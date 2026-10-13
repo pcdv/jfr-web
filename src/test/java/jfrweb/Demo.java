@@ -46,6 +46,24 @@ public class Demo {
     public String hello() {
       return "hello\n";
     }
+
+    @Route("/load")
+    public String load() throws IOException {
+      // what a slow request may hide: an exception caught, slow file accesses
+      try {
+        throw new IllegalStateException("not in cache");
+      }
+      catch (IllegalStateException e) {
+        Path f = Files.createTempFile("demo", ".bin");
+        try {
+          Files.write(f, new byte[4 << 20]);
+          return Files.readAllBytes(f).length + " bytes loaded\n";
+        }
+        finally {
+          Files.delete(f);
+        }
+      }
+    }
   }
 
   public static void main(String[] args) throws Exception {
@@ -62,12 +80,12 @@ public class Demo {
                                 .start();
 
     System.out.println("Profiler:  " + profiler.getUrl());
-    System.out.println("Endpoints: " + app.getRootUrl() + "/sort/500, /files, /hello");
+    System.out.println("Endpoints: " + app.getRootUrl() + "/sort/500, /files, /hello, /load");
     if (Boolean.getBoolean("demo.session")) {
       // records a short session by itself, e.g. to look at the interface
       profiler.getSessions().start("demo");
       // three clients calling the endpoints at random, for 8 seconds
-      String[] paths = {"/sort/2000", "/sort/200", "/files", "/hello", "/hello"};
+      String[] paths = {"/sort/2000", "/sort/200", "/files", "/hello", "/hello", "/load"};
       long end = System.currentTimeMillis() + 8000;
       Thread[] clients = new Thread[3];
       for (int c = 0; c < clients.length; c++) {

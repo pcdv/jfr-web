@@ -49,6 +49,24 @@ public class ProfilerTest {
       }
       return "done";
     }
+
+    @Route("/io")
+    public String io() throws IOException {
+      try {
+        throw new IllegalStateException("boom");
+      }
+      catch (IllegalStateException e) {
+        // a slow request's exceptions, even caught, tell what went on
+      }
+      Path f = Files.createTempFile("jfr-web", ".bin");
+      try {
+        Files.write(f, new byte[8 << 20]);
+        return Files.readAllBytes(f).length + " bytes";
+      }
+      finally {
+        Files.delete(f);
+      }
+    }
   }
 
   @Before
@@ -84,6 +102,8 @@ public class ProfilerTest {
     for (int i = 0; i < 3; i++)
       Assert.assertEquals("done", http.send(HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/busy")).build(),
                                             HttpResponse.BodyHandlers.ofString()).body());
+    http.send(HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/io")).build(),
+              HttpResponse.BodyHandlers.ofString());
 
     HttpResponse<String> stopped = post("api/sessions/1/stop");
     Assert.assertTrue(stopped.body(), stopped.body().contains("\"state\":\"STOPPED\""));
@@ -95,6 +115,21 @@ public class ProfilerTest {
     Assert.assertEquals("application/json", report.headers().firstValue("Content-Type").orElse(null));
     Assert.assertTrue(report.body(), report.body().contains("\"endpoint\":\"GET /busy\",\"count\":3"));
     Assert.assertTrue(report.body(), report.body().contains("\"requestEvent\":true"));
+
+    String slowest = get("api/sessions/1/requests?endpoint=GET+/busy&limit=2").body();
+    Assert.assertTrue(slowest, slowest.startsWith("[{\"id\":"));
+    Assert.assertEquals("limited to 2", 2, slowest.split("\"endpoint\":\"GET /busy\"").length - 1);
+
+    String io = get("api/sessions/1/requests?endpoint=GET+/io").body();
+    String ioId = io.replaceAll("^\\[\\{\"id\":(\\d+),.*", "$1");
+    String details = get("api/sessions/1/requests/" + ioId).body();
+    Assert.assertTrue(details, details.contains("\"type\":\"java.lang.IllegalStateException\",\"message\":\"boom\","));
+    Assert.assertTrue(details, details.contains("\"frame\":\"jfrweb.ProfilerTest$Handlers.io\""));
+    Assert.assertTrue(details, details.contains("\"jdk.FileRead\":\"1 ms\""));
+    Assert.assertEquals(404, get("api/sessions/1/requests/9999").statusCode());
+
+    String requestFlame = get("api/sessions/1/flame?request=" + ioId).body();
+    Assert.assertTrue(requestFlame, requestFlame.contains("request " + ioId + ": GET /io"));
 
     String timeline = get("api/sessions/1/timeline").body();
     Assert.assertTrue(timeline, timeline.contains("\"series\":[{\"endpoint\":\"GET /busy\",\"values\":["));
@@ -125,7 +160,7 @@ public class ProfilerTest {
     // browsers refuse a module served with another type
     for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
                                       "views/live", "components/endpoints", "components/flame",
-                                      "components/timeline"}) {
+                                      "components/timeline", "components/requests"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assert.assertEquals(module, 200, js.statusCode());
       Assert.assertEquals(module, "application/javascript", js.headers().firstValue("Content-Type").orElse(null));

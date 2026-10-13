@@ -49,7 +49,55 @@
  */
 
 /**
+ * @typedef {object} RequestRow
+ * @property {number} id the index of the request in the recording
+ * @property {string} endpoint
+ * @property {string} method
+ * @property {string} path
+ * @property {number} status
+ * @property {number} start in seconds since the start of the recording
+ * @property {number} duration in ms
+ * @property {string} thread
+ * @property {number} bytesIn
+ * @property {number} bytesOut
+ */
+
+/**
+ * @typedef {object} RequestDetail
+ * @property {number} javaSamples
+ * @property {number} nativeSamples
+ * @property {boolean} exceptionsRecorded
+ * @property {Record<string, string | null>} ioThresholds by event, null if not recorded
+ * @property {{offset: number, type: string, message: string | null, frame: string | null}[]} exceptions
+ *           offset in ms since the start of the request
+ * @property {{offset: number, kind: string, target: string, bytes: number, duration: number}[]} io
+ *           file and socket accesses longer than the thresholds
+ */
+
+/**
+ * @param {number} id
+ * @param {string | undefined} endpoint all endpoints if undefined
+ * @param {number} limit
+ * @returns {Promise<RequestRow[]>} the slowest first
+ */
+export function listRequests(id, endpoint, limit) {
+  const q = new URLSearchParams({limit: String(limit)});
+  if (endpoint) q.set('endpoint', endpoint);
+  return call(`api/sessions/${id}/requests?${q}`);
+}
+
+/**
+ * @param {number} id
+ * @param {number} request
+ * @returns {Promise<RequestRow & RequestDetail>}
+ */
+export function getRequest(id, request) {
+  return call(`api/sessions/${id}/requests/${request}`);
+}
+
+/**
  * @typedef {object} FlameFilter
+ * @property {number} [request] keeps the samples of one request, ignoring the other filters
  * @property {string} [endpoint] keeps the samples of one endpoint
  * @property {string} [thread] keeps the samples of one thread
  * @property {number} [from] seconds since the start of the recording
@@ -146,6 +194,7 @@ export function downloadUrl(id) {
  */
 export function flameUrl(id, filter) {
   const q = new URLSearchParams();
+  if (filter.request !== undefined) q.set('request', String(filter.request));
   if (filter.endpoint) q.set('endpoint', filter.endpoint);
   if (filter.thread) q.set('thread', filter.thread);
   if (filter.from !== undefined) q.set('from', String(filter.from));

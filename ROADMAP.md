@@ -72,14 +72,20 @@ into a running JVM through the Attach API), which could also start the recording
 
 Recordings use the JDK's `profile` settings, plus flak's request event and native calls sampled
 every 5 ms. The interface is plain JS modules served from the jar, type-checked from their JSDoc
-(`jsconfig.json`), with no build step. Picking an interval is a pair of numbers for now: the
-timeline of M3 will let it be selected.
+(`jsconfig.json`), with no build step.
 
 ## M3: flak-aware views
 
-- [ ] Live endpoint statistics, without profiling
-- [ ] Timeline of requests in flight, stacked by route, with interval selection
-- [ ] Flame graph per route and per slow request (with its exceptions and file accesses)
+- [x] Live endpoint statistics, without profiling
+- [x] Timeline of requests in flight, stacked by route, with interval selection
+- [x] Flame graph per route and per slow request (with its exceptions and file accesses)
+
+Live statistics come from flak's request listener (`Profiler.builder().observe(app)`), per minute
+over the last hour; percentiles from a logarithmic histogram, within about 10%. Recordings now
+also hold the exceptions created (`jdk.JavaExceptionThrow`, with their stack: an application
+creating thousands per second should turn it off) and the file and socket accesses from 1 ms.
+Only accesses with a JFR event show: checking a file's attributes or listing a directory has
+none, which is what made that application's repository view slow on Windows.
 
 ## M4: auto mode
 

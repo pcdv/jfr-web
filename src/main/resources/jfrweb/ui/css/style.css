@@ -206,6 +206,40 @@ table.grid {
   background: var(--panel);
 }
 
+.grid tr.selected, .grid tr.selected:hover {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.grid td.wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.hint.warn {
+  color: var(--bad);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+}
+
+.chip[hidden] {
+  display: none;
+}
+
+.chip button {
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+}
+
 .actions a {
   margin-right: 8px;
 }

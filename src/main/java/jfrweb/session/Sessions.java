@@ -47,16 +47,27 @@ public final class Sessions implements AutoCloseable {
   }
 
   /**
-   * The settings of the JDK's "profile" configuration, plus flak's request
-   * event, and native calls sampled every 5 ms instead of 20: JFR samples one
-   * thread in native code per period, and idle threads (selectors, acceptors)
-   * take most periods.
+   * The settings of the JDK's "profile" configuration, plus:
+   * <ul>
+   *   <li>flak's request event
+   *   <li>native calls sampled every 5 ms instead of 20: JFR samples one
+   *   thread in native code per period, and idle threads (selectors,
+   *   acceptors) take most periods
+   *   <li>the exceptions created, to show those of a slow request. Each one
+   *   records its stack trace: an application creating thousands per second
+   *   should turn them off ("jdk.JavaExceptionThrow#enabled" to "false")
+   *   <li>file and socket accesses from 1 ms instead of 10 or 20, to show
+   *   those of a slow request
+   * </ul>
    */
   public static Map<String, String> defaultSettings() {
     try {
       Map<String, String> s = new HashMap<>(Configuration.getConfiguration("profile").getSettings());
       s.put("flak.Request#enabled", "true");
       s.put("jdk.NativeMethodSample#period", "5 ms");
+      s.put("jdk.JavaExceptionThrow#enabled", "true");
+      for (String io : new String[]{"jdk.FileRead", "jdk.FileWrite", "jdk.SocketRead", "jdk.SocketWrite"})
+        s.put(io + "#threshold", "1 ms");
       return s;
     }
     catch (IOException | ParseException e) {

@@ -9,7 +9,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 
 import jdk.jfr.EventType;
 import jdk.jfr.consumer.RecordedEvent;
@@ -225,6 +227,19 @@ public final class Analysis {
   }
 
   /**
+   * Reads the events of some types, in no particular order.
+   */
+  public void visitEvents(Set<String> types, Consumer<RecordedEvent> visitor) throws IOException {
+    try (RecordingFile rf = new RecordingFile(file)) {
+      while (rf.hasMoreEvents()) {
+        RecordedEvent e = rf.readEvent();
+        if (types.contains(e.getEventType().getName()))
+          visitor.accept(e);
+      }
+    }
+  }
+
+  /**
    * Whether some request was running at that time, on any thread.
    */
   public boolean isRequestRunning(Instant time) {
@@ -238,7 +253,11 @@ public final class Analysis {
     return os == null ? null : os.trim().replaceFirst("^OS:\\s*", "").replaceAll("\\s*\\R\\s*", " ");
   }
 
-  static long nanos(Instant i) {
+  /**
+   * A time in nanoseconds since the epoch, as {@link RecordedRequest} holds
+   * them.
+   */
+  public static long nanos(Instant i) {
     return i.getEpochSecond() * 1_000_000_000L + i.getNano();
   }
 }

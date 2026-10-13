@@ -24,6 +24,8 @@ import jfrweb.analysis.Analysis;
 import jfrweb.analysis.EndpointStats;
 import jfrweb.analysis.FlameGraphs;
 import jfrweb.analysis.RecordingInfo;
+import jfrweb.analysis.RecordedRequest;
+import jfrweb.analysis.RequestDetails;
 import jfrweb.analysis.SamplingSummary;
 import jfrweb.analysis.Timeline;
 import jfrweb.live.LiveStats;
@@ -210,12 +212,110 @@ public class ProfilerRoutes {
   }
 
   /**
+   * The slowest requests of a session, the slowest first. A request is known
+   * by its index among those of the recording.
+   * <p>
+   * Query: {@code endpoint} to keep the requests of one; {@code limit}, 20 by
+   * default.
+   */
+  @Route("/api/sessions/:id/requests")
+  @OutputFormat(JSON)
+  public List<Object> requests(int id, Query q) throws IOException {
+    Analysis a = stopped(id).getAnalysis();
+    String endpoint = q.get("endpoint");
+    int limit = q.getInt("limit", 20);
+    List<RecordedRequest> all = a.getRequests();
+
+    List<Integer> indexes = new ArrayList<>();
+    for (int i = 0; i < all.size(); i++)
+      if (endpoint == null || endpoint.isEmpty() || all.get(i).endpoint().equals(endpoint))
+        indexes.add(i);
+    indexes.sort((i, j) -> Long.compare(all.get(j).durationNanos(), all.get(i).durationNanos()));
+
+    List<Object> res = new ArrayList<>();
+    for (int i : indexes.subList(0, Math.min(limit, indexes.size())))
+      res.add(requestRow(a, i));
+    return res;
+  }
+
+  /**
+   * One request of a session: its exceptions, and its file and socket
+   * accesses longer than the thresholds of the recording.
+   */
+  @Route("/api/sessions/:id/requests/:n")
+  @OutputFormat(JSON)
+  public Map<String, Object> request(int id, int n) throws IOException {
+    Analysis a = stopped(id).getAnalysis();
+    RequestDetails d = RequestDetails.of(a, request(a, String.valueOf(n)));
+
+    List<Object> thrown = new ArrayList<>();
+    for (RequestDetails.Thrown t : d.getThrown()) {
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("offset", ms(t.offsetNanos()));
+      m.put("type", t.type());
+      m.put("message", t.message());
+      m.put("frame", t.frame());
+      thrown.add(m);
+    }
+    List<Object> io = new ArrayList<>();
+    for (RequestDetails.Io i : d.getIo()) {
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("offset", ms(i.offsetNanos()));
+      m.put("kind", i.kind());
+      m.put("target", i.target());
+      m.put("bytes", i.bytes());
+      m.put("duration", ms(i.durationNanos()));
+      io.add(m);
+    }
+
+    RecordingInfo info = a.getInfo();
+    Map<String, Object> thresholds = new LinkedHashMap<>();
+    for (String e : new String[]{RequestDetails.FILE_READ, RequestDetails.FILE_WRITE,
+                                 RequestDetails.SOCKET_READ, RequestDetails.SOCKET_WRITE})
+      thresholds.put(e, info.isEnabled(e) ? info.getSettings(e).get("threshold") : null);
+
+    Map<String, Object> res = requestRow(a, n);
+    res.put("javaSamples", d.getJavaSamples());
+    res.put("nativeSamples", d.getNativeSamples());
+    res.put("exceptionsRecorded", info.isEnabled(RequestDetails.EXCEPTION));
+    res.put("ioThresholds", thresholds);
+    res.put("exceptions", thrown);
+    res.put("io", io);
+    return res;
+  }
+
+  private static RecordedRequest request(Analysis a, String index) {
+    try {
+      return a.getRequests().get(Integer.parseInt(index));
+    }
+    catch (NumberFormatException | IndexOutOfBoundsException e) {
+      throw new HttpException(404, "No request " + index);
+    }
+  }
+
+  private static Map<String, Object> requestRow(Analysis a, int index) {
+    RecordedRequest r = a.getRequests().get(index);
+    Map<String, Object> m = new LinkedHashMap<>();
+    m.put("id", index);
+    m.put("endpoint", r.endpoint());
+    m.put("method", r.method());
+    m.put("path", r.path());
+    m.put("status", r.status());
+    m.put("start", Math.round((r.startNanos() - Analysis.nanos(a.getInfo().getStart())) / 1e6) / 1000.0);
+    m.put("duration", ms(r.durationNanos()));
+    m.put("thread", r.threadName());
+    m.put("bytesIn", r.bytesIn());
+    m.put("bytesOut", r.bytesOut());
+    return m;
+  }
+
+  /**
    * A flame graph, as a self-contained HTML page.
    * <p>
    * Query: {@code from} and {@code to}, in seconds since the start of the
    * recording; {@code thread}, the name of a thread; {@code endpoint}, e.g.
-   * "GET /api/user/:id"; {@code all=true} to add the samples taken outside
-   * requests.
+   * "GET /api/user/:id", or {@code request}, the index of one request;
+   * {@code all=true} to add the samples taken outside requests.
    */
   @Route("/api/sessions/:id/flame")
   public Response flame(int id, Query q, Response resp) throws IOException {
@@ -232,7 +332,13 @@ public class ProfilerRoutes {
       title.append(", thread ").append(thread);
     }
     String endpoint = q.get("endpoint");
-    if (endpoint != null && !endpoint.isEmpty()) {
+    String request = q.get("request");
+    if (request != null && !request.isEmpty()) {
+      RecordedRequest r = request(a, request);
+      o.requests(r::equals);
+      title.append(", request ").append(request).append(": ").append(r.method()).append(' ').append(r.path());
+    }
+    else if (endpoint != null && !endpoint.isEmpty()) {
       o.requests(r -> r.endpoint().equals(endpoint));
       title.append(", ").append(endpoint);
     }

@@ -9,15 +9,19 @@ graph per route or per slow request.
 
 ## Status
 
-M2: embedded, with manual sessions.
+M3: embedded, with manual sessions and flak-aware views.
 
 ```java
-Profiler.start();   // serves the interface on loopback, on a free port, and logs its URL
+Profiler.builder().observe(app).start();   // serves the interface on loopback, logs its URL
 ```
 
-From the interface, start a session, use the application, stop the session: its report states
-how it was recorded, lists the endpoints by total time, and shows flame graphs by endpoint,
-thread and time interval. The `.jfr` file can be downloaded, e.g. for JDK Mission Control.
+- **Live endpoints**: the endpoints of the apps observed over the last 1 to 60 minutes (count,
+  total time, p50/p99/max, 5xx, bytes), kept by counters whether a session records or not.
+- **Sessions**: start one, use the application, stop it. Its report states how it was recorded,
+  shows a timeline of the requests in flight by endpoint (drag to select an interval), lists the
+  endpoints by total time and their slowest requests, and shows flame graphs by endpoint, thread,
+  interval or single request. A request also shows the exceptions it created and its slow file
+  and socket accesses. The `.jfr` file can be downloaded, e.g. for JDK Mission Control.
 
 A builder sets the rest: address, port, guard, directory of the recordings, JFR settings, or
 mounting on an existing flak server:
