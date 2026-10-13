@@ -38,6 +38,7 @@ import jfrweb.auto.Trigger;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
+import jfrweb.session.StackDepth;
 
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
 import static jfrweb.analysis.RecordingInfo.FLAK_REQUEST;
@@ -244,6 +245,9 @@ public class ProfilerRoutes {
     sampling.put("operationShareOfNative", summary.getOperationShareOfNative());
     sampling.put("operationEvents", info.isEnabled(FLAK_REQUEST) || info.isEnabled(OPERATION));
     sampling.put("operations", a.getOperations().size());
+    sampling.put("truncated", summary.getTruncated());
+    sampling.put("stackDepth", summary.getStackDepth());
+    sampling.put("suggestedStackDepth", StackDepth.suggest(summary.getStackDepth()));
 
     List<Object> threads = new ArrayList<>();
     summary.getSamplesByThread().forEach((name, count) -> {

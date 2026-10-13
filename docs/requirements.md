@@ -227,6 +227,10 @@ operations, also their count and, in auto mode, its trigger.
   view shows Java code and native calls, not waiting.
 - JFR drops a sample whose stack it fails to walk: tight loops and intrinsics (e.g. hashing)
   get few samples, or none.
+- JFR keeps the top 64 frames of a stack by default, once for the whole JVM, before its first
+  recording. The profiler and the snapshots raise it to 256 when they start first; otherwise
+  reports tell how many stacks were cut, and the JVM option that keeps more
+  (`-XX:FlightRecorderOptions:stackdepth=`).
 
 ## Decisions
 

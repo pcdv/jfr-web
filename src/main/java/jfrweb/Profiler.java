@@ -19,6 +19,7 @@ import flak.util.CrossOriginProtection;
 import jfrweb.auto.AutoMode;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Sessions;
+import jfrweb.session.StackDepth;
 import jfrweb.snapshot.Snapshots;
 import jfrweb.json.Json;
 import jfrweb.web.HistoryRoutes;
@@ -110,6 +111,7 @@ public final class Profiler implements AutoCloseable {
     private BeforeHook guard;
     private Path directory;
     private Map<String, String> settings;
+    private int stackDepth = StackDepth.DEFAULT;
     private boolean highResolutionTimer = true;
     private Path history;
     private Snapshots snapshots;
@@ -179,6 +181,19 @@ public final class Profiler implements AutoCloseable {
      * The JFR settings of the recordings, e.g. "jdk.ExecutionSample#period"
      * to "20 ms". See {@link Sessions#defaultSettings()}.
      */
+    /**
+     * The number of frames JFR keeps of each stack, {@link StackDepth#DEFAULT}
+     * by default, instead of the 64 of the JVM: set as this starts, if nothing
+     * recorded with JFR in this JVM yet, and the command line does not set it.
+     * 0 leaves it as it is.
+     */
+    public Builder stackDepth(int frames) {
+      if (frames < 0 || frames > StackDepth.MAX)
+        throw new IllegalArgumentException("Stack depth out of 0.." + StackDepth.MAX + ": " + frames);
+      this.stackDepth = frames;
+      return this;
+    }
+
     public Builder settings(Map<String, String> settings) {
       this.settings = settings;
       return this;
@@ -215,6 +230,8 @@ public final class Profiler implements AutoCloseable {
     }
 
     public Profiler start() throws IOException {
+      if (stackDepth > 0)
+        StackDepth.raise(stackDepth);
       Sessions sessions = new Sessions(directory != null ? directory : Files.createTempDirectory("jfr-web"),
                                        settings != null ? settings : Sessions.defaultSettings(),
                                        highResolutionTimer);

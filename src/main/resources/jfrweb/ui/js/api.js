@@ -44,7 +44,9 @@
  * @property {{start: string, end: string, jvm: string, jvmArguments: string,
  *            javaArguments: string, os: string, enabledEvents: number}} recording
  * @property {{java: Sampling, native: Sampling, operationShareOfNative: number | null,
- *            operationEvents: boolean, operations: number}} sampling
+ *            operationEvents: boolean, operations: number, truncated: number, stackDepth: number,
+ *            suggestedStackDepth: number}} sampling truncated: the samples whose stack JFR cut at
+ *            stackDepth frames
  * @property {string[]} biases
  * @property {{name: string, samples: number}[]} threads
  * @property {OperationRow[]} operations

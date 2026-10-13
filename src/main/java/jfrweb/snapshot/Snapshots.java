@@ -28,6 +28,7 @@ import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
 import jfrweb.json.Json;
 import jfrweb.ops.Operations;
+import jfrweb.session.StackDepth;
 
 /**
  * Records all the time, and saves the last minutes when something goes
@@ -273,6 +274,7 @@ public final class Snapshots implements AutoCloseable {
     private int maxCount = 20;
     private long maxSize = 1L << 30;
     private Map<String, String> settings;
+    private int stackDepth = StackDepth.DEFAULT;
     private final List<App> apps = new ArrayList<>();
     private Clock clock = Clock.systemUTC();
 
@@ -330,6 +332,19 @@ public final class Snapshots implements AutoCloseable {
     }
 
     /**
+     * The number of frames JFR keeps of each stack, {@link StackDepth#DEFAULT}
+     * by default, instead of the 64 of the JVM: set as this starts, if nothing
+     * recorded with JFR in this JVM yet, and the command line does not set it.
+     * 0 leaves it as it is.
+     */
+    public Builder stackDepth(int frames) {
+      if (frames < 0 || frames > StackDepth.MAX)
+        throw new IllegalArgumentException("Stack depth out of 0.." + StackDepth.MAX + ": " + frames);
+      this.stackDepth = frames;
+      return this;
+    }
+
+    /**
      * The JFR settings of the rolling recording, see {@link #defaultSettings()}.
      */
     public Builder settings(Map<String, String> settings) {
@@ -351,6 +366,9 @@ public final class Snapshots implements AutoCloseable {
     public Snapshots start() throws IOException {
       if (directory == null)
         throw new IllegalStateException("No directory");
+      // before its rolling recording, which would fix it
+      if (stackDepth > 0)
+        StackDepth.raise(stackDepth);
       Snapshots s = new Snapshots(this);
       s.start();
       apps.forEach(s::observe);

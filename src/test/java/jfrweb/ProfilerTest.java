@@ -122,6 +122,7 @@ public class ProfilerTest {
     Assert.assertEquals("application/json", report.headers().firstValue("Content-Type").orElse(null));
     Assert.assertTrue(report.body(), report.body().contains("\"name\":\"GET /busy\",\"count\":3"));
     Assert.assertTrue(report.body(), report.body().contains("\"operationEvents\":true"));
+    Assert.assertTrue(report.body(), report.body().matches(".*\"truncated\":\\d+,\"stackDepth\":\\d+,.*"));
 
     String slowest = get("api/sessions/1/instances?name=GET+/busy&limit=2").body();
     Assert.assertTrue(slowest, slowest.startsWith("[{\"id\":"));

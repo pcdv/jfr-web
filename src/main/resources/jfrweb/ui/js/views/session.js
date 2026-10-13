@@ -71,10 +71,16 @@ function summary(r) {
  */
 function recording(r) {
   const share = r.sampling.operationShareOfNative;
+  const samples = r.sampling.java.samples + r.sampling.native.samples;
+  const truncated = samples ? r.sampling.truncated / samples : 0;
   return h('details', {class: 'card'},
-    h('summary', null, 'How it was recorded', share !== null && share < 0.5
-      ? h('span', {class: 'hint'}, ` — native times are proportions: operations got ${fmt.percent(share)} of the native samples`)
-      : null),
+    h('summary', null, 'How it was recorded',
+      truncated >= 0.01
+        ? h('span', {class: 'hint warn'}, ` — ${fmt.percent(truncated)} of the stacks cut at ${r.sampling.stackDepth} frames`)
+        : null,
+      share !== null && share < 0.5
+        ? h('span', {class: 'hint'}, ` — native times are proportions: operations got ${fmt.percent(share)} of the native samples`)
+        : null),
     h('dl', null,
       h('dt', null, 'JVM'), h('dd', null, r.recording.jvm),
       h('dt', null, 'JVM arguments'), h('dd', {class: 'mono'}, r.recording.jvmArguments || '(none)'),
@@ -88,6 +94,12 @@ function recording(r) {
       h('dt', null, 'Operations'), h('dd', null, r.sampling.operationEvents
         ? `${r.sampling.operations}, from the events of flak's requests and of the jfrweb.ops API`
         : 'neither flak.Request nor jfrweb.Operation enabled: no operation context'),
+      h('dt', null, 'Stacks'), h('dd', null, r.sampling.truncated === 0
+        ? 'none cut'
+        : [`${r.sampling.truncated} of ${samples} samples cut at ${r.sampling.stackDepth} frames: their bottom is lost, ` +
+           'and flame graphs show their top under "(truncated)". Start the JVM with ',
+           h('code', null, `-XX:FlightRecorderOptions:stackdepth=${r.sampling.suggestedStackDepth}`),
+           ', or let jfr-web start before anything else records with JFR: it raises the depth then.']),
       h('dt', null, 'Events'), h('dd', null, `${r.recording.enabledEvents} enabled`)),
     h('h3', null, 'Known biases'),
     h('ul', null, r.biases.map(b => h('li', null, b))));

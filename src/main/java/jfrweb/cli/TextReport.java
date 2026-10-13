@@ -12,6 +12,7 @@ import jfrweb.analysis.Analysis;
 import jfrweb.analysis.OperationStats;
 import jfrweb.analysis.RecordingInfo;
 import jfrweb.analysis.SamplingSummary;
+import jfrweb.session.StackDepth;
 
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
 import static jfrweb.analysis.RecordingInfo.FLAK_REQUEST;
@@ -69,6 +70,12 @@ final class TextReport {
                                        ? analysis.getOperations().size() + " (" + FLAK_REQUEST + ", " + OPERATION + ")"
                                        : "neither " + FLAK_REQUEST + " nor " + OPERATION +
                                          " enabled: no operation context"));
+    if (s.getTruncated() > 0)
+      out.println(String.format(Locale.ROOT,
+                                "  stacks         %d of %d samples cut at %d frames: their bottom is lost.%n" +
+                                "                 Start the JVM with -XX:FlightRecorderOptions:stackdepth=%d",
+                                s.getTruncated(), s.getJavaSamples() + s.getNativeSamples(), s.getStackDepth(),
+                                StackDepth.suggest(s.getStackDepth())));
 
     out.println();
     out.println("Known biases:");

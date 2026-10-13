@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.TreeMap;
 
+import jdk.jfr.consumer.RecordedStackTrace;
+
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
 
 /**
@@ -17,6 +19,8 @@ public final class SamplingSummary {
   private long javaInOperations;
   private long nativeInOperations;
   private long nativeWhileOperations;
+  private long truncated;
+  private int stackDepth;
   private final Map<String, Long> byThread = new TreeMap<>();
 
   private SamplingSummary() {}
@@ -36,6 +40,12 @@ public final class SamplingSummary {
           s.nativeInOperations++;
         if (analysis.isOperationRunning(sample.getStartTime()))
           s.nativeWhileOperations++;
+      }
+      RecordedStackTrace st = sample.getStackTrace();
+      if (st != null && st.isTruncated()) {
+        s.truncated++;
+        // JFR keeps that many frames of a stack it cuts
+        s.stackDepth = Math.max(s.stackDepth, st.getFrames().size());
       }
       s.byThread.merge(String.valueOf(thread.getJavaName()), 1L, Long::sum);
     });
@@ -65,6 +75,22 @@ public final class SamplingSummary {
    */
   public Double getOperationShareOfNative() {
     return nativeWhileOperations == 0 ? null : (double) nativeInOperations / nativeWhileOperations;
+  }
+
+  /**
+   * The number of samples, Java and native, whose stack JFR cut: their bottom
+   * frames are lost, and flame graphs show their top under "(truncated)".
+   */
+  public long getTruncated() {
+    return truncated;
+  }
+
+  /**
+   * The number of frames JFR kept of each stack, as the truncated ones show,
+   * or 0 if none was.
+   */
+  public int getStackDepth() {
+    return stackDepth;
   }
 
   /**

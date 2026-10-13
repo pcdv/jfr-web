@@ -153,11 +153,12 @@ already wired must follow.
 
 ## Next
 
-- [ ] Deeper stacks: JFR keeps the top 64 frames of a stack by default, and deep applications
+- [x] Deeper stacks: JFR keeps the top 64 frames of a stack by default, and deep applications
   get truncated flame graphs. `JFR.configure stackdepth=` raises it from inside the JVM (JDK 17
-  and 21 alike), but only before its first recording: the profiler and the snapshots would raise
-  it as they start, when they are first, and the report would tell the share of stacks truncated
-  and the JVM option otherwise (`-XX:FlightRecorderOptions:stackdepth=256`)
+  and 21 alike), but only before its first recording: the profiler and the snapshots raise it to
+  256 frames as they start, when they are first (`stackDepth()` of their builders), and reports
+  tell how many stacks were cut and the JVM option otherwise
+  (`-XX:FlightRecorderOptions:stackdepth=`)
 
 ## Later
 
