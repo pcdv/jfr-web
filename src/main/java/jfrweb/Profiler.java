@@ -16,6 +16,7 @@ import flak.BeforeHook;
 import flak.Flak;
 import flak.ResourceOptions;
 import flak.util.CrossOriginProtection;
+import jfrweb.auto.AutoMode;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Sessions;
 import jfrweb.web.Json;
@@ -38,11 +39,13 @@ public final class Profiler implements AutoCloseable {
   private final App app;
   private final Sessions sessions;
   private final LiveStats live;
+  private final AutoMode auto;
 
-  private Profiler(App app, Sessions sessions, LiveStats live) {
+  private Profiler(App app, Sessions sessions, LiveStats live, AutoMode auto) {
     this.app = app;
     this.sessions = sessions;
     this.live = live;
+    this.auto = auto;
   }
 
   /**
@@ -76,11 +79,20 @@ public final class Profiler implements AutoCloseable {
   }
 
   /**
+   * The automatic start of sessions, triggered by the requests of the apps
+   * observed.
+   */
+  public AutoMode getAutoMode() {
+    return auto;
+  }
+
+  /**
    * Stops the session recording, if any, observing the apps, and the web
    * interface. The .jfr files stay.
    */
   @Override
   public void close() {
+    auto.close();
     sessions.close();
     live.close();
     app.stop();
@@ -102,7 +114,8 @@ public final class Profiler implements AutoCloseable {
 
     /**
      * Flak apps whose endpoints get live statistics, kept by counters as
-     * requests end, without recording. Sessions do not need it: recordings get
+     * requests end, without recording, and whose requests can start sessions
+     * by themselves (auto mode). Manual sessions do not need it: recordings get
      * the route of each request from flak's request event.
      */
     public Builder observe(App... apps) {
@@ -196,13 +209,17 @@ public final class Profiler implements AutoCloseable {
         resp.getOutputStream().write(Json.write(data).getBytes(StandardCharsets.UTF_8));
       });
       LiveStats live = new LiveStats();
-      observed.forEach(live::observe);
-      app.scan(new ProfilerRoutes(sessions, live));
+      AutoMode auto = new AutoMode(sessions);
+      for (App a : observed) {
+        live.observe(a);
+        auto.observe(a);
+      }
+      app.scan(new ProfilerRoutes(sessions, live, auto));
       app.serveClasspath("/", "/jfrweb/ui",
                          new ResourceOptions().classLoader(Profiler.class.getClassLoader()));
       app.start();
 
-      Profiler p = new Profiler(app, sessions, live);
+      Profiler p = new Profiler(app, sessions, live, auto);
       log.log(System.Logger.Level.INFO, "jfr-web profiler at " + p.getUrl() +
                                         ", recordings in " + sessions.getDirectory());
       return p;

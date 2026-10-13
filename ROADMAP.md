@@ -89,9 +89,15 @@ none, which is what made that application's repository view slow on Windows.
 
 ## M4: auto mode
 
-- [ ] Trigger by route patterns
-- [ ] "Arm my browser" trigger (cookie), once or every time
-- [ ] Idle stop, grace period, maximum session duration
+- [x] Trigger by route patterns
+- [x] "Arm my browser" trigger (cookie), once or every time
+- [x] Idle stop, grace period, maximum session duration
+
+The session starts in the request listener's `onBegin`, before the handler: the request that
+triggers it is recorded whole. The first recording of a JVM costs about 230 ms to start, the next
+ones about 10 ms: arming warms JFR up. The idle time and the grace period are one setting. The
+cookie of an armed browser has `Path=/`, and cookies ignore ports: the profiler on its own port
+arms the requests of an app on another one of the same host.
 
 ## M5: history
 

@@ -160,7 +160,7 @@ public class ProfilerTest {
     // browsers refuse a module served with another type
     for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
                                       "views/live", "components/endpoints", "components/flame",
-                                      "components/timeline", "components/requests"}) {
+                                      "components/timeline", "components/requests", "components/auto"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assert.assertEquals(module, 200, js.statusCode());
       Assert.assertEquals(module, "application/javascript", js.headers().firstValue("Content-Type").orElse(null));
@@ -182,6 +182,43 @@ public class ProfilerTest {
     Assert.assertTrue(live, live.startsWith("{\"observing\":true,\"apps\":[\"\"],\"window\":1,"));
     Assert.assertTrue(live, live.contains("\"endpoint\":\"GET /busy\",\"count\":1"));
     Assert.assertEquals(400, get("api/live?window=7").statusCode());
+  }
+
+  @Test
+  public void testAutoModeArmedBrowser() throws Exception {
+    profiler = Profiler.builder().directory(dir).observe(app).start();
+
+    HttpResponse<String> armed = post("api/auto?patterns=GET+/busy&browser=true&idle=0.5");
+    Assert.assertTrue(armed.body(), armed.body().contains("\"armed\":true,\"patterns\":[\"GET /busy\"],\"browser\":true,\"thisBrowser\":true"));
+    String cookie = armed.headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
+    Assert.assertTrue(cookie, cookie.startsWith("jfrweb-armed="));
+
+    busy(null);
+    Assert.assertEquals("another client", "[]", get("api/sessions").body());
+
+    busy(cookie);
+    String list = get("api/sessions").body();
+    Assert.assertTrue(list, list.contains("\"trigger\":\"auto: GET /busy, armed browser\""));
+    for (int i = 0; i < 100 && !get("api/sessions").body().contains("STOPPED"); i++)
+      Thread.sleep(50);
+    Assert.assertTrue("stopped once idle", get("api/sessions").body().contains("STOPPED"));
+
+    HttpResponse<String> disarmed = http.send(request("api/auto").DELETE().build(), HttpResponse.BodyHandlers.ofString());
+    Assert.assertTrue(disarmed.body(), disarmed.body().startsWith("{\"observing\":true,\"armed\":false"));
+    Assert.assertTrue(disarmed.headers().firstValue("Set-Cookie").orElse("").contains("Max-Age=0"));
+  }
+
+  @Test
+  public void testAutoModeNeedsObservedApps() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+    Assert.assertEquals(409, post("api/auto").statusCode());
+  }
+
+  private void busy(String cookie) throws Exception {
+    HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/busy"));
+    if (cookie != null)
+      b.header("Cookie", cookie);
+    http.send(b.build(), HttpResponse.BodyHandlers.ofString());
   }
 
   @Test

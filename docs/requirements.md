@@ -112,14 +112,15 @@ flak app, also its request count and, in auto mode, its trigger.
   by time interval.
 - Auto, flak apps only: a session starts when matching endpoints are invoked, and stops when
   idle.
-  - Trigger: route patterns, or "arm my browser" (a cookie set from the UI, so that only the
-    requests of that browser trigger a session); once or every time.
+  - Trigger: route patterns, "arm my browser" (a cookie set from the UI, so that only the
+    requests of that browser trigger a session), or both; once or every time.
   - The recording starts synchronously, before the triggering request runs (in the request
     hook's begin). JFR is warmed up when auto mode is enabled, by a short recording that is
     thrown away, so a start costs a few milliseconds. Installing the profiler alone still
     records nothing.
-  - Stop after T seconds without requests (plus a grace period for asynchronous work), with a
-    maximum session duration.
+  - Stop once no matching request has run for T seconds (3 by default, long enough for
+    asynchronous work to finish: one setting rather than an idle time plus a grace period, which
+    would only add up), with a maximum session duration (2 minutes by default).
   - The profiler's own requests never count as activity.
 
 ### History

@@ -16,7 +16,9 @@ import java.util.regex.Pattern;
 
 import flak.HttpException;
 import flak.Query;
+import flak.Request;
 import flak.Response;
+import flak.annotations.Delete;
 import flak.annotations.OutputFormat;
 import flak.annotations.Post;
 import flak.annotations.Route;
@@ -28,6 +30,8 @@ import jfrweb.analysis.RecordedRequest;
 import jfrweb.analysis.RequestDetails;
 import jfrweb.analysis.SamplingSummary;
 import jfrweb.analysis.Timeline;
+import jfrweb.auto.AutoMode;
+import jfrweb.auto.Trigger;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
@@ -47,10 +51,94 @@ public class ProfilerRoutes {
 
   private final Sessions sessions;
   private final LiveStats live;
+  private final AutoMode auto;
 
-  public ProfilerRoutes(Sessions sessions, LiveStats live) {
+  public ProfilerRoutes(Sessions sessions, LiveStats live, AutoMode auto) {
     this.sessions = sessions;
     this.live = live;
+    this.auto = auto;
+  }
+
+  /**
+   * The state of the auto mode, as seen from the browser asking.
+   */
+  @Route("/api/auto")
+  @OutputFormat(JSON)
+  public Map<String, Object> autoState(Request req) {
+    return autoState(auto.getTrigger(), req.getCookie(AutoMode.COOKIE));
+  }
+
+  /**
+   * Arms the auto mode.
+   * <p>
+   * Query: {@code patterns}, endpoints separated by commas or new lines, *
+   * matching anything, none for any endpoint; {@code browser=true} to only
+   * count the requests of the browser arming, which gets a cookie;
+   * {@code repeat=true} to start a session each time, not once; {@code idle}
+   * and {@code max}, in seconds.
+   */
+  @Route("/api/auto")
+  @Post
+  @OutputFormat(JSON)
+  public Map<String, Object> arm(Query q, Response resp) {
+    if (!live.isObserving())
+      throw new HttpException(409, "No app is observed: nothing can trigger a session");
+
+    List<String> patterns = new ArrayList<>();
+    for (String p : q.get("patterns", "").split("[,\\n]"))
+      if (!p.isBlank())
+        patterns.add(p.trim());
+    String browser = q.getBool("browser", false) ? AutoMode.newBrowserToken() : null;
+    Trigger t = new Trigger(patterns, browser, q.getBool("repeat", false),
+                            seconds(q, "idle", Trigger.DEFAULT_IDLE),
+                            seconds(q, "max", Trigger.DEFAULT_MAX));
+    auto.arm(t);
+    if (browser != null) {
+      // to every path of the host: the apps observed may be anywhere on it
+      resp.addHeader("Set-Cookie", AutoMode.COOKIE + "=" + browser + "; Path=/; SameSite=Lax; HttpOnly");
+    }
+    return autoState(t, browser);
+  }
+
+  @Route("/api/auto")
+  @Delete
+  @OutputFormat(JSON)
+  public Map<String, Object> disarm(Response resp) {
+    auto.disarm();
+    resp.addHeader("Set-Cookie", AutoMode.COOKIE + "=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly");
+    return autoState(null, null);
+  }
+
+  private Map<String, Object> autoState(Trigger t, String cookie) {
+    Map<String, Object> m = new LinkedHashMap<>();
+    m.put("observing", live.isObserving());
+    m.put("armed", t != null);
+    if (t != null) {
+      m.put("patterns", t.patterns());
+      m.put("browser", t.browser() != null);
+      m.put("thisBrowser", t.browser() != null && t.browser().equals(cookie));
+      m.put("repeat", t.repeat());
+      m.put("idle", t.idle().toMillis() / 1000.0);
+      m.put("max", t.max().toMillis() / 1000.0);
+    }
+    Session s = auto.getSession();
+    m.put("recording", s == null ? null : s.getId());
+    return m;
+  }
+
+  private static Duration seconds(Query q, String name, Duration byDefault) {
+    String v = q.get(name);
+    if (v == null || v.isBlank())
+      return byDefault;
+    try {
+      double s = Double.parseDouble(v);
+      if (s <= 0)
+        throw new NumberFormatException();
+      return Duration.ofMillis((long) (s * 1000));
+    }
+    catch (NumberFormatException e) {
+      throw new HttpException(400, "Not a positive number of seconds for " + name + ": " + v);
+    }
   }
 
   /**

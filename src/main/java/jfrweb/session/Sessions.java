@@ -112,6 +112,22 @@ public final class Sessions implements AutoCloseable {
   }
 
   /**
+   * Starts and stops a recording with the settings of the sessions, kept
+   * nowhere: the first recording of a JVM costs much more than the next ones
+   * (classes to load, the JFR runtime to set up). Done before a session must
+   * start in the middle of a request.
+   */
+  public synchronized void warmUp() {
+    if (recording != null)
+      return;
+    try (Recording r = new Recording(settings)) {
+      r.setToDisk(false);
+      r.start();
+      r.stop();
+    }
+  }
+
+  /**
    * Stops a session, which writes its .jfr file.
    *
    * @return the session, or null if there is none with this id

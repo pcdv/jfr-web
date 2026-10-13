@@ -5,8 +5,9 @@
 import * as api from '../api.js';
 import {h, replace, errorBox} from '../dom.js';
 import * as fmt from '../format.js';
+import {autoPanel} from '../components/auto.js';
 
-/** How often the list refreshes while a session records, in ms. */
+/** How often the list refreshes while a session records or auto mode is armed, in ms. */
 const POLL = 1000;
 
 /**
@@ -14,21 +15,29 @@ const POLL = 1000;
  * @returns {() => void}
  */
 export function renderSessions(root) {
+  const auto = h('div');
   const content = h('div');
-  root.append(h('h1', null, 'Sessions'), content);
+  root.append(h('h1', null, 'Sessions'), auto, content);
 
   /** @type {number | undefined} */
   let timer;
   let stopped = false;
+  /** The auto mode shown, redrawn only when it changes: its form may be in use. */
+  let autoShown = '';
 
   async function refresh() {
     clearTimeout(timer);
     try {
-      const sessions = await api.listSessions();
+      const [sessions, autoState] = await Promise.all([api.listSessions(), api.getAuto()]);
       if (stopped)
         return;
+      const autoJson = JSON.stringify(autoState);
+      if (autoJson !== autoShown) {
+        autoShown = autoJson;
+        replace(auto, autoPanel(autoState, refresh));
+      }
       replace(content, toolbar(sessions, refresh), table(sessions, refresh));
-      if (sessions.some(s => s.state === 'RECORDING'))
+      if (autoState.armed || sessions.some(s => s.state === 'RECORDING'))
         timer = window.setTimeout(refresh, POLL);
     }
     catch (e) {

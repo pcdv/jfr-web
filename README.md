@@ -9,7 +9,7 @@ graph per route or per slow request.
 
 ## Status
 
-M3: embedded, with manual sessions and flak-aware views.
+M4: embedded, with manual or automatic sessions and flak-aware views.
 
 ```java
 Profiler.builder().observe(app).start();   // serves the interface on loopback, logs its URL
@@ -22,6 +22,9 @@ Profiler.builder().observe(app).start();   // serves the interface on loopback, 
   endpoints by total time and their slowest requests, and shows flame graphs by endpoint, thread,
   interval or single request. A request also shows the exceptions it created and its slow file
   and socket accesses. The `.jfr` file can be downloaded, e.g. for JDK Mission Control.
+- **Auto mode**: sessions start by themselves when a matching request comes (endpoint patterns,
+  and/or only the requests of the browser armed), before its handler runs, and stop once no
+  matching request has run for a few seconds; once or every time.
 
 A builder sets the rest: address, port, guard, directory of the recordings, JFR settings, or
 mounting on an existing flak server:

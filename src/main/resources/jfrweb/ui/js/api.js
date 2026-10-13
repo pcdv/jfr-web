@@ -134,6 +134,50 @@ export function getLive(window) {
   return call(`api/live?window=${window}`);
 }
 
+/**
+ * @typedef {object} AutoState
+ * @property {boolean} observing whether any app is observed: nothing triggers sessions otherwise
+ * @property {boolean} armed
+ * @property {string[]} [patterns] endpoints that trigger a session, * matching anything; empty for any
+ * @property {boolean} [browser] whether only the requests of an armed browser count
+ * @property {boolean} [thisBrowser] whether this browser is the one armed
+ * @property {boolean} [repeat] a session each time, or once
+ * @property {number} [idle] seconds without a matching request before a session stops
+ * @property {number} [max] maximum duration of a session, in seconds
+ * @property {number | null} recording the id of the session it started, while it records
+ */
+
+/**
+ * @typedef {object} AutoArming
+ * @property {string} patterns endpoints separated by commas
+ * @property {boolean} browser only the requests of this browser count
+ * @property {boolean} repeat a session each time, or once
+ * @property {number} idle in seconds
+ * @property {number} max in seconds
+ */
+
+/** @returns {Promise<AutoState>} */
+export function getAuto() {
+  return call('api/auto');
+}
+
+/**
+ * @param {AutoArming} a
+ * @returns {Promise<AutoState>}
+ */
+export function armAuto(a) {
+  const q = new URLSearchParams({
+    patterns: a.patterns, browser: String(a.browser), repeat: String(a.repeat),
+    idle: String(a.idle), max: String(a.max),
+  });
+  return call(`api/auto?${q}`, {method: 'POST'});
+}
+
+/** @returns {Promise<AutoState>} */
+export function disarmAuto() {
+  return call('api/auto', {method: 'DELETE'});
+}
+
 /** @returns {Promise<Session[]>} the latest first */
 export function listSessions() {
   return call('api/sessions');
