@@ -10,6 +10,20 @@ a few lines (see [Any application](#any-application-operations)). It then shows 
 expensive operations, a timeline of those in flight, and flame graphs per operation or per
 slow one.
 
+## Getting it
+
+Java 17 or later. Released on [JitPack](https://jitpack.io/#pcdv/jfr-web), with flak:
+
+```groovy
+repositories {
+  maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+  implementation 'com.github.pcdv:jfr-web:0.1.0'
+}
+```
+
 ## Features
 
 ```java
@@ -170,3 +184,7 @@ jcmd <pid> JFR.stop name=jfrweb
 
 - [docs/requirements.md](docs/requirements.md): what the project must do
 - [ROADMAP.md](ROADMAP.md): milestones, what is done and what comes next
+
+## License
+
+[Apache License 2.0](LICENSE).
