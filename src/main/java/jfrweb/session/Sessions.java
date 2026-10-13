@@ -58,6 +58,8 @@ public final class Sessions implements AutoCloseable {
    *   should turn them off ("jdk.JavaExceptionThrow#enabled" to "false")
    *   <li>file and socket accesses from 1 ms instead of 10 or 20, to show
    *   those of a slow request
+   *   <li>the load of the CPU every minute instead of every second, see
+   *   {@link jfrweb.snapshot.Snapshots#defaultSettings()}
    * </ul>
    */
   public static Map<String, String> defaultSettings() {
@@ -66,6 +68,9 @@ public final class Sessions implements AutoCloseable {
       s.put("flak.Request#enabled", "true");
       s.put("jdk.NativeMethodSample#period", "5 ms");
       s.put("jdk.JavaExceptionThrow#enabled", "true");
+      // every second, its 65 ms of CPU on Windows would show among the samples
+      // taken outside requests; see Snapshots.defaultSettings()
+      s.put("jdk.CPULoad#period", "60 s");
       for (String io : new String[]{"jdk.FileRead", "jdk.FileWrite", "jdk.SocketRead", "jdk.SocketWrite"})
         s.put(io + "#threshold", "1 ms");
       return s;

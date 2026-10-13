@@ -101,13 +101,17 @@ public final class Snapshots implements AutoCloseable {
   }
 
   /**
-   * The JDK's "default" settings, light enough for production (about 1%), plus
-   * flak's request event.
+   * The JDK's "default" settings, light enough for production, plus flak's
+   * request event, and the load of the CPU measured every minute instead of
+   * every second: on Windows, a measure costs about 65 ms of CPU (performance
+   * counters), and every second it was 95% of the cost of the recording, about
+   * 7% of a core on an idle application server.
    */
   public static Map<String, String> defaultSettings() {
     try {
       Map<String, String> s = new HashMap<>(Configuration.getConfiguration("default").getSettings());
       s.put("flak.Request#enabled", "true");
+      s.put("jdk.CPULoad#period", "60 s");
       return s;
     }
     catch (IOException | ParseException e) {

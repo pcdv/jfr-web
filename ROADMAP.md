@@ -116,7 +116,13 @@ requests: about 3 MB a day before gzip.
 - [x] Snapshots saved by themselves: request much slower than usual for its endpoint, burst of
   errors; no threshold to configure
 - [x] Retention by snapshot count and disk size, kept across restarts
-- [ ] Measure the cost of the rolling recording and the size of a snapshot on a real application
+- [x] Measure the cost of the rolling recording and the size of a snapshot on a real application
+
+Measured on an application server (Windows, JDK 21, idle): with the JDK's `default` settings, the rolling
+recording cost about 7% of a core, nearly all of it `jdk.CPULoad`, taken every second through
+Windows' performance counters at about 65 ms each. Taken every minute instead (sessions too), the
+thread of periodic events uses 0.09 s of CPU per minute, about 0.15% of a core. A snapshot of
+5 idle minutes weighs 2.7 MB.
 - [ ] Other triggers: saturation (requests in flight far above usual), JVM signals (long GC
   pauses, CPU saturated) watched from the rolling recording itself
 - [ ] Snapshots marked on the History page's timeline
