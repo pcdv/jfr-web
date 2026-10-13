@@ -1,9 +1,24 @@
 plugins {
   id 'java-library'
   id 'application'
+  id 'maven-publish'
 }
 
 group = 'com.github.pcdv'
+
+java {
+  withSourcesJar()
+}
+
+// publishToMavenLocal (or jitpack.io) using -Pversion=x.y.z
+publishing {
+  publications {
+    maven(MavenPublication) {
+      artifactId = 'jfr-web'
+      from components.java
+    }
+  }
+}
 
 // 3.4.0 brings the request listener and the flak.Request JFR event. Until it
 // is released: publishToMavenLocal -Pversion=3.4.0-SNAPSHOT in flak
