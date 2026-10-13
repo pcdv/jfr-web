@@ -148,6 +148,16 @@ already wired must follow.
   beforehand for what can be reached by clicking
 - [x] The TCP demo exports itself (`-Pdemo.export=dir`), without the environment of the JVM
 - [x] Published on GitHub Pages, rebuilt by a workflow
+- [ ] A link to the repository from the static site
+- [ ] Two demos on the site: the flak app and the TCP server
+
+## Next
+
+- [ ] Deeper stacks: JFR keeps the top 64 frames of a stack by default, and deep applications
+  get truncated flame graphs. `JFR.configure stackdepth=` raises it from inside the JVM (JDK 17
+  and 21 alike), but only before its first recording: the profiler and the snapshots would raise
+  it as they start, when they are first, and the report would tell the share of stacks truncated
+  and the JVM option otherwise (`-XX:FlightRecorderOptions:stackdepth=256`)
 
 ## Later
 
