@@ -24,5 +24,14 @@ The recording must enable flak's request event (flak 3.4.0+), which is off by de
 `recording.enable("flak.Request")`, or in a `.jfc` file. The `profile` settings of the JDK
 sample Java code every 10 ms and native calls every 20 ms.
 
+To record an application that is already running, with no change to it (JDK 21):
+
+```sh
+jcmd <pid> JFR.start name=jfrweb settings=profile +flak.Request#enabled=true
+# ... run the workload ...
+jcmd <pid> JFR.dump name=jfrweb filename=workload.jfr
+jcmd <pid> JFR.stop name=jfrweb
+```
+
 - [docs/requirements.md](docs/requirements.md): what the project must do
 - [ROADMAP.md](ROADMAP.md): milestones, what is done and what comes next

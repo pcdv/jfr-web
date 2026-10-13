@@ -36,6 +36,10 @@ public final class RecordingInfo {
   Instant start;
   Instant end;
 
+  /** How often samples were really taken, null if too few to tell. */
+  Duration javaInterval;
+  Duration nativeInterval;
+
   /** Settings of each event, by event name then setting name. */
   final Map<String, Map<String, String>> settings = new TreeMap<>();
 
@@ -65,6 +69,20 @@ public final class RecordingInfo {
 
   public Instant getEnd() {
     return end;
+  }
+
+  /**
+   * How often the samples of an event were really taken, which can be much
+   * less often than its period asks (e.g. on Windows), or null if there were
+   * too few samples to tell. Samples weigh this interval, or the period if
+   * longer.
+   */
+  public Duration getObservedInterval(String event) {
+    switch (event) {
+      case EXECUTION_SAMPLE: return javaInterval;
+      case NATIVE_SAMPLE: return nativeInterval;
+      default: return null;
+    }
   }
 
   /**

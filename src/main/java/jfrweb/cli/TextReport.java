@@ -48,12 +48,15 @@ final class TextReport {
     out.println("Java arguments: " + info.getJavaArguments());
     out.println("OS:             " + os(info.getOs()));
 
-    long[] counts = new long[4];
+    // Java, native; then in requests; then native while a request ran
+    long[] counts = new long[5];
     analysis.visitSamples((sample, thread, request, weight) -> {
       boolean java = sample.getEventType().getName().equals(EXECUTION_SAMPLE);
       counts[java ? 0 : 1]++;
       if (request != null)
         counts[java ? 2 : 3]++;
+      if (!java && analysis.isRequestRunning(sample.getStartTime()))
+        counts[4]++;
     });
 
     out.println();
@@ -62,6 +65,13 @@ final class TextReport {
                 " samples, " + counts[2] + " in requests");
     out.println("  native calls   " + period(NATIVE_SAMPLE) + ", " + counts[1] +
                 " samples, " + counts[3] + " in requests");
+    if (counts[4] > 0)
+      out.println(String.format(Locale.ROOT,
+                                "                 one thread sampled per period: while requests ran, " +
+                                "their threads got %.0f%% of the native samples, idle threads the rest." +
+                                "%n                 Read native time in requests as proportions, " +
+                                "not as absolute time.",
+                                100.0 * counts[3] / counts[4]));
     out.println("  requests       " + (info.isEnabled(REQUEST)
                                        ? analysis.getRequests().size() + " (" + REQUEST + ")"
                                        : REQUEST + " not enabled: no route context"));
@@ -84,7 +94,12 @@ final class TextReport {
 
   private String period(String event) {
     Duration p = analysis.getInfo().getPeriod(event);
-    return p == null ? "off" : "every " + ms(p.toNanos());
+    if (p == null)
+      return "off";
+    Duration observed = analysis.getInfo().getObservedInterval(event);
+    if (observed == null || observed.compareTo(p.multipliedBy(5).dividedBy(4)) <= 0)
+      return "every " + ms(p.toNanos());
+    return "every " + ms(p.toNanos()) + " asked, " + ms(observed.toNanos()) + " observed";
   }
 
   private void printEndpoints() {

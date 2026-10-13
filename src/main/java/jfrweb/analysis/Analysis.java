@@ -32,6 +32,13 @@ public final class Analysis {
   private final List<RecordedRequest> requests = new ArrayList<>();
   private final RequestIndex index = new RequestIndex();
 
+  /** Times of the samples, to measure how often they were really taken. */
+  private final LongList javaSampleTimes = new LongList();
+  private final LongList nativeSampleTimes = new LongList();
+
+  private long javaWeight;
+  private long nativeWeight;
+
   private Analysis(Path file) {
     this.file = file;
   }
@@ -72,6 +79,12 @@ public final class Analysis {
           case REQUEST:
             addRequest(e);
             break;
+          case EXECUTION_SAMPLE:
+            javaSampleTimes.add(nanos(e.getStartTime()));
+            break;
+          case NATIVE_SAMPLE:
+            nativeSampleTimes.add(nanos(e.getStartTime()));
+            break;
           case "jdk.ActiveSetting":
             String event = eventNames.get(e.getLong("id"));
             if (event != null)
@@ -90,15 +103,69 @@ public final class Analysis {
         }
       }
     }
+
+    index.seal();
+    info.javaInterval = observedRoundInterval(javaSampleTimes);
+    info.nativeInterval = observedSampleInterval(nativeSampleTimes);
+    javaWeight = weight(info.getPeriod(EXECUTION_SAMPLE), info.javaInterval);
+    nativeWeight = weight(info.getPeriod(NATIVE_SAMPLE), info.nativeInterval);
   }
 
+  /**
+   * The recording spans from its first to its last committed event. A
+   * duration event may have started before the recording (e.g. a thread
+   * parked earlier), but is committed when it ends.
+   */
   private void updateBounds(RecordedEvent e) {
-    Instant start = e.getStartTime();
     Instant end = e.getEndTime();
-    if (info.start == null || start.isBefore(info.start))
-      info.start = start;
+    if (info.start == null || end.isBefore(info.start))
+      info.start = end;
     if (info.end == null || end.isAfter(info.end))
       info.end = end;
+  }
+
+  /**
+   * The mean interval between native samples. JFR samples one thread in
+   * native code per period, and a server always has one (an idle selector, an
+   * acceptor): each period yields one sample.
+   */
+  static Duration observedSampleInterval(LongList times) {
+    if (times.size() < 2)
+      return null;
+    long[] t = times.sorted();
+    return Duration.ofNanos((t[t.length - 1] - t[0]) / (t.length - 1));
+  }
+
+  /**
+   * The interval between rounds of Java samples. A round samples the threads
+   * running Java code at that moment, so the rounds where none is are missing:
+   * the shortest gaps between rounds are the period. The samples of a round
+   * are taken within a millisecond.
+   */
+  static Duration observedRoundInterval(LongList times) {
+    long[] t = times.sorted();
+    LongList gaps = new LongList();
+    long roundStart = t.length == 0 ? 0 : t[0];
+    for (int i = 1; i < t.length; i++)
+      if (t[i] - t[i - 1] > 1_000_000) {
+        gaps.add(t[i] - roundStart);
+        roundStart = t[i];
+      }
+    if (gaps.size() < 20)
+      return null;
+    long[] g = gaps.sorted();
+    return Duration.ofNanos(g[g.length / 10]);
+  }
+
+  /**
+   * The time a sample stands for, in milliseconds: the period actually
+   * observed, which on Windows can be much longer than the period asked.
+   */
+  private static long weight(Duration period, Duration observed) {
+    long ms = period == null ? 1 : period.toMillis();
+    if (observed != null)
+      ms = Math.max(ms, Math.round(observed.toNanos() / 1e6));
+    return Math.max(1, ms);
   }
 
   private void addRequest(RecordedEvent e) {
@@ -140,9 +207,6 @@ public final class Analysis {
    * (files, sockets).
    */
   public void visitSamples(SampleVisitor visitor) throws IOException {
-    long javaWeight = weight(EXECUTION_SAMPLE);
-    long nativeWeight = weight(NATIVE_SAMPLE);
-
     try (RecordingFile rf = new RecordingFile(file)) {
       while (rf.hasMoreEvents()) {
         RecordedEvent e = rf.readEvent();
@@ -160,9 +224,11 @@ public final class Analysis {
     }
   }
 
-  private long weight(String event) {
-    Duration period = info.getPeriod(event);
-    return period == null ? 1 : Math.max(1, period.toMillis());
+  /**
+   * Whether some request was running at that time, on any thread.
+   */
+  public boolean isRequestRunning(Instant time) {
+    return index.isAnyRunning(nanos(time));
   }
 
   static long nanos(Instant i) {

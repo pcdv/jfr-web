@@ -41,6 +41,27 @@ Found on the way: on Windows (Zulu 17.0.14), JFR drops the samples whose stack i
 walk. A tight loop got no sample at all over 1 s, sorting arrays about 60 of 100, SHA-256
 hashing 12. Reports state it among the known biases.
 
+First real workload (the backend of a web UI, JDK 21, `profile` settings): JFR takes one native sample per
+period across all threads, and idle threads blocked in `accept` / `select` won 75% of them while
+`GET /api/repository` ran. The request threads got the rest: the flame graph kept the right
+proportions, but showed about a quarter of the time. A shorter period gives more samples, not a
+bigger share: native times can only be read as proportions.
+
+On Windows, the native period is not honored: 2 ms asked gave one sample every 12 ms in that application.
+On JDK 17 and 21 alike, a daemon thread in `Thread.sleep(Long.MAX_VALUE)` raises the rate about
+2.5× (1 ms asked: about 215/s without, 540/s with), likely by holding the timer resolution at
+1 ms for the process. Measured on 2026-10-13 with a standalone program, not in that application.
+
+Done since: samples weigh the interval observed in the recording when it is longer than their
+period (native: the mean interval, one sample per period; Java: the shorter gaps between
+rounds, since rounds with no Java thread running leave no sample), the span of a recording runs
+from its first to its last committed event, and reports state which share of the native samples
+the request threads got.
+
+For M2: on Windows, run the sleeping thread while a session records, and only then. Before M2,
+jfr-web could ship it as a Java agent (`-javaagent`, or loaded into a running JVM through the
+Attach API), which could also start the recording.
+
 ## M2: embedded, manual sessions
 
 - [ ] `Profiler.start()`: UI on loopback, URL logged
