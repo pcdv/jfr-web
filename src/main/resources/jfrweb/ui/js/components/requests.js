@@ -19,6 +19,8 @@ const FEW_SAMPLES = 10;
  * @property {HTMLElement} element
  * @property {(endpoint: string | undefined) => void} showEndpoint lists the slowest
  *           requests of an endpoint, or of all
+ * @property {(interval: api.Interval) => void} showInterval keeps those in flight
+ *           during an interval, or all of them
  */
 
 /**
@@ -30,14 +32,20 @@ export function requestsPanel(sessionId, onPick) {
   const title = h('span');
   const list = h('div');
   const detail = h('div');
+  /** @type {string | undefined} */
+  let endpoint;
+  /** @type {api.Interval} */
+  let interval = {};
 
-  /** @param {string | undefined} endpoint */
-  async function showEndpoint(endpoint) {
-    replace(title, 'Slowest requests', endpoint ? h('span', {class: 'mono'}, ` · ${endpoint}`) : null);
+  async function refresh() {
+    const label = fmt.interval(interval);
+    replace(title, 'Slowest requests',
+      endpoint ? h('span', {class: 'mono'}, ` · ${endpoint}`) : null,
+      label ? h('span', {class: 'interval'}, ` · ${label}`) : null);
     replace(detail);
     try {
-      const rows = await api.listRequests(sessionId, endpoint, LIMIT);
-      replace(list, table(rows, pick));
+      const rows = await api.listRequests(sessionId, endpoint, interval, LIMIT);
+      replace(list, table(rows, pick, label ? 'No request in flight in this interval.' : 'No request recorded.'));
     }
     catch (e) {
       replace(list, errorBox(e));
@@ -59,17 +67,28 @@ export function requestsPanel(sessionId, onPick) {
     }
   }
 
-  showEndpoint(undefined);
-  return {element: section('requests', title, list, detail), showEndpoint};
+  refresh();
+  return {
+    element: section('requests', title, list, detail),
+    showEndpoint(e) {
+      endpoint = e;
+      refresh();
+    },
+    showInterval(i) {
+      interval = i;
+      refresh();
+    },
+  };
 }
 
 /**
  * @param {api.RequestRow[]} rows
  * @param {(row: api.RequestRow) => void} onPick
+ * @param {string} empty the message shown when there is no row
  */
-function table(rows, onPick) {
+function table(rows, onPick, empty) {
   if (rows.length === 0)
-    return h('p', {class: 'empty'}, 'No request recorded.');
+    return h('p', {class: 'empty'}, empty);
   return h('table', {class: 'grid'},
     h('thead', null, h('tr', null,
       h('th', {class: 'num'}, 'At'), h('th', {class: 'num'}, 'Duration'), h('th', {class: 'num'}, 'Status'),

@@ -120,6 +120,19 @@ public class ProfilerTest {
     Assert.assertTrue(slowest, slowest.startsWith("[{\"id\":"));
     Assert.assertEquals("limited to 2", 2, slowest.split("\"endpoint\":\"GET /busy\"").length - 1);
 
+    // 10 ms within the first of 3 consecutive /busy: only that one in flight
+    double first = Arrays.stream(get("api/sessions/1/requests?endpoint=GET+/busy").body()
+                                   .split("\"start\":"))
+                         .skip(1)
+                         .mapToDouble(s -> Double.parseDouble(s.substring(0, s.indexOf(','))))
+                         .min().orElseThrow();
+    String interval = "from=" + (first + 0.05) + "&to=" + (first + 0.06);
+    String inInterval = get("api/sessions/1/endpoints?" + interval).body();
+    Assert.assertTrue(inInterval, inInterval.startsWith("[{\"endpoint\":\"GET /busy\",\"count\":1,"));
+    Assert.assertEquals(1, get("api/sessions/1/requests?" + interval).body().split("\"endpoint\":").length - 1);
+    Assert.assertEquals("after the session", "[]", get("api/sessions/1/endpoints?from=999").body());
+    Assert.assertEquals("[]", get("api/sessions/1/requests?from=999").body());
+
     String io = get("api/sessions/1/requests?endpoint=GET+/io").body();
     String ioId = io.replaceAll("^\\[\\{\"id\":(\\d+),.*", "$1");
     String details = get("api/sessions/1/requests/" + ioId).body();

@@ -2,8 +2,47 @@
 /**
  * The table of endpoints of a session, sorted by total time.
  */
-import {h} from '../dom.js';
+import * as api from '../api.js';
+import {h, replace, errorBox} from '../dom.js';
 import * as fmt from '../format.js';
+import {section} from './section.js';
+
+/**
+ * @typedef {object} EndpointsPanel
+ * @property {HTMLElement} element
+ * @property {(interval: api.Interval) => void} showInterval shows the requests in
+ *           flight during an interval, or all of them
+ */
+
+/**
+ * The endpoints of a session, as a foldable section, over the whole session
+ * or an interval.
+ *
+ * @param {number} sessionId
+ * @param {api.EndpointRow[]} rows those of the whole session
+ * @param {(endpoint: string) => void} onSelect called when a row is clicked
+ * @returns {EndpointsPanel}
+ */
+export function endpointsPanel(sessionId, rows, onSelect) {
+  const title = h('span', null, 'Endpoints');
+  const body = h('div', null, endpointsTable(rows, onSelect));
+
+  /** @param {api.Interval} interval */
+  async function showInterval(interval) {
+    const label = fmt.interval(interval);
+    replace(title, 'Endpoints', label ? h('span', {class: 'interval'}, ` · ${label}`) : null);
+    try {
+      replace(body, label
+        ? endpointsTable(await api.listEndpoints(sessionId, interval), onSelect, 'No request in flight in this interval.')
+        : endpointsTable(rows, onSelect));
+    }
+    catch (e) {
+      replace(body, errorBox(e));
+    }
+  }
+
+  return {element: section('endpoints', title, body), showInterval};
+}
 
 /**
  * @param {import('../api.js').EndpointRow[]} rows

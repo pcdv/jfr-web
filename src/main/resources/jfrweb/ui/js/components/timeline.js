@@ -168,8 +168,8 @@ export function timelineChart(data, onSelect) {
 
   return h('div', null,
     h('p', {class: 'hint'}, requests
-      ? `Requests in flight, on average per ${fmt.duration(data.bucket)}, by endpoint. Drag to select an interval for the flame graph; click to clear it.`
-      : `No request recorded: samples of Java code per ${fmt.duration(data.bucket)}. Drag to select an interval for the flame graph; click to clear it.`),
+      ? `Requests in flight, on average per ${fmt.duration(data.bucket)}, by endpoint. Drag to select an interval: the sections below show only it; click to clear it.`
+      : `No request recorded: samples of Java code per ${fmt.duration(data.bucket)}. Drag to select an interval: the sections below show only it; click to clear it.`),
     legend(series),
     wrapper);
 }

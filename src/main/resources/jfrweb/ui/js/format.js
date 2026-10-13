@@ -32,6 +32,16 @@ export function time(iso) {
 }
 
 /**
+ * @param {{from?: number, to?: number}} i in seconds
+ * @returns {string} e.g. "2–4.2 s", or "" for the whole session
+ */
+export function interval(i) {
+  if (i.from === undefined && i.to === undefined)
+    return '';
+  return `${i.from ?? 0}–${i.to ?? 'end'}${i.to !== undefined ? ' s' : ''}`;
+}
+
+/**
  * @param {number} ratio between 0 and 1
  * @returns {string}
  */

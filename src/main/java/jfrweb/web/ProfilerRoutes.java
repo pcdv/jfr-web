@@ -12,7 +12,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import flak.HttpException;
 import flak.Query;
@@ -300,11 +302,30 @@ public class ProfilerRoutes {
   }
 
   /**
+   * The endpoints of a session, sorted by total time, over the whole session
+   * or the requests in flight during an interval.
+   * <p>
+   * Query: {@code from} and {@code to}, in seconds since the start of the
+   * recording.
+   */
+  @Route("/api/sessions/:id/endpoints")
+  @OutputFormat(JSON)
+  public List<Object> endpoints(int id, Query q) throws IOException {
+    Analysis a = stopped(id).getAnalysis();
+    Predicate<RecordedRequest> during = during(a, q);
+    List<Object> res = new ArrayList<>();
+    for (EndpointStats e : EndpointStats.of(a.getRequests().stream().filter(during).collect(Collectors.toList())))
+      res.add(endpointRow(e));
+    return res;
+  }
+
+  /**
    * The slowest requests of a session, the slowest first. A request is known
    * by its index among those of the recording.
    * <p>
-   * Query: {@code endpoint} to keep the requests of one; {@code limit}, 20 by
-   * default.
+   * Query: {@code endpoint} to keep the requests of one; {@code from} and
+   * {@code to}, in seconds since the start of the recording, to keep those in
+   * flight during an interval; {@code limit}, 20 by default.
    */
   @Route("/api/sessions/:id/requests")
   @OutputFormat(JSON)
@@ -312,11 +333,12 @@ public class ProfilerRoutes {
     Analysis a = stopped(id).getAnalysis();
     String endpoint = q.get("endpoint");
     int limit = q.getInt("limit", 20);
+    Predicate<RecordedRequest> during = during(a, q);
     List<RecordedRequest> all = a.getRequests();
 
     List<Integer> indexes = new ArrayList<>();
     for (int i = 0; i < all.size(); i++)
-      if (endpoint == null || endpoint.isEmpty() || all.get(i).endpoint().equals(endpoint))
+      if ((endpoint == null || endpoint.isEmpty() || all.get(i).endpoint().equals(endpoint)) && during.test(all.get(i)))
         indexes.add(i);
     indexes.sort((i, j) -> Long.compare(all.get(j).durationNanos(), all.get(i).durationNanos()));
 
@@ -370,6 +392,20 @@ public class ProfilerRoutes {
     res.put("exceptions", thrown);
     res.put("io", io);
     return res;
+  }
+
+  /**
+   * Keeps the requests in flight at some point of the interval of the query,
+   * all of them if it has none. A request keeps its whole duration: cut at the
+   * bounds, percentiles would mean nothing.
+   */
+  private static Predicate<RecordedRequest> during(Analysis a, Query q) {
+    Instant start = a.getInfo().getStart();
+    Instant from = offset(start, q.get("from"));
+    Instant to = offset(start, q.get("to"));
+    long fromNanos = from == null ? Long.MIN_VALUE : Analysis.nanos(from);
+    long toNanos = to == null ? Long.MAX_VALUE : Analysis.nanos(to);
+    return r -> r.startNanos() < toNanos && r.endNanos() > fromNanos;
   }
 
   private static RecordedRequest request(Analysis a, String index) {

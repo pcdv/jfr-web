@@ -75,14 +75,43 @@
  */
 
 /**
+ * An interval of a session, in seconds since its start; both undefined for
+ * the whole session.
+ *
+ * @typedef {{from?: number, to?: number}} Interval
+ */
+
+/**
+ * @param {URLSearchParams} q
+ * @param {Interval} interval
+ */
+function addInterval(q, interval) {
+  if (interval.from !== undefined) q.set('from', String(interval.from));
+  if (interval.to !== undefined) q.set('to', String(interval.to));
+}
+
+/**
+ * @param {number} id
+ * @param {Interval} interval keeps the requests in flight during it
+ * @returns {Promise<EndpointRow[]>} sorted by total time
+ */
+export function listEndpoints(id, interval) {
+  const q = new URLSearchParams();
+  addInterval(q, interval);
+  return call(`api/sessions/${id}/endpoints?${q}`);
+}
+
+/**
  * @param {number} id
  * @param {string | undefined} endpoint all endpoints if undefined
+ * @param {Interval} interval keeps the requests in flight during it
  * @param {number} limit
  * @returns {Promise<RequestRow[]>} the slowest first
  */
-export function listRequests(id, endpoint, limit) {
+export function listRequests(id, endpoint, interval, limit) {
   const q = new URLSearchParams({limit: String(limit)});
   if (endpoint) q.set('endpoint', endpoint);
+  addInterval(q, interval);
   return call(`api/sessions/${id}/requests?${q}`);
 }
 

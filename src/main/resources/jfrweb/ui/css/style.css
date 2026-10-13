@@ -289,6 +289,11 @@ details.section > summary h2 {
   margin: 24px 0 8px;
 }
 
+details.section .interval {
+  color: var(--accent);
+  font-weight: normal;
+}
+
 details.section > summary::marker {
   color: var(--muted);
 }

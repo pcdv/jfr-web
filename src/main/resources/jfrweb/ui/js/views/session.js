@@ -6,7 +6,7 @@
 import * as api from '../api.js';
 import {h, replace, errorBox} from '../dom.js';
 import * as fmt from '../format.js';
-import {endpointsTable} from '../components/endpoints.js';
+import {endpointsPanel} from '../components/endpoints.js';
 import {flamePanel} from '../components/flame.js';
 import {timelineChart} from '../components/timeline.js';
 import {requestsPanel} from '../components/requests.js';
@@ -27,14 +27,21 @@ export function renderSession(root, params) {
     ([report, timeline]) => {
       const flame = flamePanel(report);
       const requests = requestsPanel(id, flame.showRequest);
+      const endpoints = endpointsPanel(id, report.endpoints, e => {
+        requests.showEndpoint(e);
+        flame.showEndpoint(e);
+      });
+      // the interval selected on the timeline narrows everything below it
+      const showInterval = (/** @type {number | undefined} */ from, /** @type {number | undefined} */ to) => {
+        endpoints.showInterval({from, to});
+        requests.showInterval({from, to});
+        flame.showInterval(from, to);
+      };
       replace(content,
         summary(report),
         recording(report),
-        section('timeline', 'Timeline', timelineChart(timeline, flame.showInterval)),
-        section('endpoints', 'Endpoints', endpointsTable(report.endpoints, e => {
-          requests.showEndpoint(e);
-          flame.showEndpoint(e);
-        })),
+        section('timeline', 'Timeline', timelineChart(timeline, showInterval)),
+        endpoints.element,
         requests.element,
         section('flame', 'Flame graph', flame.element));
     },
