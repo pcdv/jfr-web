@@ -8,6 +8,7 @@ import {h, replace, errorBox} from '../dom.js';
 import * as fmt from '../format.js';
 import {endpointsTable} from '../components/endpoints.js';
 import {flamePanel} from '../components/flame.js';
+import {timelineChart} from '../components/timeline.js';
 
 /**
  * @param {HTMLElement} root
@@ -20,12 +21,14 @@ export function renderSession(root, params) {
               h('h1', null, `Session ${id}`),
               content);
 
-  api.getReport(id).then(
-    report => {
+  Promise.all([api.getReport(id), api.getTimeline(id)]).then(
+    ([report, timeline]) => {
       const flame = flamePanel(report);
       replace(content,
         summary(report),
         recording(report),
+        h('h2', null, 'Timeline'),
+        timelineChart(timeline, flame.showInterval),
         h('h2', null, 'Endpoints'),
         endpointsTable(report.endpoints, flame.showEndpoint),
         h('h2', null, 'Flame graph'),

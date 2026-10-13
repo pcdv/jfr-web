@@ -162,6 +162,29 @@ public class AnalysisTest {
   }
 
   @Test
+  public void testTimeline() throws IOException {
+    Timeline t = Timeline.of(analysis);
+    Assert.assertTrue(t.getBuckets() <= Timeline.MAX_BUCKETS);
+    Assert.assertEquals("the endpoint with the most time first",
+                        "GET /busy/:id", t.getSeries().keySet().iterator().next());
+    Assert.assertNull("4 endpoints, all shown", t.getOther());
+
+    // in flight per bucket, times the bucket, gives back the time of the requests
+    double seconds = 0;
+    for (double v : t.getSeries().get("GET /busy/:id"))
+      seconds += v * t.getBucket().toNanos() / 1e9;
+    double expected = analysis.getRequests().stream()
+                              .filter(r -> r.endpoint().equals("GET /busy/:id"))
+                              .mapToLong(RecordedRequest::durationNanos).sum() / 1e9;
+    Assert.assertEquals(expected, seconds, expected * 0.001);
+    Assert.assertTrue(Arrays.stream(t.getJavaSamples()).sum() > 0);
+
+    Assert.assertEquals(100_000_000, Timeline.bucketFor(1_000_000_000));
+    Assert.assertEquals(1_000_000_000, Timeline.bucketFor(299_000_000_000L));
+    Assert.assertEquals(2_000_000_000, Timeline.bucketFor(301_000_000_000L));
+  }
+
+  @Test
   public void testFlameGraphRootedByEndpoint() throws IOException {
     String collapsed = flame(new FlameGraphs.Options().collapsed(true));
 

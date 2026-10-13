@@ -8,6 +8,16 @@
   --accent-fg: #ffffff;
   --bad: #cf222e;
   --recording: #bf3989;
+  /* categorical slots, in this order, validated for adjacent pairs on --bg */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --series-other: #a3a29c;
   color-scheme: light dark;
 }
 
@@ -22,6 +32,15 @@
     --accent-fg: #0d1117;
     --bad: #f85149;
     --recording: #db61a2;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --series-other: #6e6d68;
   }
 }
 
@@ -239,6 +258,111 @@ table.grid {
 
 .filters select, .filters input {
   font: inherit;
+}
+
+.timeline-wrapper {
+  position: relative;
+}
+
+svg.timeline {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  touch-action: none;
+}
+
+svg.timeline .grid-line {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+svg.timeline .axis-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+svg.timeline .axis-label.end {
+  text-anchor: end;
+}
+
+svg.timeline .axis-label.middle {
+  text-anchor: middle;
+}
+
+svg.timeline .hover {
+  fill: var(--fg);
+  opacity: 0.06;
+}
+
+svg.timeline .selection {
+  fill: var(--accent);
+  opacity: 0.15;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 8px;
+  font-size: 13px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.tooltip {
+  position: absolute;
+  top: 8px;
+  min-width: 180px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.tooltip-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.tooltip-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.tooltip-name {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tooltip-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltip-row.total {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 2px;
 }
 
 iframe.flame {

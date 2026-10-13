@@ -96,6 +96,9 @@ public class ProfilerTest {
     Assert.assertTrue(report.body(), report.body().contains("\"endpoint\":\"GET /busy\",\"count\":3"));
     Assert.assertTrue(report.body(), report.body().contains("\"requestEvent\":true"));
 
+    String timeline = get("api/sessions/1/timeline").body();
+    Assert.assertTrue(timeline, timeline.contains("\"series\":[{\"endpoint\":\"GET /busy\",\"values\":["));
+
     String flame = get("api/sessions/1/flame?endpoint=GET+/busy").body();
     Assert.assertTrue(flame.startsWith("<!DOCTYPE html>"));
     Assert.assertTrue(flame.contains("GET /busy"));
@@ -121,7 +124,8 @@ public class ProfilerTest {
 
     // browsers refuse a module served with another type
     for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
-                                      "views/live", "components/endpoints", "components/flame"}) {
+                                      "views/live", "components/endpoints", "components/flame",
+                                      "components/timeline"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assert.assertEquals(module, 200, js.statusCode());
       Assert.assertEquals(module, "application/javascript", js.headers().firstValue("Content-Type").orElse(null));

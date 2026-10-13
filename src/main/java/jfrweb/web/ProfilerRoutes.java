@@ -25,6 +25,7 @@ import jfrweb.analysis.EndpointStats;
 import jfrweb.analysis.FlameGraphs;
 import jfrweb.analysis.RecordingInfo;
 import jfrweb.analysis.SamplingSummary;
+import jfrweb.analysis.Timeline;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
@@ -168,6 +169,43 @@ public class ProfilerRoutes {
     res.put("biases", RecordingInfo.KNOWN_BIASES);
     res.put("threads", threads);
     res.put("endpoints", endpoints);
+    return res;
+  }
+
+  /**
+   * The activity of a session over time: requests in flight by endpoint, and
+   * samples of Java code, in buckets of a round duration.
+   */
+  @Route("/api/sessions/:id/timeline")
+  @OutputFormat(JSON)
+  public Map<String, Object> timeline(int id) throws IOException {
+    Timeline t = Timeline.of(stopped(id).getAnalysis());
+
+    List<Object> series = new ArrayList<>();
+    t.getSeries().forEach((endpoint, values) -> {
+      Map<String, Object> s = new LinkedHashMap<>();
+      s.put("endpoint", endpoint);
+      s.put("values", rounded(values));
+      series.add(s);
+    });
+    List<Long> java = new ArrayList<>();
+    for (long n : t.getJavaSamples())
+      java.add(n);
+
+    Map<String, Object> res = new LinkedHashMap<>();
+    res.put("start", t.getStart());
+    res.put("bucket", t.getBucket().toMillis());
+    res.put("buckets", t.getBuckets());
+    res.put("series", series);
+    res.put("other", t.getOther() == null ? null : rounded(t.getOther()));
+    res.put("javaSamples", java);
+    return res;
+  }
+
+  private static List<Double> rounded(double[] values) {
+    List<Double> res = new ArrayList<>(values.length);
+    for (double v : values)
+      res.add(Math.round(v * 1000) / 1000.0);
     return res;
   }
 

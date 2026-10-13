@@ -113,6 +113,25 @@ export function getReport(id) {
 }
 
 /**
+ * @typedef {object} TimelineData
+ * @property {string} start ISO-8601, the start of the recording
+ * @property {number} bucket the duration of a bucket, in ms
+ * @property {number} buckets their number
+ * @property {{endpoint: string, values: number[]}[]} series requests in flight per bucket,
+ *           on average, by endpoint, the most time first
+ * @property {number[] | null} other the same for the other endpoints, null if none
+ * @property {number[]} javaSamples samples of Java code per bucket
+ */
+
+/**
+ * @param {number} id
+ * @returns {Promise<TimelineData>}
+ */
+export function getTimeline(id) {
+  return call(`api/sessions/${id}/timeline`);
+}
+
+/**
  * @param {number} id
  * @returns {string} where the .jfr file is downloaded from
  */

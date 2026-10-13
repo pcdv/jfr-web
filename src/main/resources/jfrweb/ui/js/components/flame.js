@@ -10,6 +10,8 @@ import {h} from '../dom.js';
  * @typedef {object} FlamePanel
  * @property {HTMLElement} element
  * @property {(endpoint: string) => void} showEndpoint selects an endpoint
+ * @property {(from: number | undefined, to: number | undefined) => void} showInterval
+ *           selects an interval, in seconds since the start, or the whole session
  */
 
 /**
@@ -60,6 +62,11 @@ export function flamePanel(report) {
       endpoint.value = e;
       update();
       frame.scrollIntoView({behavior: 'smooth'});
+    },
+    showInterval(f, t) {
+      from.value = f === undefined ? '' : String(f);
+      to.value = t === undefined ? '' : String(t);
+      update();
     },
   };
 }

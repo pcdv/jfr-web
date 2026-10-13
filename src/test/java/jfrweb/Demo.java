@@ -66,11 +66,27 @@ public class Demo {
     if (Boolean.getBoolean("demo.session")) {
       // records a short session by itself, e.g. to look at the interface
       profiler.getSessions().start("demo");
-      for (int i = 0; i < 5; i++) {
-        call(app.getRootUrl() + "/sort/2000");
-        call(app.getRootUrl() + "/files");
-        call(app.getRootUrl() + "/hello");
+      // three clients calling the endpoints at random, for 8 seconds
+      String[] paths = {"/sort/2000", "/sort/200", "/files", "/hello", "/hello"};
+      long end = System.currentTimeMillis() + 8000;
+      Thread[] clients = new Thread[3];
+      for (int c = 0; c < clients.length; c++) {
+        Random random = new Random(c);
+        clients[c] = new Thread(() -> {
+          while (System.currentTimeMillis() < end) {
+            try {
+              call(app.getRootUrl() + paths[random.nextInt(paths.length)]);
+              Thread.sleep(random.nextInt(100));
+            }
+            catch (Exception e) {
+              throw new IllegalStateException(e);
+            }
+          }
+        });
+        clients[c].start();
       }
+      for (Thread c : clients)
+        c.join();
       profiler.getSessions().stop(1);
       System.out.println("Recorded session 1");
     }
