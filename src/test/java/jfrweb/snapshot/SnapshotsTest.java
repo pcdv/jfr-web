@@ -77,7 +77,7 @@ public class SnapshotsTest {
                            .contains("\"reason\":\"saved by hand\""));
 
     Analysis a = Analysis.load(s.file());
-    Assert.assertEquals(5, a.getRequests().stream().filter(r -> r.endpoint().equals("GET /item/:id")).count());
+    Assert.assertEquals(5, a.getOperations().stream().filter(r -> r.name().equals("GET /item/:id")).count());
   }
 
   @Test
@@ -106,9 +106,9 @@ public class SnapshotsTest {
     for (int i = 0; i < 100 && seen.isEmpty(); i++)
       Thread.sleep(50);
     Assert.assertEquals(1, seen.size());
-    Assert.assertTrue(seen.get(0).reason(), seen.get(0).reason().startsWith("5 errors (5xx) in a minute"));
+    Assert.assertTrue(seen.get(0).reason(), seen.get(0).reason().startsWith("5 errors in a minute"));
     Assert.assertEquals("the failing requests are in it", 5,
-                        Analysis.load(seen.get(0).file()).getRequests().stream().filter(r -> r.status() == 500).count());
+                        Analysis.load(seen.get(0).file()).getOperations().stream().filter(r -> r.status() == 500).count());
   }
 
   @Test

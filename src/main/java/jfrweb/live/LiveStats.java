@@ -5,28 +5,28 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.LongSupplier;
 
 import flak.App;
-import flak.Request;
-import flak.RequestListener;
-import flak.RequestSummary;
-import jfrweb.analysis.EndpointStats;
+import jfrweb.analysis.OperationStats;
+import jfrweb.ops.Operation;
+import jfrweb.ops.OperationListener;
+import jfrweb.ops.OperationSources;
 
 /**
- * Statistics of the endpoints of flak apps, kept by counters as requests
- * end, whether a session records or not. Nothing is recorded with JFR: the
- * cost is a few counters per request.
+ * Statistics of the operations of the application, kept by counters as they
+ * end, whether a session records or not: those of the jfrweb.ops API, and the
+ * requests of the flak apps observed. Nothing is recorded with JFR: the cost
+ * is a few counters per operation.
  */
 public final class LiveStats implements AutoCloseable {
 
   /** The windows statistics can be asked for, in minutes. */
   public static final List<Integer> WINDOWS = List.of(1, 5, 15, 60);
 
-  private final Map<String, EndpointCounter> endpoints = new ConcurrentHashMap<>();
-  private final List<Observed> observed = new CopyOnWriteArrayList<>();
+  private final Map<String, OperationCounter> operations = new ConcurrentHashMap<>();
   private final LongSupplier minuteClock;
+  private final OperationSources sources;
 
   public LiveStats() {
     this(() -> System.currentTimeMillis() / 60_000);
@@ -37,76 +37,67 @@ public final class LiveStats implements AutoCloseable {
    */
   LiveStats(LongSupplier minuteClock) {
     this.minuteClock = minuteClock;
-  }
-
-  private final class Observed implements RequestListener {
-    final App app;
-
-    Observed(App app) {
-      this.app = app;
-    }
-
-    @Override
-    public void onEnd(Request request, RequestSummary s) {
-      // grouped as in recordings, see RecordedRequest.endpoint()
-      String endpoint = request.getMethod() + " " +
-                        (s.getRoute() == null ? "(no route)" : app.getPath() + s.getRoute());
-      endpoints.computeIfAbsent(endpoint, EndpointCounter::new)
-               .record(minuteClock.getAsLong(), s.getDurationNanos(), s.getStatus(),
-                       s.getBytesIn(), s.getBytesOut());
-    }
+    this.sources = new OperationSources(new OperationListener() {
+      @Override
+      public void onEnd(Operation op) {
+        operations.computeIfAbsent(op.getName(), OperationCounter::new)
+                  .record(minuteClock.getAsLong(), op.getDurationNanos(), op.isFailed(),
+                          op.getBytesIn(), op.getBytesOut());
+      }
+    });
   }
 
   /**
-   * Counts the requests of an app from now on.
+   * Counts the requests of a flak app from now on.
    */
   public void observe(App app) {
-    Observed o = new Observed(app);
-    observed.add(o);
-    app.addRequestListener(o);
-  }
-
-  public boolean isObserving() {
-    return !observed.isEmpty();
+    sources.observe(app);
   }
 
   /**
-   * The paths of the apps observed, "" for an app at the root of its server.
+   * Whether operations may come: a flak app is observed, or the application
+   * has used the jfrweb.ops API.
+   */
+  public boolean isObserving() {
+    return sources.isObserving();
+  }
+
+  /**
+   * The paths of the flak apps observed, "" for an app at the root of its
+   * server.
    */
   public List<String> getAppPaths() {
     List<String> res = new ArrayList<>();
-    for (Observed o : observed)
-      res.add(o.app.getPath());
+    for (App a : sources.getApps())
+      res.add(a.getPath());
     return res;
   }
 
   /**
-   * The endpoints called in the last minutes, the current one included,
-   * sorted by total time, the biggest first.
+   * The operations of the last minutes, the current one included, sorted by
+   * total time, the biggest first.
    *
    * @param window a number of minutes, at most 60
    */
-  public List<EndpointStats> getEndpoints(int window) {
-    if (window < 1 || window > EndpointCounter.MINUTES)
-      throw new IllegalArgumentException("Window out of 1.." + EndpointCounter.MINUTES + ": " + window);
+  public List<OperationStats> getOperations(int window) {
+    if (window < 1 || window > OperationCounter.MINUTES)
+      throw new IllegalArgumentException("Window out of 1.." + OperationCounter.MINUTES + ": " + window);
     long now = minuteClock.getAsLong();
-    List<EndpointStats> res = new ArrayList<>();
-    for (EndpointCounter c : endpoints.values()) {
-      EndpointStats s = c.over(now, window);
+    List<OperationStats> res = new ArrayList<>();
+    for (OperationCounter c : operations.values()) {
+      OperationStats s = c.over(now, window);
       if (s != null)
         res.add(s);
     }
-    res.sort(Comparator.comparingLong(EndpointStats::totalNanos).reversed());
+    res.sort(Comparator.comparingLong(OperationStats::totalNanos).reversed());
     return res;
   }
 
   /**
-   * Stops observing the apps.
+   * Stops observing.
    */
   @Override
   public void close() {
-    for (Observed o : observed)
-      o.app.removeRequestListener(o);
-    observed.clear();
+    sources.close();
   }
 }

@@ -3,9 +3,14 @@
 //
 //   ./gradlew demo -Pdemo.session=true -Pdemo.load=true
 //   # let the load run a few minutes, for the live and history pages
-//   node docs/screenshots/capture.mjs [http://localhost:8080/] [browser.exe]
+//   node docs/screenshots/capture.mjs <profiler URL>
 //
-// The profiler's URL is the one the demo prints.
+//   ./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true
+//   node docs/screenshots/capture.mjs <profiler URL> tcp- order
+//
+// The profiler's URL is the one the demo prints. The prefix names the files,
+// and the operation is the one whose flame graph and slowest instance are
+// shown. BROWSER= sets the path of Edge or Chrome.
 import {spawn} from 'node:child_process';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -13,7 +18,9 @@ import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
-const browser = process.argv[3] ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const prefix = process.argv[3] ?? '';
+const operation = process.argv[4] ?? 'GET /sort/:n';
+const browser = process.env.BROWSER ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const outDir = dirname(fileURLToPath(import.meta.url));
 const port = 9338;
 const width = 1200;
@@ -70,8 +77,8 @@ async function shot(name, first, last = first) {
   const top = Math.max(0, r.y - 8);
   const clip = {x: 0, y: top, width, height: r.y + r.h + 16 - top, scale: 1};
   const res = await send('Page.captureScreenshot', {format: 'png', clip, captureBeyondViewport: true});
-  writeFileSync(join(outDir, name), Buffer.from(res.result.data, 'base64'));
-  console.log(name, `${width}x${Math.round(clip.height)}`);
+  writeFileSync(join(outDir, prefix + name), Buffer.from(res.result.data, 'base64'));
+  console.log(prefix + name, `${width}x${Math.round(clip.height)}`);
 }
 
 /** drags across the timeline, between two fractions of its width */
@@ -125,17 +132,17 @@ try {
   await open(`#/sessions/${session}`);
   await shot('report.png', `document.querySelector('p.summary')`, sectionOf('Timeline'));
 
-  // an interval selected on the timeline narrows the endpoints and the rest
+  // an interval selected on the timeline narrows the operations and the rest
   await drag(0.3, 0.6);
-  await shot('interval.png', sectionOf('Timeline'), sectionOf('Endpoints'));
+  await shot('interval.png', sectionOf('Timeline'), sectionOf('Operations'));
 
-  // the flame graph of an endpoint, picked in the table
+  // the flame graph of an operation, picked in the table
   await drag(0.5, 0.5);
-  await click('tr.clickable', 'GET /sort/:n');
+  await click('tr.clickable', operation);
   await flameRoots();
   await shot('flame.png', sectionOf('Flame graph'));
 
-  // the slowest request of the endpoint: its details and flame graph
+  // the slowest of these operations: its details and flame graph
   await evaluate(`document.querySelector('tr[data-id]').click()`);
   await sleep(3000);
   await flameRoots();
@@ -156,7 +163,7 @@ try {
   })()`);
   if (first > 0.1)
     await drag(Math.max(0, first - 0.01), 0.999);
-  await shot('history.png', `document.body`, sectionOf('Endpoints'));
+  await shot('history.png', `document.body`, sectionOf('Operations'));
 }
 finally {
   ws.close();

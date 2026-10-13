@@ -15,12 +15,12 @@ import jdk.jfr.consumer.RecordedThread;
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
 
 /**
- * What a recording tells about one request, beyond its samples: the
- * exceptions created and the file and socket accesses on its thread while it
- * ran. Only the accesses longer than the threshold of their event are
- * recorded.
+ * What a recording tells about one operation, beyond its samples: the
+ * exceptions created and the file and socket accesses of the threads that
+ * worked for it, while they did. Only the accesses longer than the threshold
+ * of their event are recorded.
  */
-public final class RequestDetails {
+public final class OperationDetails {
 
   public static final String EXCEPTION = "jdk.JavaExceptionThrow";
   public static final String ERROR = "jdk.JavaErrorThrow";
@@ -32,9 +32,9 @@ public final class RequestDetails {
   private static final Set<String> TYPES = Set.of(EXCEPTION, ERROR, FILE_READ, FILE_WRITE, SOCKET_READ, SOCKET_WRITE);
 
   /**
-   * An exception or error created by the request.
+   * An exception or error created by the operation.
    *
-   * @param offsetNanos since the start of the request
+   * @param offsetNanos since the start of the operation
    * @param frame       the method that created it, e.g. "com.acme.Dao.load"
    */
   public record Thrown(long offsetNanos, String type, String message, String frame) {}
@@ -47,26 +47,27 @@ public final class RequestDetails {
    */
   public record Io(long offsetNanos, String kind, String target, long bytes, long durationNanos) {}
 
-  private final RecordedRequest request;
+  private final RecordedOperation operation;
+  private final List<OperationIndex.Segment> segments;
   private final List<Thrown> thrown = new ArrayList<>();
   private final List<Io> io = new ArrayList<>();
   private long javaSamples;
   private long nativeSamples;
 
-  private RequestDetails(RecordedRequest request) {
-    this.request = request;
+  private OperationDetails(RecordedOperation operation, List<OperationIndex.Segment> segments) {
+    this.operation = operation;
+    this.segments = segments;
   }
 
-  public static RequestDetails of(Analysis analysis, RecordedRequest request) throws IOException {
-    RequestDetails d = new RequestDetails(request);
+  public static OperationDetails of(Analysis analysis, RecordedOperation operation) throws IOException {
+    OperationDetails d = new OperationDetails(operation, analysis.getSegments(operation));
 
     analysis.visitEvents(TYPES, e -> {
       RecordedThread t = e.getThread();
       long time = Analysis.nanos(e.getStartTime());
-      if (t == null || t.getJavaThreadId() != request.threadId() ||
-          time < request.startNanos() || time > request.endNanos())
+      if (t == null || !d.workedFor(t.getJavaThreadId(), time))
         return;
-      long offset = time - request.startNanos();
+      long offset = time - operation.startNanos();
       String type = e.getEventType().getName();
       switch (type) {
         case EXCEPTION:
@@ -93,8 +94,8 @@ public final class RequestDetails {
     d.thrown.sort(Comparator.comparingLong(Thrown::offsetNanos));
     d.io.sort(Comparator.comparingLong(Io::offsetNanos));
 
-    analysis.visitSamples((sample, thread, r, weight) -> {
-      if (request.equals(r)) {
+    analysis.visitSamples((sample, thread, op, weight) -> {
+      if (operation.equals(op)) {
         if (sample.getEventType().getName().equals(EXECUTION_SAMPLE))
           d.javaSamples++;
         else
@@ -119,8 +120,22 @@ public final class RequestDetails {
     return null;
   }
 
-  public RecordedRequest getRequest() {
-    return request;
+  private boolean workedFor(long threadId, long timeNanos) {
+    for (OperationIndex.Segment s : segments)
+      if (s.threadId() == threadId && timeNanos >= s.startNanos() && timeNanos <= s.endNanos())
+        return true;
+    return false;
+  }
+
+  public RecordedOperation getOperation() {
+    return operation;
+  }
+
+  /**
+   * The threads that worked for it, and when, the earliest first.
+   */
+  public List<OperationIndex.Segment> getSegments() {
+    return segments;
   }
 
   public List<Thrown> getThrown() {

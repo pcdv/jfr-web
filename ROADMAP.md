@@ -125,6 +125,23 @@ thread of periodic events uses 0.09 s of CPU per minute, about 0.15% of a core. 
 - [ ] Manual and automatic sessions kept across restarts too
 - [ ] Diff of two flame graphs
 
+## M7: any application, operations
+
+- [x] Operations instead of endpoints: flak's requests are one source, grouped and shown the same
+- [x] `jfrweb.ops` API: synchronous and asynchronous operations, segments, failures, sizes; JFR
+  events `jfrweb.Operation` and `jfrweb.OperationSegment`
+- [x] Live statistics, history, snapshots and auto mode fed by the API with no set-up
+- [x] Recordings: an asynchronous operation gets the samples of its segments; its report lists
+  the threads that worked for it
+- [x] Demo without HTTP: an order server over TCP (`./gradlew tcpDemo`)
+- [ ] Nested operations on a thread (an operation inside a request), shown by the innermost
+- [ ] Other frameworks as sources: they emit their own events and counters, jfr-web adapts to
+  them
+
+Renamed while no one used it: `EndpointHistory` is `OperationHistory`, and the REST API, the
+history files and the command line changed their keys (files written before still read). Applications
+already wired must follow.
+
 ## Later
 
 - [ ] async-profiler as an additional source on Linux and macOS

@@ -75,43 +75,56 @@ The contract any HTTP stack can emit to get route context. Fields beyond JFR's o
 - Installing it records nothing: recording is a separate, runtime decision (see Recording
   modes).
 
-## Applications observed
+## Operations
 
-- The application does not have to be a flak application, nor even an HTTP one. Without flak,
-  the profiler provides sessions, timelines and flame graphs, without route context.
-- The API accepts references to one or several flak `App`s (a server can host several), which
-  allows introspecting their endpoints/routes.
-- With a flak app, every sample taken while a request runs is attributed to its route, with no
-  annotation, thanks to flak's request event.
-- The request event is a documented contract (name and fields), so another HTTP stack can emit
-  it and get the same route context.
+Everything is grouped by **operation**: a unit of work of the application, with a name that
+operations are grouped by (like the route of a request), a start, a duration, an outcome
+(failed or not), and optionally a detail (what this one worked on) and sizes in and out.
 
-## Endpoint statistics (without profiling)
+- The application does not have to be a flak application, nor even an HTTP one. Without
+  operations, the profiler still provides sessions, timelines of samples and flame graphs.
+- **flak**: the requests of the apps given to the profiler are operations, named after their
+  method and route ("GET /api/user/:id"), failed on a 5xx status, with no annotation. Their
+  samples come from flak's request event, a documented contract (name and fields) that another
+  HTTP stack can emit to get the same.
+- **Any application**: the `jfrweb.ops` API begins and ends operations, and records them as the
+  `jfrweb.Operation` JFR event. The profiler, the history and the snapshots hear of them with no
+  set-up.
+  - Synchronous: run by the thread that begins it, which works only for it until it ends: the
+    samples of that thread in that time are its own. Synchronous operations do not nest.
+  - Asynchronous: may end on any thread (a reply sent from a callback). Its duration is that of
+    the whole, waiting included; its samples are those of its segments, the times when a thread
+    declares working for it (`jfrweb.OperationSegment` events, `op.wrap(task)` for an
+    executor).
+- Other sources adapt to it rather than depend on jfr-web: e.g. an RPC framework would emit its
+  own JFR events and counters, with an adapter on the jfr-web side.
 
-- Flak apps only.
-- Per endpoint: invocation count, durations (p50/p99/max), errors, bytes in / bytes out.
+## Operation statistics (without profiling)
+
+- Per operation name: count, durations (p50/p99/max), errors, bytes in / bytes out.
 - Available even when no profiling runs, so the statistics are kept by in-memory counters fed
-  by flak, not derived from a JFR recording.
+  as operations end, not derived from a JFR recording.
 - Shown per time window, sorted by total time (count × duration).
 
-## Endpoint history (production)
+## Operation history (production)
 
-A mode that can stay on in production, to tell afterwards which endpoints were called during a
-period, and how they behaved. No profiling: the same counters, written to disk.
+A mode that can stay on in production, to tell afterwards which operations ran during a period,
+and how they behaved. No profiling: the same counters, written to disk.
 
-- Low impact: counters updated as requests end, written once per interval (1 minute by default,
-  configurable).
-- An interval is one JSON line: per endpoint, count, total, p50/p99/max, 5xx, bytes, and the
-  histogram the percentiles come from, so that intervals add up; plus the slowest requests of
-  the interval (10 by default: time, path, status, duration, thread). An interval without
-  requests is written all the same: no line means the history was not running.
+- Low impact: counters updated as operations end, written once per interval (1 minute by
+  default, configurable).
+- An interval is one JSON line: per operation name, count, total, p50/p99/max, errors, bytes,
+  and the histogram the percentiles come from, so that intervals add up; plus the slowest
+  operations of the interval (10 by default: time, detail, outcome, duration, thread). An
+  interval without operations is written all the same: no line means the history was not
+  running. Files written when the history counted endpoints still read.
 - Hourly files in a dedicated directory, `<dir>/<yyyy-MM-dd>/<HH>.jsonl` in UTC, gzipped once
   the hour is over. Purged by age (7 days by default) and total size (100 MiB by default),
   both configurable.
 - Runs alone, without the web interface or JFR. The embedding application decides whether it
   runs and how, from its own configuration.
-- Read from the profiler's interface (a period, zoomable: endpoints, requests over time,
-  slowest requests) or from the command line, e.g. on files copied off a server.
+- Read from the profiler's interface (a period, zoomable: operations, operations over time,
+  slowest operations) or from the command line, e.g. on files copied off a server.
 
 ## Snapshots (production)
 
@@ -119,15 +132,15 @@ Something to investigate after a problem, with no need to have started a session
 and nothing to configure, otherwise it would never be turned on.
 
 - A rolling recording keeps the last minutes (5 by default) on disk, with the JDK's `default`
-  settings (about 1%) plus flak's request event. A snapshot saves them as a `.jfr` file, with a
+  settings (about 1%) plus the operation events. A snapshot saves them as a `.jfr` file, with a
   `.json` file telling why and when.
 - Taken by hand (e.g. right after a problem), or by themselves when:
-  - a request is much slower than usual for its endpoint: 4 times its p99 of the last hour, and
-    over 1 s; for an endpoint with too few requests to tell what is usual, over 10 s
-  - errors burst: at least 5 responses with a 5xx status in a minute, 10% of the requests of
-    that minute at least, and 4 times their usual share
+  - an operation is much slower than usual for its name: 4 times its p99 of the last hour, and
+    over 1 s; for a name with too few operations to tell what is usual, over 10 s
+  - errors burst: at least 5 operations failed in a minute, 10% of the operations of that
+    minute at least, and 4 times their usual share
 - Automatic snapshots wait 10 s to hold the aftermath, and are 15 minutes apart at least: an
-  incident gives one snapshot, not one per slow request.
+  incident gives one snapshot, not one per slow operation.
 - A dedicated directory, kept across restarts (an incident is often followed by one), purged by
   number of snapshots (20) and total size (1 GiB).
 - Listed with the sessions, with their reason; their report is that of a session.
@@ -140,23 +153,22 @@ method samples, so that time blocked in native calls (filesystem, sockets) is vi
 ### Sessions
 
 A session is one profiling recording, kept on disk as one `.jfr` file. Its bounds depend on the
-recording mode below. A session records its start time, duration and how it was started; with a
-flak app, also its request count and, in auto mode, its trigger.
+recording mode below. A session records its start time, duration and how it was started; with
+operations, also their count and, in auto mode, its trigger.
 
 ### Recording modes
 
 - Manual: a session runs from start to stop, from the UI or the REST API.
 - Continuous: one open-ended session, a rolling recording with a maximum age and size, browsed
   by time interval.
-- Auto, flak apps only: a session starts when matching endpoints are invoked, and stops when
-  idle.
-  - Trigger: route patterns, "arm my browser" (a cookie set from the UI, so that only the
-    requests of that browser trigger a session), or both; once or every time.
-  - The recording starts synchronously, before the triggering request runs (in the request
-    hook's begin). JFR is warmed up when auto mode is enabled, by a short recording that is
+- Auto: a session starts when matching operations begin, and stops when idle.
+  - Trigger: name patterns, "arm my browser" (a cookie set from the UI, so that only the
+    requests of that browser trigger a session; flak only), or both; once or every time.
+  - The recording starts synchronously, before the triggering operation runs (in the request
+    hook's begin for flak, in `Operations.begin` for the API). JFR is warmed up when auto mode is enabled, by a short recording that is
     thrown away, so a start costs a few milliseconds. Installing the profiler alone still
     records nothing.
-  - Stop once no matching request has run for T seconds (3 by default, long enough for
+  - Stop once no matching operation has run for T seconds (3 by default, long enough for
     asynchronous work to finish: one setting rather than an idle time plus a grace period, which
     would only add up), with a maximum session duration (2 minutes by default).
   - The profiler's own requests never count as activity.
@@ -169,12 +181,12 @@ flak app, also its request count and, in auto mode, its trigger.
 ## Web interface
 
 - Sessions list.
-- Endpoints table for a session or a time window (flak apps).
-- Timeline: activity per second (requests in flight stacked by route, for flak apps); select an
-  interval to zoom in.
-- Flame graph for any combination of time interval, thread and, for flak apps, route; for a
-  single slow request, its flame graph plus the exceptions thrown and files accessed by its
-  thread.
+- Operations table for a session or a time window.
+- Timeline: activity per second (operations in flight stacked by name); select an interval to
+  zoom in.
+- Flame graph for any combination of time interval, thread and operation name; for a single
+  slow operation, its flame graph plus the threads that worked for it (asynchronous), the
+  exceptions thrown and the files accessed by them.
 - Diff of two flame graphs (before / after a fix, Windows / Linux).
 - Every report states how it was recorded: JDK version, JVM arguments, enabled events, sampling
   periods, and the known sampling biases.
@@ -199,12 +211,13 @@ flak app, also its request count and, in auto mode, its trigger.
 
 ## Known limitations
 
-- Sampling density: at 10-20 ms per sample, a single short request gets few samples. Per-route
-  flame graphs aggregate many requests; per-request ones are only meaningful for slow requests.
-- Work handed to another thread (executor) falls outside the request window and is not
-  attributed to the route.
+- Sampling density: at 10-20 ms per sample, a single short operation gets few samples. Flame
+  graphs per name aggregate many operations; per-operation ones are only meaningful for slow
+  ones.
+- Work handed to another thread (executor) falls outside the operation's window and is not
+  attributed to it, unless it runs in a segment of an asynchronous operation.
 - JFR samples only a few threads per period, and idle threads blocked in native code (selectors,
-  `accept`) take part of the native samples. Filtering by request hides them in the views but
+  `accept`) take part of the native samples. Filtering by operation hides them in the views but
   does not recover the lost samples.
 - Threads blocked on a lock, sleeping or parked are sampled by neither event: the wall-clock
   view shows Java code and native calls, not waiting.
@@ -212,6 +225,13 @@ flak app, also its request count and, in auto mode, its trigger.
   get few samples, or none.
 
 ## Decisions
+
+- **Operations, not endpoints**: the profiler started with flak's requests, and grouped by
+  endpoint. Its views only need a unit of work (a name, a start, a duration, an outcome, a
+  thread or segments), so flak became one source of operations among others, and the interface
+  says "operations" everywhere, a flak endpoint included. Renamed while no one used it yet:
+  `EndpointHistory` became `OperationHistory`, the REST API and the files changed their keys
+  (the old files still read).
 
 - **JSON is written by hand**, with no dependency: flak-jackson would impose a Jackson version
   on host applications (some already ship their own). The profiler only produces JSON (its

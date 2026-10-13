@@ -3,40 +3,41 @@ package jfrweb.auto;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import flak.App;
-import flak.Request;
-import flak.RequestListener;
-import flak.RequestSummary;
+import jfrweb.ops.FlakOperations;
+import jfrweb.ops.Operation;
+import jfrweb.ops.OperationListener;
+import jfrweb.ops.OperationSources;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
 
 /**
- * Starts sessions by themselves: when a request matching the trigger begins,
- * before its handler runs, so that the whole request is recorded; and stops
- * them once no matching request has run for a while, or after a maximum
- * duration. Only the requests of the apps observed count, so the profiler's
- * own never do.
+ * Starts sessions by themselves: when an operation matching the trigger
+ * begins, before it runs (before its handler for a request), so that the
+ * whole operation is recorded; and stops them once no matching operation has
+ * run for a while, or after a maximum duration. Only the operations of the
+ * jfrweb.ops API and the requests of the flak apps observed count, so the
+ * profiler's own requests never do.
  */
 public final class AutoMode implements AutoCloseable {
 
   private static final System.Logger log = System.getLogger(AutoMode.class.getName());
 
   /** The cookie of an armed browser, sent to every path of the host. */
-  public static final String COOKIE = "jfrweb-armed";
+  public static final String COOKIE = FlakOperations.ARM_COOKIE;
 
   /** How often a session is checked for being idle or too long, in ms. */
   private static final long CHECK_PERIOD = 200;
 
   private final Sessions sessions;
   private final ScheduledExecutorService scheduler;
-  private final List<Map.Entry<App, RequestListener>> observed = new CopyOnWriteArrayList<>();
+  private final OperationSources sources;
 
   private volatile Trigger trigger;
   private boolean warm;
@@ -44,12 +45,12 @@ public final class AutoMode implements AutoCloseable {
   /** The session started by this, while it records. */
   private Session session;
   private long sessionStart;
-  /** Matching requests in flight, and when the last one ended (nanoTime). */
+  /** Matching operations in flight, and when the last one ended (nanoTime). */
   private int inFlight;
   private long lastEnd;
 
-  /** Whether the request served by this thread matched, set by onBegin. */
-  private final ThreadLocal<Boolean> counted = new ThreadLocal<>();
+  /** The operations in flight that matched, set by onBegin. */
+  private final Set<Operation> counted = ConcurrentHashMap.newKeySet();
 
   public AutoMode(Sessions sessions) {
     this.sessions = sessions;
@@ -59,6 +60,22 @@ public final class AutoMode implements AutoCloseable {
       return t;
     });
     scheduler.scheduleWithFixedDelay(this::check, CHECK_PERIOD, CHECK_PERIOD, TimeUnit.MILLISECONDS);
+    sources = new OperationSources(new OperationListener() {
+      @Override
+      public void onBegin(Operation op) {
+        Trigger t = trigger;
+        if (t != null && t.matches(op.getName(), op.getArmToken())) {
+          counted.add(op);
+          begin(t, op.getName());
+        }
+      }
+
+      @Override
+      public void onEnd(Operation op) {
+        if (counted.remove(op))
+          end();
+      }
+    });
   }
 
   /**
@@ -71,9 +88,9 @@ public final class AutoMode implements AutoCloseable {
   }
 
   /**
-   * Starts waiting for requests that match the trigger. The first time, warms
-   * JFR up, which takes a moment, so that starting a session in the middle of
-   * a request then costs a few milliseconds.
+   * Starts waiting for operations that match the trigger. The first time,
+   * warms JFR up, which takes a moment, so that starting a session at the
+   * beginning of an operation then costs a few milliseconds.
    */
   public void arm(Trigger trigger) {
     synchronized (this) {
@@ -109,44 +126,19 @@ public final class AutoMode implements AutoCloseable {
   }
 
   /**
-   * Makes the requests of an app trigger sessions, until closed.
+   * Makes the requests of a flak app trigger sessions, until closed. The
+   * operations of the jfrweb.ops API do from the start.
    */
   public void observe(App app) {
-    RequestListener l = listenerFor(app);
-    observed.add(Map.entry(app, l));
-    app.addRequestListener(l);
+    sources.observe(app);
   }
 
-  private RequestListener listenerFor(App app) {
-    return new RequestListener() {
-      @Override
-      public void onBegin(Request request) {
-        Trigger t = trigger;
-        if (t == null)
-          return;
-        String endpoint = request.getMethod() + " " + app.getPath() + request.getRoute();
-        if (t.matches(endpoint, request.getCookie(COOKIE))) {
-          counted.set(Boolean.TRUE);
-          begin(t, endpoint);
-        }
-      }
-
-      @Override
-      public void onEnd(Request request, RequestSummary summary) {
-        if (counted.get() != null) {
-          counted.remove();
-          end();
-        }
-      }
-    };
-  }
-
-  private synchronized void begin(Trigger t, String endpoint) {
+  private synchronized void begin(Trigger t, String operation) {
     inFlight++;
     if (session != null || sessions.getRecording() != null)
       return;
     try {
-      session = sessions.start(t.describe(endpoint));
+      session = sessions.start(t.describe(operation));
       sessionStart = System.nanoTime();
       lastEnd = sessionStart;
     }
@@ -194,9 +186,8 @@ public final class AutoMode implements AutoCloseable {
   @Override
   public synchronized void close() {
     trigger = null;
-    for (Map.Entry<App, RequestListener> e : observed)
-      e.getKey().removeRequestListener(e.getValue());
-    observed.clear();
+    sources.close();
+    counted.clear();
     scheduler.shutdownNow();
     if (session != null) {
       sessions.stop(session.getId());

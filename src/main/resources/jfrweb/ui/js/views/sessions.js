@@ -71,7 +71,7 @@ function toolbar(sessions, snapshots, refresh) {
     snapshots.available
       ? [' ', h('button', {
           title: 'A rolling recording keeps the last minutes: save them, e.g. right after a problem. ' +
-                 'Snapshots are also saved by themselves when a request is much slower than usual, or errors burst.',
+                 'Snapshots are also saved by themselves when an operation is much slower than usual, or errors burst.',
           onclick: () => act(() => api.saveSnapshot(), refresh),
         }, `Save the last ${minutes} minutes`)]
       : null);

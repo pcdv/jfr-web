@@ -19,17 +19,18 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
-import jfrweb.analysis.EndpointStats;
+import jfrweb.analysis.OperationStats;
 import jfrweb.json.Json;
 import jfrweb.stats.Histogram;
 
 /**
- * Reads a period of a history written by {@link EndpointHistory}, and adds up
- * its intervals.
+ * Reads a period of a history written by {@link OperationHistory}, and adds up
+ * its intervals. It also reads those written before operations replaced
+ * endpoints.
  */
 public final class HistoryReader {
 
-  /** Endpoints shown on their own in a timeline, the others added up. */
+  /** Operation names shown on their own in a timeline, the others added up. */
   public static final int MAX_SERIES = 8;
 
   /** At most this many buckets in a timeline. */
@@ -40,13 +41,15 @@ public final class HistoryReader {
                                        7200, 10800, 21600, 43200, 86400};
 
   /**
-   * A request among the slowest of an interval.
+   * An operation among the slowest of an interval.
    *
-   * @param end when it ended
+   * @param end    when it ended
+   * @param status the HTTP status of a request, 0 for other operations
    */
-  public record Slow(Instant end, String endpoint, String path, int status, long nanos, String thread) {}
+  public record Slow(Instant end, String name, String detail, int status, boolean failed, long nanos,
+                     String thread) {}
 
-  private record Row(String endpoint, int count, long totalNanos, long maxNanos, int errors,
+  private record Row(String name, int count, long totalNanos, long maxNanos, int errors,
                      long bytesIn, long bytesOut, Histogram durations) {}
 
   private record Interval(Instant start, Instant end, List<Row> rows, List<Slow> slowest) {}
@@ -99,10 +102,12 @@ public final class HistoryReader {
   @SuppressWarnings("unchecked")
   private static Interval parse(String line) {
     Map<String, Object> m = (Map<String, Object>) Json.parse(line);
+    // before operations, an interval held "endpoints"
+    boolean old = !m.containsKey("operations");
     List<Row> rows = new ArrayList<>();
-    for (Object o : (List<Object>) m.get("endpoints")) {
+    for (Object o : (List<Object>) m.get(old ? "endpoints" : "operations")) {
       Map<String, Object> e = (Map<String, Object>) o;
-      rows.add(new Row((String) e.get("endpoint"),
+      rows.add(new Row((String) e.get(old ? "endpoint" : "name"),
                        ((Number) e.get("count")).intValue(),
                        nanos(e.get("total")),
                        nanos(e.get("max")),
@@ -114,10 +119,12 @@ public final class HistoryReader {
     List<Slow> slowest = new ArrayList<>();
     for (Object o : (List<Object>) m.get("slowest")) {
       Map<String, Object> s = (Map<String, Object>) o;
+      int status = ((Number) s.get("status")).intValue();
       slowest.add(new Slow(Instant.parse((String) s.get("end")),
-                           (String) s.get("endpoint"),
-                           (String) s.get("path"),
-                           ((Number) s.get("status")).intValue(),
+                           (String) s.get(old ? "endpoint" : "operation"),
+                           (String) s.get(old ? "path" : "detail"),
+                           status,
+                           old ? status >= 500 : (Boolean) s.get("failed"),
                            nanos(s.get("duration")),
                            (String) s.get("thread")));
     }
@@ -138,27 +145,28 @@ public final class HistoryReader {
 
   /**
    * The number of intervals found: none means the history was not written
-   * then, whereas an interval without requests was written all the same.
+   * then, whereas an interval without operations was written all the same.
    */
   public int getIntervalCount() {
     return intervals.size();
   }
 
   /**
-   * The endpoints of the period, sorted by total time, the biggest first.
+   * The operations of the period, by name, sorted by total time, the biggest
+   * first.
    */
-  public List<EndpointStats> getEndpoints() {
+  public List<OperationStats> getOperations() {
     Map<String, Row> sums = new LinkedHashMap<>();
     for (Interval i : intervals)
       for (Row r : i.rows())
-        sums.merge(r.endpoint(), r, HistoryReader::add);
-    List<EndpointStats> res = new ArrayList<>();
+        sums.merge(r.name(), r, HistoryReader::add);
+    List<OperationStats> res = new ArrayList<>();
     for (Row r : sums.values())
-      res.add(new EndpointStats(r.endpoint(), r.count(), r.totalNanos(),
-                                Math.min(r.durations().percentile(50), r.maxNanos()),
-                                Math.min(r.durations().percentile(99), r.maxNanos()),
-                                r.maxNanos(), r.errors(), r.bytesIn(), r.bytesOut()));
-    res.sort(Comparator.comparingLong(EndpointStats::totalNanos).reversed());
+      res.add(new OperationStats(r.name(), r.count(), r.totalNanos(),
+                                 Math.min(r.durations().percentile(50), r.maxNanos()),
+                                 Math.min(r.durations().percentile(99), r.maxNanos()),
+                                 r.maxNanos(), r.errors(), r.bytesIn(), r.bytesOut()));
+    res.sort(Comparator.comparingLong(OperationStats::totalNanos).reversed());
     return res;
   }
 
@@ -166,21 +174,21 @@ public final class HistoryReader {
     Histogram h = new Histogram();
     h.addAll(a.durations());
     h.addAll(b.durations());
-    return new Row(a.endpoint(), a.count() + b.count(), a.totalNanos() + b.totalNanos(),
+    return new Row(a.name(), a.count() + b.count(), a.totalNanos() + b.totalNanos(),
                    Math.max(a.maxNanos(), b.maxNanos()), a.errors() + b.errors(),
                    a.bytesIn() + b.bytesIn(), a.bytesOut() + b.bytesOut(), h);
   }
 
   /**
-   * The slowest requests of the period, the slowest first, among those each
+   * The slowest operations of the period, the slowest first, among those each
    * interval kept.
    *
-   * @param endpoint keeps those of an endpoint, or all if null
+   * @param name keeps the operations of a name, or all if null
    */
-  public List<Slow> getSlowest(String endpoint, int limit) {
+  public List<Slow> getSlowest(String name, int limit) {
     return intervals.stream()
                     .flatMap(i -> i.slowest().stream())
-                    .filter(s -> endpoint == null || s.endpoint().equals(endpoint))
+                    .filter(s -> name == null || s.name().equals(name))
                     .filter(s -> !s.end().isBefore(from) && s.end().isBefore(to))
                     .sorted(Comparator.comparingLong(Slow::nanos).reversed())
                     .limit(limit)
@@ -188,7 +196,7 @@ public final class HistoryReader {
   }
 
   /**
-   * The number of requests of the period over time, in buckets, by endpoint:
+   * The number of operations of the period over time, in buckets, by name:
    * the {@link #MAX_SERIES} with the most time on their own.
    */
   public CountTimeline getTimeline() {
@@ -207,15 +215,15 @@ public final class HistoryReader {
       }
     int buckets = (int) Math.max(1, (span + bucket - 1) / bucket);
 
-    List<String> top = getEndpoints().stream().limit(MAX_SERIES).map(EndpointStats::endpoint)
-                                     .collect(Collectors.toList());
+    List<String> top = getOperations().stream().limit(MAX_SERIES).map(OperationStats::name)
+                                      .collect(Collectors.toList());
     Map<String, double[]> series = new LinkedHashMap<>();
     Map<String, double[]> seconds = new LinkedHashMap<>();
     for (String e : top) {
       series.put(e, new double[buckets]);
       seconds.put(e, new double[buckets]);
     }
-    boolean others = getEndpoints().size() > MAX_SERIES;
+    boolean others = getOperations().size() > MAX_SERIES;
     double[] other = others ? new double[buckets] : null;
     double[] otherSeconds = others ? new double[buckets] : null;
     boolean[] covered = new boolean[buckets];
@@ -226,18 +234,18 @@ public final class HistoryReader {
         continue;
       covered[(int) b] = true;
       for (Row r : i.rows()) {
-        series.getOrDefault(r.endpoint(), other)[(int) b] += r.count();
-        seconds.getOrDefault(r.endpoint(), otherSeconds)[(int) b] += r.totalNanos() / 1e9;
+        series.getOrDefault(r.name(), other)[(int) b] += r.count();
+        seconds.getOrDefault(r.name(), otherSeconds)[(int) b] += r.totalNanos() / 1e9;
       }
     }
     return new CountTimeline(from, Duration.ofSeconds(bucket), buckets, series, other, seconds, otherSeconds, covered);
   }
 
   /**
-   * Requests per bucket, by endpoint: their number, and the time they took.
+   * Operations per bucket, by name: their number, and the time they took.
    *
-   * @param seconds      the time the requests took, by endpoint
-   * @param otherSeconds the same for the other endpoints, or null
+   * @param seconds      the time the operations took, by name
+   * @param otherSeconds the same for the other names, or null
    * @param covered      whether the history was written during each bucket
    */
   public record CountTimeline(Instant start, Duration bucket, int buckets, Map<String, double[]> series,
@@ -255,12 +263,12 @@ public final class HistoryReader {
   }
 
   /**
-   * Requests by endpoint over the period, for tests.
+   * Operations by name over the period, for tests.
    */
   Map<String, Integer> counts() {
     Map<String, Integer> res = new HashMap<>();
-    for (EndpointStats e : getEndpoints())
-      res.put(e.endpoint(), e.count());
+    for (OperationStats e : getOperations())
+      res.put(e.name(), e.count());
     return res;
   }
 }

@@ -25,11 +25,12 @@ import flak.annotations.OutputFormat;
 import flak.annotations.Post;
 import flak.annotations.Route;
 import jfrweb.analysis.Analysis;
-import jfrweb.analysis.EndpointStats;
 import jfrweb.analysis.FlameGraphs;
+import jfrweb.analysis.OperationDetails;
+import jfrweb.analysis.OperationIndex;
+import jfrweb.analysis.OperationStats;
+import jfrweb.analysis.RecordedOperation;
 import jfrweb.analysis.RecordingInfo;
-import jfrweb.analysis.RecordedRequest;
-import jfrweb.analysis.RequestDetails;
 import jfrweb.analysis.SamplingSummary;
 import jfrweb.analysis.Timeline;
 import jfrweb.auto.AutoMode;
@@ -39,8 +40,9 @@ import jfrweb.session.Session;
 import jfrweb.session.Sessions;
 
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
+import static jfrweb.analysis.RecordingInfo.FLAK_REQUEST;
 import static jfrweb.analysis.RecordingInfo.NATIVE_SAMPLE;
-import static jfrweb.analysis.RecordingInfo.REQUEST;
+import static jfrweb.analysis.RecordingInfo.OPERATION;
 
 /**
  * The REST API behind the web interface. Durations are in milliseconds, times
@@ -73,8 +75,8 @@ public class ProfilerRoutes {
   /**
    * Arms the auto mode.
    * <p>
-   * Query: {@code patterns}, endpoints separated by commas or new lines, *
-   * matching anything, none for any endpoint; {@code browser=true} to only
+   * Query: {@code patterns}, operations separated by commas or new lines, *
+   * matching anything, none for any operation; {@code browser=true} to only
    * count the requests of the browser arming, which gets a cookie;
    * {@code repeat=true} to start a session each time, not once; {@code idle}
    * and {@code max}, in seconds.
@@ -84,7 +86,7 @@ public class ProfilerRoutes {
   @OutputFormat(JSON)
   public Map<String, Object> arm(Query q, Response resp) {
     if (!live.isObserving())
-      throw new HttpException(409, "No app is observed: nothing can trigger a session");
+      throw new HttpException(409, "No operation is observed: nothing can trigger a session");
 
     List<String> patterns = new ArrayList<>();
     for (String p : q.get("patterns", "").split("[,\\n]"))
@@ -114,6 +116,7 @@ public class ProfilerRoutes {
   private Map<String, Object> autoState(Trigger t, String cookie) {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("observing", live.isObserving());
+    m.put("flakApps", !live.getAppPaths().isEmpty());
     m.put("armed", t != null);
     if (t != null) {
       m.put("patterns", t.patterns());
@@ -144,7 +147,7 @@ public class ProfilerRoutes {
   }
 
   /**
-   * The endpoints of the apps observed, over the last minutes.
+   * The operations of the application, over the last minutes.
    * <p>
    * Query: {@code window}, a number of minutes among {@link LiveStats#WINDOWS}.
    */
@@ -161,16 +164,16 @@ public class ProfilerRoutes {
     if (!LiveStats.WINDOWS.contains(window))
       throw new HttpException(400, "Window not among " + LiveStats.WINDOWS + ": " + window);
 
-    List<Object> endpoints = new ArrayList<>();
-    for (EndpointStats e : live.getEndpoints(window))
-      endpoints.add(endpointRow(e));
+    List<Object> operations = new ArrayList<>();
+    for (OperationStats o : live.getOperations(window))
+      operations.add(operationRow(o));
 
     Map<String, Object> res = new LinkedHashMap<>();
     res.put("observing", live.isObserving());
     res.put("apps", live.getAppPaths());
     res.put("window", window);
     res.put("windows", LiveStats.WINDOWS);
-    res.put("endpoints", endpoints);
+    res.put("operations", operations);
     return res;
   }
 
@@ -236,11 +239,11 @@ public class ProfilerRoutes {
     recording.put("enabledEvents", info.getEnabledEvents().size());
 
     Map<String, Object> sampling = new LinkedHashMap<>();
-    sampling.put("java", sampling(info, EXECUTION_SAMPLE, summary.getJavaSamples(), summary.getJavaInRequests()));
-    sampling.put("native", sampling(info, NATIVE_SAMPLE, summary.getNativeSamples(), summary.getNativeInRequests()));
-    sampling.put("requestShareOfNative", summary.getRequestShareOfNative());
-    sampling.put("requestEvent", info.isEnabled(REQUEST));
-    sampling.put("requests", a.getRequests().size());
+    sampling.put("java", sampling(info, EXECUTION_SAMPLE, summary.getJavaSamples(), summary.getJavaInOperations()));
+    sampling.put("native", sampling(info, NATIVE_SAMPLE, summary.getNativeSamples(), summary.getNativeInOperations()));
+    sampling.put("operationShareOfNative", summary.getOperationShareOfNative());
+    sampling.put("operationEvents", info.isEnabled(FLAK_REQUEST) || info.isEnabled(OPERATION));
+    sampling.put("operations", a.getOperations().size());
 
     List<Object> threads = new ArrayList<>();
     summary.getSamplesByThread().forEach((name, count) -> {
@@ -250,9 +253,9 @@ public class ProfilerRoutes {
       threads.add(t);
     });
 
-    List<Object> endpoints = new ArrayList<>();
-    for (EndpointStats e : EndpointStats.of(a.getRequests()))
-      endpoints.add(endpointRow(e));
+    List<Object> operations = new ArrayList<>();
+    for (OperationStats o : OperationStats.of(a.getOperations()))
+      operations.add(operationRow(o));
 
     Map<String, Object> res = new LinkedHashMap<>();
     res.put("session", session(s));
@@ -260,12 +263,12 @@ public class ProfilerRoutes {
     res.put("sampling", sampling);
     res.put("biases", RecordingInfo.KNOWN_BIASES);
     res.put("threads", threads);
-    res.put("endpoints", endpoints);
+    res.put("operations", operations);
     return res;
   }
 
   /**
-   * The activity of a session over time: requests in flight by endpoint, and
+   * The activity of a session over time: operations in flight by name, and
    * samples of Java code, in buckets of a round duration.
    * <p>
    * Query: {@code from} and {@code to}, in seconds since the start of the
@@ -279,9 +282,9 @@ public class ProfilerRoutes {
     Timeline t = Timeline.of(a, offset(start, q.get("from")), offset(start, q.get("to")));
 
     List<Object> series = new ArrayList<>();
-    t.getSeries().forEach((endpoint, values) -> {
+    t.getSeries().forEach((name, values) -> {
       Map<String, Object> s = new LinkedHashMap<>();
-      s.put("endpoint", endpoint);
+      s.put("name", name);
       s.put("values", rounded(values));
       series.add(s);
     });
@@ -307,64 +310,75 @@ public class ProfilerRoutes {
   }
 
   /**
-   * The endpoints of a session, sorted by total time, over the whole session
-   * or the requests in flight during an interval.
+   * The operations of a session by name, sorted by total time, over the whole
+   * session or the operations in flight during an interval.
    * <p>
    * Query: {@code from} and {@code to}, in seconds since the start of the
    * recording.
    */
-  @Route("/api/sessions/:id/endpoints")
+  @Route("/api/sessions/:id/operations")
   @OutputFormat(JSON)
-  public List<Object> endpoints(int id, Query q) throws IOException {
+  public List<Object> operations(int id, Query q) throws IOException {
     Analysis a = stopped(id).getAnalysis();
-    Predicate<RecordedRequest> during = during(a, q);
+    Predicate<RecordedOperation> during = during(a, q);
     List<Object> res = new ArrayList<>();
-    for (EndpointStats e : EndpointStats.of(a.getRequests().stream().filter(during).collect(Collectors.toList())))
-      res.add(endpointRow(e));
+    for (OperationStats o : OperationStats.of(a.getOperations().stream().filter(during).collect(Collectors.toList())))
+      res.add(operationRow(o));
     return res;
   }
 
   /**
-   * The slowest requests of a session, the slowest first. A request is known
-   * by its index among those of the recording.
+   * The slowest operations of a session, the slowest first. An operation is
+   * known by its index among those of the recording.
    * <p>
-   * Query: {@code endpoint} to keep the requests of one; {@code from} and
+   * Query: {@code name} to keep the operations of a name; {@code from} and
    * {@code to}, in seconds since the start of the recording, to keep those in
    * flight during an interval; {@code limit}, 20 by default.
    */
-  @Route("/api/sessions/:id/requests")
+  @Route("/api/sessions/:id/instances")
   @OutputFormat(JSON)
-  public List<Object> requests(int id, Query q) throws IOException {
+  public List<Object> instances(int id, Query q) throws IOException {
     Analysis a = stopped(id).getAnalysis();
-    String endpoint = q.get("endpoint");
+    String name = q.get("name");
     int limit = q.getInt("limit", 20);
-    Predicate<RecordedRequest> during = during(a, q);
-    List<RecordedRequest> all = a.getRequests();
+    Predicate<RecordedOperation> during = during(a, q);
+    List<RecordedOperation> all = a.getOperations();
 
     List<Integer> indexes = new ArrayList<>();
     for (int i = 0; i < all.size(); i++)
-      if ((endpoint == null || endpoint.isEmpty() || all.get(i).endpoint().equals(endpoint)) && during.test(all.get(i)))
+      if ((name == null || name.isEmpty() || all.get(i).name().equals(name)) && during.test(all.get(i)))
         indexes.add(i);
     indexes.sort((i, j) -> Long.compare(all.get(j).durationNanos(), all.get(i).durationNanos()));
 
     List<Object> res = new ArrayList<>();
     for (int i : indexes.subList(0, Math.min(limit, indexes.size())))
-      res.add(requestRow(a, i));
+      res.add(instanceRow(a, i));
     return res;
   }
 
   /**
-   * One request of a session: its exceptions, and its file and socket
-   * accesses longer than the thresholds of the recording.
+   * One operation of a session: the threads that worked for it, its
+   * exceptions, and its file and socket accesses longer than the thresholds
+   * of the recording.
    */
-  @Route("/api/sessions/:id/requests/:n")
+  @Route("/api/sessions/:id/instances/:n")
   @OutputFormat(JSON)
-  public Map<String, Object> request(int id, int n) throws IOException {
+  public Map<String, Object> instance(int id, int n) throws IOException {
     Analysis a = stopped(id).getAnalysis();
-    RequestDetails d = RequestDetails.of(a, request(a, String.valueOf(n)));
+    RecordedOperation op = instance(a, String.valueOf(n));
+    OperationDetails d = OperationDetails.of(a, op);
+
+    List<Object> segments = new ArrayList<>();
+    for (OperationIndex.Segment s : d.getSegments()) {
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("thread", s.threadName());
+      m.put("offset", ms(s.startNanos() - op.startNanos()));
+      m.put("duration", ms(s.endNanos() - s.startNanos()));
+      segments.add(m);
+    }
 
     List<Object> thrown = new ArrayList<>();
-    for (RequestDetails.Thrown t : d.getThrown()) {
+    for (OperationDetails.Thrown t : d.getThrown()) {
       Map<String, Object> m = new LinkedHashMap<>();
       m.put("offset", ms(t.offsetNanos()));
       m.put("type", t.type());
@@ -373,7 +387,7 @@ public class ProfilerRoutes {
       thrown.add(m);
     }
     List<Object> io = new ArrayList<>();
-    for (RequestDetails.Io i : d.getIo()) {
+    for (OperationDetails.Io i : d.getIo()) {
       Map<String, Object> m = new LinkedHashMap<>();
       m.put("offset", ms(i.offsetNanos()));
       m.put("kind", i.kind());
@@ -385,14 +399,15 @@ public class ProfilerRoutes {
 
     RecordingInfo info = a.getInfo();
     Map<String, Object> thresholds = new LinkedHashMap<>();
-    for (String e : new String[]{RequestDetails.FILE_READ, RequestDetails.FILE_WRITE,
-                                 RequestDetails.SOCKET_READ, RequestDetails.SOCKET_WRITE})
+    for (String e : new String[]{OperationDetails.FILE_READ, OperationDetails.FILE_WRITE,
+                                 OperationDetails.SOCKET_READ, OperationDetails.SOCKET_WRITE})
       thresholds.put(e, info.isEnabled(e) ? info.getSettings(e).get("threshold") : null);
 
-    Map<String, Object> res = requestRow(a, n);
+    Map<String, Object> res = instanceRow(a, n);
     res.put("javaSamples", d.getJavaSamples());
     res.put("nativeSamples", d.getNativeSamples());
-    res.put("exceptionsRecorded", info.isEnabled(RequestDetails.EXCEPTION));
+    res.put("segments", segments);
+    res.put("exceptionsRecorded", info.isEnabled(OperationDetails.EXCEPTION));
     res.put("ioThresholds", thresholds);
     res.put("exceptions", thrown);
     res.put("io", io);
@@ -400,11 +415,11 @@ public class ProfilerRoutes {
   }
 
   /**
-   * Keeps the requests in flight at some point of the interval of the query,
-   * all of them if it has none. A request keeps its whole duration: cut at the
-   * bounds, percentiles would mean nothing.
+   * Keeps the operations in flight at some point of the interval of the
+   * query, all of them if it has none. An operation keeps its whole duration:
+   * cut at the bounds, percentiles would mean nothing.
    */
-  private static Predicate<RecordedRequest> during(Analysis a, Query q) {
+  private static Predicate<RecordedOperation> during(Analysis a, Query q) {
     Instant start = a.getInfo().getStart();
     Instant from = offset(start, q.get("from"));
     Instant to = offset(start, q.get("to"));
@@ -413,28 +428,30 @@ public class ProfilerRoutes {
     return r -> r.startNanos() < toNanos && r.endNanos() > fromNanos;
   }
 
-  private static RecordedRequest request(Analysis a, String index) {
+  private static RecordedOperation instance(Analysis a, String index) {
     try {
-      return a.getRequests().get(Integer.parseInt(index));
+      return a.getOperations().get(Integer.parseInt(index));
     }
     catch (NumberFormatException | IndexOutOfBoundsException e) {
-      throw new HttpException(404, "No request " + index);
+      throw new HttpException(404, "No operation " + index);
     }
   }
 
-  private static Map<String, Object> requestRow(Analysis a, int index) {
-    RecordedRequest r = a.getRequests().get(index);
+  private static Map<String, Object> instanceRow(Analysis a, int index) {
+    RecordedOperation op = a.getOperations().get(index);
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("id", index);
-    m.put("endpoint", r.endpoint());
-    m.put("method", r.method());
-    m.put("path", r.path());
-    m.put("status", r.status());
-    m.put("start", Math.round((r.startNanos() - Analysis.nanos(a.getInfo().getStart())) / 1e6) / 1000.0);
-    m.put("duration", ms(r.durationNanos()));
-    m.put("thread", r.threadName());
-    m.put("bytesIn", r.bytesIn());
-    m.put("bytesOut", r.bytesOut());
+    m.put("name", op.name());
+    m.put("detail", op.detail());
+    m.put("status", op.status());
+    m.put("failed", op.failed());
+    m.put("error", op.error());
+    m.put("async", op.async());
+    m.put("start", Math.round((op.startNanos() - Analysis.nanos(a.getInfo().getStart())) / 1e6) / 1000.0);
+    m.put("duration", ms(op.durationNanos()));
+    m.put("thread", op.threadName());
+    m.put("bytesIn", op.bytesIn());
+    m.put("bytesOut", op.bytesOut());
     return m;
   }
 
@@ -442,9 +459,10 @@ public class ProfilerRoutes {
    * A flame graph, as a self-contained HTML page.
    * <p>
    * Query: {@code from} and {@code to}, in seconds since the start of the
-   * recording; {@code thread}, the name of a thread; {@code endpoint}, e.g.
-   * "GET /api/user/:id", or {@code request}, the index of one request;
-   * {@code all=true} to add the samples taken outside requests.
+   * recording; {@code thread}, the name of a thread; {@code name}, that of
+   * operations, e.g. "GET /api/user/:id", or {@code instance}, the index of
+   * one operation; {@code all=true} to add the samples taken outside
+   * operations.
    */
   @Route("/api/sessions/:id/flame")
   public Response flame(int id, Query q, Response resp) throws IOException {
@@ -453,23 +471,24 @@ public class ProfilerRoutes {
 
     FlameGraphs.Options o = new FlameGraphs.Options()
       .interval(offset(start, q.get("from")), offset(start, q.get("to")))
-      .outsideRequests(q.getBool("all", false));
+      .outsideOperations(q.getBool("all", false));
     StringBuilder title = new StringBuilder("Wall clock");
     String thread = q.get("thread");
     if (thread != null && !thread.isEmpty()) {
       o.thread(Pattern.compile(Pattern.quote(thread)));
       title.append(", thread ").append(thread);
     }
-    String endpoint = q.get("endpoint");
-    String request = q.get("request");
-    if (request != null && !request.isEmpty()) {
-      RecordedRequest r = request(a, request);
-      o.requests(r::equals);
-      title.append(", request ").append(request).append(": ").append(r.method()).append(' ').append(r.path());
+    String name = q.get("name");
+    String instance = q.get("instance");
+    if (instance != null && !instance.isEmpty()) {
+      RecordedOperation op = instance(a, instance);
+      o.operations(op::equals);
+      title.append(", operation ").append(instance).append(": ")
+           .append(op.detail() != null ? op.detail() : op.name());
     }
-    else if (endpoint != null && !endpoint.isEmpty()) {
-      o.requests(r -> r.endpoint().equals(endpoint));
-      title.append(", ").append(endpoint);
+    else if (name != null && !name.isEmpty()) {
+      o.operations(op -> op.name().equals(name));
+      title.append(", ").append(name);
     }
     o.title(title.append(" (ms)").toString());
 
@@ -507,9 +526,9 @@ public class ProfilerRoutes {
     return m;
   }
 
-  static Map<String, Object> endpointRow(EndpointStats e) {
+  static Map<String, Object> operationRow(OperationStats e) {
     Map<String, Object> m = new LinkedHashMap<>();
-    m.put("endpoint", e.endpoint());
+    m.put("name", e.name());
     m.put("count", e.count());
     m.put("total", ms(e.totalNanos()));
     m.put("p50", ms(e.p50Nanos()));
@@ -521,14 +540,14 @@ public class ProfilerRoutes {
     return m;
   }
 
-  private static Map<String, Object> sampling(RecordingInfo info, String event, long samples, long inRequests) {
+  private static Map<String, Object> sampling(RecordingInfo info, String event, long samples, long inOperations) {
     Map<String, Object> m = new LinkedHashMap<>();
     Duration period = info.getPeriod(event);
     Duration observed = info.getObservedInterval(event);
     m.put("period", period == null ? null : ms(period.toNanos()));
     m.put("observed", observed == null ? null : ms(observed.toNanos()));
     m.put("samples", samples);
-    m.put("inRequests", inRequests);
+    m.put("inOperations", inOperations);
     return m;
   }
 

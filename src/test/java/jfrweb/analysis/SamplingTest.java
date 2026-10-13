@@ -43,11 +43,11 @@ public class SamplingTest {
   }
 
   @Test
-  public void testAnyRequestRunning() {
-    RequestIndex index = new RequestIndex();
-    index.add(request(1, 10, 20));
-    index.add(request(2, 15, 30));
-    index.add(request(1, 40, 50));
+  public void testAnyOperationRunning() {
+    OperationIndex index = new OperationIndex();
+    index.add(segment(1, 10, 20));
+    index.add(segment(2, 15, 30));
+    index.add(segment(1, 40, 50));
     index.seal();
 
     Assert.assertFalse(index.isAnyRunning(5));
@@ -62,7 +62,9 @@ public class SamplingTest {
     Assert.assertNotNull(index.find(2, 25));
   }
 
-  private static RecordedRequest request(long thread, long start, long end) {
-    return new RecordedRequest(thread, "t" + thread, start, end, "", "GET", "/x", "/x", 200, 0, 0);
+  private static OperationIndex.Segment segment(long thread, long start, long end) {
+    RecordedOperation op = new RecordedOperation(thread, "t" + thread, start, end, "GET /x", "GET /x", 200, false,
+                                                 null, 0, 0, false);
+    return new OperationIndex.Segment(thread, "t" + thread, start, end, op);
   }
 }

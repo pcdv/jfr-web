@@ -13,12 +13,12 @@ import java.util.stream.Collectors;
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
 
 /**
- * The activity of a recording over time, in buckets: the requests in flight,
- * by endpoint, and the samples of Java code.
+ * The activity of a recording over time, in buckets: the operations in
+ * flight, by name, and the samples of Java code.
  */
 public final class Timeline {
 
-  /** Endpoints shown on their own, the others are added up. */
+  /** Operation names shown on their own, the others are added up. */
   public static final int MAX_SERIES = 8;
 
   /** At most this many buckets. */
@@ -51,8 +51,8 @@ public final class Timeline {
 
   /**
    * The timeline of a part of the recording, in buckets as fine as its span
-   * allows: to zoom in. The endpoints with a series of their own are those of
-   * the whole recording, so that each keeps its color.
+   * allows: to zoom in. The operations with a series of their own are those
+   * of the whole recording, so that each keeps its color.
    *
    * @param from the start of the part, or null from the start of the recording
    * @param to   the end of the part, or null to the end of the recording
@@ -71,10 +71,10 @@ public final class Timeline {
     Timeline t = new Timeline(start != null ? start : Instant.EPOCH, Duration.ofNanos(bucketNanos), buckets);
     long origin = Analysis.nanos(t.start);
 
-    // the endpoints with the most time get a series of their own
+    // the operations with the most time get a series of their own
     Map<String, Long> totals = new HashMap<>();
-    for (RecordedRequest r : analysis.getRequests())
-      totals.merge(r.endpoint(), r.durationNanos(), Long::sum);
+    for (RecordedOperation op : analysis.getOperations())
+      totals.merge(op.name(), op.durationNanos(), Long::sum);
     List<String> top = totals.entrySet().stream()
                              .sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))
                              .limit(MAX_SERIES)
@@ -85,18 +85,18 @@ public final class Timeline {
     if (totals.size() > MAX_SERIES)
       t.other = new double[buckets];
 
-    for (RecordedRequest r : analysis.getRequests()) {
-      double[] values = t.series.getOrDefault(r.endpoint(), t.other);
-      long begin = Math.max(r.startNanos() - origin, 0);
-      long finish = Math.min(r.endNanos() - origin, (long) buckets * bucketNanos);
+    for (RecordedOperation op : analysis.getOperations()) {
+      double[] values = t.series.getOrDefault(op.name(), t.other);
+      long begin = Math.max(op.startNanos() - origin, 0);
+      long finish = Math.min(op.endNanos() - origin, (long) buckets * bucketNanos);
       for (long b = begin / bucketNanos; b * bucketNanos < finish && b < buckets; b++) {
         long overlap = Math.min(finish, (b + 1) * bucketNanos) - Math.max(begin, b * bucketNanos);
-        // a request in flight for the whole bucket counts 1
+        // an operation in flight for the whole bucket counts 1
         values[(int) b] += (double) overlap / bucketNanos;
       }
     }
 
-    analysis.visitSamples((sample, thread, request, weight) -> {
+    analysis.visitSamples((sample, thread, operation, weight) -> {
       if (!sample.getEventType().getName().equals(EXECUTION_SAMPLE))
         return;
       long b = (Analysis.nanos(sample.getStartTime()) - origin) / bucketNanos;
@@ -129,15 +129,15 @@ public final class Timeline {
   }
 
   /**
-   * The requests in flight in each bucket, on average, by endpoint: the
-   * endpoints with the most total time first.
+   * The operations in flight in each bucket, on average, by name: those
+   * with the most total time first.
    */
   public Map<String, double[]> getSeries() {
     return series;
   }
 
   /**
-   * The requests of the other endpoints, or null if all have a series.
+   * The operations of the other names, or null if all have a series.
    */
   public double[] getOther() {
     return other;
@@ -145,7 +145,7 @@ public final class Timeline {
 
   /**
    * The number of samples of Java code in each bucket: the activity of an
-   * application that serves no request.
+   * application that records no operation.
    */
   public long[] getJavaSamples() {
     return javaSamples;

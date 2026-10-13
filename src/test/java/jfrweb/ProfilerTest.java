@@ -22,10 +22,12 @@ import flak.AppFactory;
 import flak.Flak;
 import flak.HttpException;
 import flak.annotations.Route;
-import jfrweb.history.EndpointHistory;
+import jfrweb.history.OperationHistory;
+import jfrweb.ops.Operations;
 import jfrweb.snapshot.Snapshots;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -118,41 +120,41 @@ public class ProfilerTest {
 
     HttpResponse<String> report = get("api/sessions/1/report");
     Assert.assertEquals("application/json", report.headers().firstValue("Content-Type").orElse(null));
-    Assert.assertTrue(report.body(), report.body().contains("\"endpoint\":\"GET /busy\",\"count\":3"));
-    Assert.assertTrue(report.body(), report.body().contains("\"requestEvent\":true"));
+    Assert.assertTrue(report.body(), report.body().contains("\"name\":\"GET /busy\",\"count\":3"));
+    Assert.assertTrue(report.body(), report.body().contains("\"operationEvents\":true"));
 
-    String slowest = get("api/sessions/1/requests?endpoint=GET+/busy&limit=2").body();
+    String slowest = get("api/sessions/1/instances?name=GET+/busy&limit=2").body();
     Assert.assertTrue(slowest, slowest.startsWith("[{\"id\":"));
-    Assert.assertEquals("limited to 2", 2, slowest.split("\"endpoint\":\"GET /busy\"").length - 1);
+    Assert.assertEquals("limited to 2", 2, slowest.split("\"name\":\"GET /busy\"").length - 1);
 
     // 10 ms within the first of 3 consecutive /busy: only that one in flight
-    double first = Arrays.stream(get("api/sessions/1/requests?endpoint=GET+/busy").body()
+    double first = Arrays.stream(get("api/sessions/1/instances?name=GET+/busy").body()
                                    .split("\"start\":"))
                          .skip(1)
                          .mapToDouble(s -> Double.parseDouble(s.substring(0, s.indexOf(','))))
                          .min().orElseThrow();
     String interval = "from=" + (first + 0.05) + "&to=" + (first + 0.06);
-    String inInterval = get("api/sessions/1/endpoints?" + interval).body();
-    Assert.assertTrue(inInterval, inInterval.startsWith("[{\"endpoint\":\"GET /busy\",\"count\":1,"));
-    Assert.assertEquals(1, get("api/sessions/1/requests?" + interval).body().split("\"endpoint\":").length - 1);
-    Assert.assertEquals("after the session", "[]", get("api/sessions/1/endpoints?from=999").body());
-    Assert.assertEquals("[]", get("api/sessions/1/requests?from=999").body());
+    String inInterval = get("api/sessions/1/operations?" + interval).body();
+    Assert.assertTrue(inInterval, inInterval.startsWith("[{\"name\":\"GET /busy\",\"count\":1,"));
+    Assert.assertEquals(1, get("api/sessions/1/instances?" + interval).body().split("\"name\":").length - 1);
+    Assert.assertEquals("after the session", "[]", get("api/sessions/1/operations?from=999").body());
+    Assert.assertEquals("[]", get("api/sessions/1/instances?from=999").body());
 
-    String io = get("api/sessions/1/requests?endpoint=GET+/io").body();
+    String io = get("api/sessions/1/instances?name=GET+/io").body();
     String ioId = io.replaceAll("^\\[\\{\"id\":(\\d+),.*", "$1");
-    String details = get("api/sessions/1/requests/" + ioId).body();
+    String details = get("api/sessions/1/instances/" + ioId).body();
     Assert.assertTrue(details, details.contains("\"type\":\"java.lang.IllegalStateException\",\"message\":\"boom\","));
     Assert.assertTrue(details, details.contains("\"frame\":\"jfrweb.ProfilerTest$Handlers.io\""));
     Assert.assertTrue(details, details.contains("\"jdk.FileRead\":\"1 ms\""));
-    Assert.assertEquals(404, get("api/sessions/1/requests/9999").statusCode());
+    Assert.assertEquals(404, get("api/sessions/1/instances/9999").statusCode());
 
-    String requestFlame = get("api/sessions/1/flame?request=" + ioId).body();
-    Assert.assertTrue(requestFlame, requestFlame.contains("request " + ioId + ": GET /io"));
+    String instanceFlame = get("api/sessions/1/flame?instance=" + ioId).body();
+    Assert.assertTrue(instanceFlame, instanceFlame.contains("operation " + ioId + ": GET /io"));
 
     String timeline = get("api/sessions/1/timeline").body();
-    Assert.assertTrue(timeline, timeline.contains("\"series\":[{\"endpoint\":\"GET /busy\",\"values\":["));
+    Assert.assertTrue(timeline, timeline.contains("\"series\":[{\"name\":\"GET /busy\",\"values\":["));
 
-    String flame = get("api/sessions/1/flame?endpoint=GET+/busy").body();
+    String flame = get("api/sessions/1/flame?name=GET+/busy").body();
     Assert.assertTrue(flame.startsWith("<!DOCTYPE html>"));
     Assert.assertTrue(flame.contains("GET /busy"));
     Assert.assertTrue("an interval with no sample", get("api/sessions/1/flame?from=0&to=0").body()
@@ -177,8 +179,8 @@ public class ProfilerTest {
 
     // browsers refuse a module served with another type
     for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
-                                      "views/live", "components/endpoints", "components/flame",
-                                      "components/timeline", "components/requests", "components/auto",
+                                      "views/live", "components/operations", "components/flame",
+                                      "components/timeline", "components/slowest", "components/auto",
                                       "components/section", "views/history",
                                       "components/sessionTimeline", "settings"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
@@ -189,7 +191,7 @@ public class ProfilerTest {
   }
 
   @Test
-  public void testLiveEndpoints() throws Exception {
+  public void testLiveOperations() throws Exception {
     profiler = Profiler.builder().directory(dir).observe(app).start();
     http.send(HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/busy")).build(),
               HttpResponse.BodyHandlers.ofString());
@@ -200,7 +202,7 @@ public class ProfilerTest {
       live = get("api/live?window=1").body();
     }
     Assert.assertTrue(live, live.startsWith("{\"observing\":true,\"apps\":[\"\"],\"window\":1,"));
-    Assert.assertTrue(live, live.contains("\"endpoint\":\"GET /busy\",\"count\":1"));
+    Assert.assertTrue(live, live.contains("\"name\":\"GET /busy\",\"count\":1"));
     Assert.assertEquals(400, get("api/live?window=7").statusCode());
   }
 
@@ -224,14 +226,14 @@ public class ProfilerTest {
     Assert.assertTrue("stopped once idle", get("api/sessions").body().contains("STOPPED"));
 
     HttpResponse<String> disarmed = http.send(request("api/auto").DELETE().build(), HttpResponse.BodyHandlers.ofString());
-    Assert.assertTrue(disarmed.body(), disarmed.body().startsWith("{\"observing\":true,\"armed\":false"));
+    Assert.assertTrue(disarmed.body(), disarmed.body().startsWith("{\"observing\":true,\"flakApps\":true,\"armed\":false"));
     Assert.assertTrue(disarmed.headers().firstValue("Set-Cookie").orElse("").contains("Max-Age=0"));
   }
 
   @Test
   public void testHistory() throws Exception {
     Path historyDir = dir.resolve("history");
-    try (EndpointHistory history = EndpointHistory.builder().directory(historyDir)
+    try (OperationHistory history = OperationHistory.builder().directory(historyDir)
                                                   .interval(java.time.Duration.ofSeconds(1)).observe(app).start()) {
       profiler = Profiler.builder().directory(dir).history(historyDir).start();
       busy(null);
@@ -240,7 +242,7 @@ public class ProfilerTest {
 
     String body = get("api/history").body();
     Assert.assertTrue(body, body.startsWith("{\"available\":true,"));
-    Assert.assertTrue(body, body.contains("\"endpoints\":[{\"endpoint\":\"GET /busy\",\"count\":1,"));
+    Assert.assertTrue(body, body.contains("\"operations\":[{\"name\":\"GET /busy\",\"count\":1,"));
     Assert.assertTrue(body, body.contains("\"slowest\":[{\"end\":"));
     Assert.assertTrue(body, body.contains("\"timeline\":{\"start\":"));
     Assert.assertEquals(400, get("api/history?from=yesterday").statusCode());
@@ -251,7 +253,7 @@ public class ProfilerTest {
                                                      new PrintStream(out, true, StandardCharsets.UTF_8)));
     String text = out.toString(StandardCharsets.UTF_8);
     Assert.assertTrue(text, text.contains("GET /busy"));
-    Assert.assertTrue(text, text.contains("Slowest requests:"));
+    Assert.assertTrue(text, text.contains("Slowest operations:"));
   }
 
   @Test
@@ -267,7 +269,7 @@ public class ProfilerTest {
 
       String report = get("api/sessions/" + id + "/report").body();
       Assert.assertTrue("the request made before the snapshot: " + report,
-                        report.contains("\"endpoint\":\"GET /busy\",\"count\":1"));
+                        report.contains("\"name\":\"GET /busy\",\"count\":1"));
       Assert.assertTrue(get("api/sessions").body().contains("snapshot: saved by hand"));
     }
   }
@@ -287,6 +289,8 @@ public class ProfilerTest {
 
   @Test
   public void testAutoModeNeedsObservedApps() throws Exception {
+    // operations of the API may come once one was begun, by another test
+    Assume.assumeFalse(Operations.isUsed());
     profiler = Profiler.builder().directory(dir).start();
     Assert.assertEquals(409, post("api/auto").statusCode());
   }

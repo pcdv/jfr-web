@@ -16,15 +16,15 @@ import one.convert.FlameGraph;
 import one.convert.Frame;
 
 /**
- * Builds flame graphs from the samples of a recording, rooted by endpoint:
- * the first frame of each stack is the endpoint of the request the thread was
- * serving. Stacks are assembled here, filtered by request and thread, and
- * rendered by async-profiler's converter.
+ * Builds flame graphs from the samples of a recording, rooted by operation:
+ * the first frame of each stack is the name of the operation the thread was
+ * working for. Stacks are assembled here, filtered by operation and thread,
+ * and rendered by async-profiler's converter.
  */
 public final class FlameGraphs {
 
-  /** Root of the samples taken outside any request. */
-  public static final String NO_REQUEST = "(no request)";
+  /** Root of the samples taken outside any operation. */
+  public static final String NO_OPERATION = "(no operation)";
 
   /** Marks the stacks deeper than the recording kept: their bottom is lost. */
   public static final String TRUNCATED = "(truncated)";
@@ -33,19 +33,19 @@ public final class FlameGraphs {
    * What goes into a flame graph.
    */
   public static final class Options {
-    Predicate<RecordedRequest> requests = r -> true;
+    Predicate<RecordedOperation> operations = op -> true;
     Pattern thread;
     Instant from;
     Instant to;
-    boolean outsideRequests;
+    boolean outsideOperations;
     boolean collapsed;
     String title = "Wall clock";
 
     /**
-     * Keeps the samples of the requests that match, e.g. one endpoint.
+     * Keeps the samples of the operations that match, e.g. those of a name.
      */
-    public Options requests(Predicate<RecordedRequest> filter) {
-      this.requests = filter;
+    public Options operations(Predicate<RecordedOperation> filter) {
+      this.operations = filter;
       return this;
     }
 
@@ -70,12 +70,12 @@ public final class FlameGraphs {
     }
 
     /**
-     * Also keeps the samples taken outside any request, rooted by
-     * {@link #NO_REQUEST} then by thread. Most are idle threads blocked in
+     * Also keeps the samples taken outside any operation, rooted by
+     * {@link #NO_OPERATION} then by thread. Most are idle threads blocked in
      * native code (selectors, accept).
      */
-    public Options outsideRequests(boolean outside) {
-      this.outsideRequests = outside;
+    public Options outsideOperations(boolean outside) {
+      this.outsideOperations = outside;
       return this;
     }
 
@@ -108,22 +108,22 @@ public final class FlameGraphs {
     FlameGraph fg = new FlameGraph(args);
     CallStack stack = new CallStack();
 
-    analysis.visitSamples((sample, thread, request, weight) -> {
+    analysis.visitSamples((sample, thread, operation, weight) -> {
       if (o.thread != null && !o.thread.matcher(String.valueOf(thread.getJavaName())).matches())
         return;
       Instant time = sample.getStartTime();
       if ((o.from != null && time.isBefore(o.from)) || (o.to != null && !time.isBefore(o.to)))
         return;
 
-      if (request != null) {
-        if (!o.requests.test(request))
+      if (operation != null) {
+        if (!o.operations.test(operation))
           return;
-        stack.push(request.endpoint(), Frame.TYPE_CPP);
+        stack.push(operation.name(), Frame.TYPE_CPP);
       }
       else {
-        if (!o.outsideRequests)
+        if (!o.outsideOperations)
           return;
-        stack.push(NO_REQUEST, Frame.TYPE_CPP);
+        stack.push(NO_OPERATION, Frame.TYPE_CPP);
         stack.push("[" + thread.getJavaName() + " tid=" + thread.getJavaThreadId() + "]",
                    Frame.TYPE_CPP);
       }

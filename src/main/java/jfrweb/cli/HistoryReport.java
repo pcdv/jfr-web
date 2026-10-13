@@ -11,8 +11,8 @@ import java.util.List;
 import jfrweb.history.HistoryReader;
 
 /**
- * A period of an endpoint history as text: its endpoints, then its slowest
- * requests.
+ * A period of an operation history as text: its operations, then the slowest
+ * of them.
  */
 final class HistoryReport {
 
@@ -21,7 +21,7 @@ final class HistoryReport {
 
   private HistoryReport() {}
 
-  static void print(Path directory, Instant from, Instant to, String endpoint, PrintStream out) throws IOException {
+  static void print(Path directory, Instant from, Instant to, String name, PrintStream out) throws IOException {
     HistoryReader r = HistoryReader.read(directory, from, to);
     out.println("History:   " + directory);
     out.println("Period:    " + TIME.format(from) + " to " + TIME.format(to) + " (local time)");
@@ -31,15 +31,24 @@ final class HistoryReport {
       return;
 
     out.println();
-    TextReport.printEndpoints(r.getEndpoints(), out);
+    TextReport.printOperations(r.getOperations(), out);
 
-    List<HistoryReader.Slow> slowest = r.getSlowest(endpoint, 20);
+    List<HistoryReader.Slow> slowest = r.getSlowest(name, 20);
     out.println();
-    out.println("Slowest requests" + (endpoint != null ? " of " + endpoint : "") + ":");
+    out.println("Slowest operations" + (name != null ? " of " + name : "") + ":");
     if (slowest.isEmpty())
       out.println("  none");
     for (HistoryReader.Slow s : slowest)
-      out.printf("  %s  %9s  %3d  %s  (%s)%n", TIME.format(s.end()), TextReport.ms(s.nanos()), s.status(),
-                 s.path(), s.thread());
+      out.printf("  %s  %9s  %-6s  %s  (%s)%n", TIME.format(s.end()), TextReport.ms(s.nanos()), outcome(s),
+                 s.detail() != null ? s.detail() : s.name(), s.thread());
+  }
+
+  /**
+   * The status of a request, or whether another operation failed.
+   */
+  private static String outcome(HistoryReader.Slow s) {
+    if (s.status() != 0)
+      return String.valueOf(s.status());
+    return s.failed() ? "failed" : "ok";
   }
 }

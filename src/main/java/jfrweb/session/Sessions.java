@@ -15,6 +15,7 @@ import java.util.Map;
 
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
+import jfrweb.ops.Operations;
 
 /**
  * The profiling sessions of a profiler. One session records at a time.
@@ -49,7 +50,7 @@ public final class Sessions implements AutoCloseable {
   /**
    * The settings of the JDK's "profile" configuration, plus:
    * <ul>
-   *   <li>flak's request event
+   *   <li>flak's request event, and jfr-web's operation events
    *   <li>native calls sampled every 5 ms instead of 20: JFR samples one
    *   thread in native code per period, and idle threads (selectors,
    *   acceptors) take most periods
@@ -66,6 +67,8 @@ public final class Sessions implements AutoCloseable {
     try {
       Map<String, String> s = new HashMap<>(Configuration.getConfiguration("profile").getSettings());
       s.put("flak.Request#enabled", "true");
+      s.put(Operations.EVENT + "#enabled", "true");
+      s.put(Operations.SEGMENT_EVENT + "#enabled", "true");
       s.put("jdk.NativeMethodSample#period", "5 ms");
       s.put("jdk.JavaExceptionThrow#enabled", "true");
       // every second, its 65 ms of CPU on Windows would show among the samples

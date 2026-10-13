@@ -78,6 +78,21 @@ tasks.register('demo', JavaExec) {
   }
 }
 
+// the same with a server that does not speak HTTP, through the jfrweb.ops
+// API: see TcpDemo. -Pdemo.port= (9090 by default), -Pprofiler.port=,
+// -Pdemo.session=true, -Pdemo.load=true, -Pdemo.history=
+tasks.register('tcpDemo', JavaExec) {
+  group = 'application'
+  description = 'Runs an order server over TCP with the profiler, to try the web interface without HTTP.'
+  classpath = sourceSets.test.runtimeClasspath
+  mainClass = 'jfrweb.TcpDemo'
+  ['demo.port', 'profiler.port', 'demo.session', 'demo.load', 'demo.history'].each { name ->
+    def value = providers.gradleProperty(name)
+    if (value.present)
+      systemProperty name, value.get()
+  }
+}
+
 test {
   // see AnalysisTest
   def keep = providers.systemProperty('jfrweb.keepRecording')

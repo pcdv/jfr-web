@@ -8,13 +8,14 @@ import java.util.stream.Collectors;
 /**
  * What starts a session by itself, and when it stops.
  *
- * @param patterns endpoints that trigger a session, e.g. "GET /api/repository*",
- *                 where * matches anything; empty for any endpoint
+ * @param patterns operations that trigger a session, e.g. "GET /api/repository*",
+ *                 where * matches anything; empty for any operation
  * @param browser  the token of the browser armed, whose requests carry it in
- *                 the {@link AutoMode#COOKIE} cookie; null for any client
+ *                 the {@link AutoMode#COOKIE} cookie; null for any client.
+ *                 Only the requests of flak can carry it
  * @param repeat   whether to start a session again after one ended, or only
  *                 once
- * @param idle     the session stops once no matching request has run for that
+ * @param idle     the session stops once no matching operation has run for that
  *                 long: long enough for asynchronous work to finish
  * @param max      the session stops after that long whatever happens
  */
@@ -32,19 +33,20 @@ public record Trigger(List<String> patterns,
   }
 
   /**
-   * Whether a request triggers a session, or keeps it going.
+   * Whether an operation triggers a session, or keeps it going.
    *
-   * @param endpoint e.g. "GET /api/user/:id"
-   * @param cookie   the value of the {@link AutoMode#COOKIE} cookie of the
-   *                 request, or null
+   * @param operation e.g. "GET /api/user/:id"
+   * @param token     the token of the armed client that sent it, e.g. the
+   *                  value of the {@link AutoMode#COOKIE} cookie of a request,
+   *                  or null
    */
-  public boolean matches(String endpoint, String cookie) {
-    if (browser != null && !browser.equals(cookie))
+  public boolean matches(String operation, String token) {
+    if (browser != null && !browser.equals(token))
       return false;
     if (patterns.isEmpty())
       return true;
     for (String p : patterns)
-      if (glob(p).matcher(endpoint).matches())
+      if (glob(p).matcher(operation).matches())
         return true;
     return false;
   }
@@ -61,7 +63,7 @@ public record Trigger(List<String> patterns,
   /**
    * How the sessions it starts are labeled.
    */
-  String describe(String endpoint) {
-    return "auto: " + endpoint + (browser != null ? ", armed browser" : "");
+  String describe(String operation) {
+    return "auto: " + operation + (browser != null ? ", armed browser" : "");
   }
 }

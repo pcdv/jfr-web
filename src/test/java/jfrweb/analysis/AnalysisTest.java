@@ -60,7 +60,7 @@ public class AnalysisTest {
      * Sorts arrays: JFR cannot walk the stack of a tight loop, and would drop
      * nearly every sample of one.
      */
-    static void burn(long millis) {
+    public static void burn(long millis) {
       long end = System.nanoTime() + millis * 1_000_000;
       Random random = new Random(1);
       while (System.nanoTime() < end) {
@@ -124,9 +124,9 @@ public class AnalysisTest {
 
   @Test
   public void testRequests() {
-    Map<String, Long> counts = analysis.getRequests()
+    Map<String, Long> counts = analysis.getOperations()
                                        .stream()
-                                       .collect(Collectors.groupingBy(RecordedRequest::endpoint,
+                                       .collect(Collectors.groupingBy(RecordedOperation::name,
                                                                       Collectors.counting()));
     Assert.assertEquals(Map.of("GET /busy/:id", 5L,
                                "GET /fast", 20L,
@@ -136,18 +136,18 @@ public class AnalysisTest {
   }
 
   @Test
-  public void testEndpointStats() {
-    List<EndpointStats> stats = EndpointStats.of(analysis.getRequests());
+  public void testOperationStats() {
+    List<OperationStats> stats = OperationStats.of(analysis.getOperations());
 
-    EndpointStats busy = stats.get(0);
-    Assert.assertEquals("sorted by total time", "GET /busy/:id", busy.endpoint());
+    OperationStats busy = stats.get(0);
+    Assert.assertEquals("sorted by total time", "GET /busy/:id", busy.name());
     Assert.assertEquals(5, busy.count());
     Assert.assertTrue(busy.p50Nanos() >= 200_000_000);
     Assert.assertTrue(busy.maxNanos() >= busy.p99Nanos());
     Assert.assertEquals(0, busy.errors());
     Assert.assertEquals(5, busy.bytesOut());
 
-    EndpointStats fail = stats.stream().filter(s -> s.endpoint().equals("GET /fail")).findFirst().orElseThrow();
+    OperationStats fail = stats.stream().filter(s -> s.name().equals("GET /fail")).findFirst().orElseThrow();
     Assert.assertEquals(1, fail.errors());
   }
 
@@ -155,7 +155,7 @@ public class AnalysisTest {
   public void testInfo() {
     RecordingInfo info = analysis.getInfo();
     Assert.assertNotNull(info.getJvmVersion());
-    Assert.assertTrue(info.isEnabled(RecordingInfo.REQUEST));
+    Assert.assertTrue(info.isEnabled(RecordingInfo.FLAK_REQUEST));
     Assert.assertEquals(java.time.Duration.ofMillis(10), info.getPeriod(RecordingInfo.EXECUTION_SAMPLE));
     Assert.assertEquals(java.time.Duration.ofMillis(20), info.getPeriod(RecordingInfo.NATIVE_SAMPLE));
     Assert.assertTrue(info.getStart().isBefore(info.getEnd()));
@@ -173,9 +173,9 @@ public class AnalysisTest {
     double seconds = 0;
     for (double v : t.getSeries().get("GET /busy/:id"))
       seconds += v * t.getBucket().toNanos() / 1e9;
-    double expected = analysis.getRequests().stream()
-                              .filter(r -> r.endpoint().equals("GET /busy/:id"))
-                              .mapToLong(RecordedRequest::durationNanos).sum() / 1e9;
+    double expected = analysis.getOperations().stream()
+                              .filter(r -> r.name().equals("GET /busy/:id"))
+                              .mapToLong(RecordedOperation::durationNanos).sum() / 1e9;
     Assert.assertEquals(expected, seconds, expected * 0.001);
     Assert.assertTrue(Arrays.stream(t.getJavaSamples()).sum() > 0);
 
@@ -193,7 +193,7 @@ public class AnalysisTest {
   }
 
   @Test
-  public void testFlameGraphRootedByEndpoint() throws IOException {
+  public void testFlameGraphRootedByOperation() throws IOException {
     String collapsed = flame(new FlameGraphs.Options().collapsed(true));
 
     // 1 s burnt in /busy, sampled every 10 ms. JFR drops the samples whose
@@ -201,21 +201,21 @@ public class AnalysisTest {
     long busy = weight(collapsed, "GET /busy/:id;", "Handlers.burn");
     Assert.assertTrue(collapsed, busy >= 200);
     Assert.assertEquals("burnt nowhere else", 0, weight(collapsed, "GET /fast;", "Handlers.burn"));
-    Assert.assertFalse("samples outside requests are left out", collapsed.contains(FlameGraphs.NO_REQUEST));
+    Assert.assertFalse("samples outside requests are left out", collapsed.contains(FlameGraphs.NO_OPERATION));
   }
 
   @Test
-  public void testFlameGraphOfOneEndpoint() throws IOException {
+  public void testFlameGraphOfOneOperation() throws IOException {
     String collapsed = flame(new FlameGraphs.Options()
                                .collapsed(true)
-                               .requests(r -> r.endpoint().equals("GET /fast")));
+                               .operations(r -> r.name().equals("GET /fast")));
     Assert.assertFalse(collapsed, collapsed.contains("GET /busy"));
   }
 
   @Test
   public void testFlameGraphWithSamplesOutsideRequests() throws IOException {
-    String collapsed = flame(new FlameGraphs.Options().collapsed(true).outsideRequests(true));
-    Assert.assertTrue(collapsed.contains(FlameGraphs.NO_REQUEST + ";["));
+    String collapsed = flame(new FlameGraphs.Options().collapsed(true).outsideOperations(true));
+    Assert.assertTrue(collapsed.contains(FlameGraphs.NO_OPERATION + ";["));
     Assert.assertTrue(collapsed.contains("GET /busy/:id;"));
   }
 

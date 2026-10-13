@@ -30,7 +30,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-public class EndpointHistoryTest {
+public class OperationHistoryTest {
 
   /** A clock the test moves. */
   static final class TestClock extends Clock {
@@ -72,7 +72,7 @@ public class EndpointHistoryTest {
 
   private Path dir;
   private App app;
-  private EndpointHistory history;
+  private OperationHistory history;
   private final TestClock clock = new TestClock("2026-10-13T10:00:30Z");
 
   @Before
@@ -95,8 +95,8 @@ public class EndpointHistoryTest {
     }
   }
 
-  private EndpointHistory.Builder builder() {
-    return EndpointHistory.builder().directory(dir).observe(app).clock(clock, false);
+  private OperationHistory.Builder builder() {
+    return OperationHistory.builder().directory(dir).observe(app).clock(clock, false);
   }
 
   @Test
@@ -119,19 +119,19 @@ public class EndpointHistoryTest {
     List<String> lines = Files.readAllLines(file);
     Assert.assertEquals("one line per interval, even without requests", 3, lines.size());
     Assert.assertTrue(lines.get(0), lines.get(0).startsWith(
-      "{\"start\":\"2026-10-13T10:00:30Z\",\"end\":\"2026-10-13T10:01:00Z\",\"endpoints\":[{\"endpoint\":\"GET /api/item/:id\",\"count\":3,"));
+      "{\"start\":\"2026-10-13T10:00:30Z\",\"end\":\"2026-10-13T10:01:00Z\",\"operations\":[{\"name\":\"GET /api/item/:id\",\"count\":3,"));
     Assert.assertTrue("histogram, to add intervals up", lines.get(0).contains("\"histogram\":[["));
-    Assert.assertTrue(lines.get(2), lines.get(2).endsWith("\"endpoints\":[],\"slowest\":[]}"));
+    Assert.assertTrue(lines.get(2), lines.get(2).endsWith("\"operations\":[],\"slowest\":[]}"));
 
     HistoryReader r = HistoryReader.read(dir, Instant.parse("2026-10-13T10:00:00Z"), Instant.parse("2026-10-13T11:00:00Z"));
     Assert.assertEquals(3, r.getIntervalCount());
     Assert.assertEquals(Map.of("GET /api/item/:id", 4, "GET /api/fail", 1), r.counts());
-    Assert.assertEquals(1, r.getEndpoints().stream().filter(e -> e.endpoint().equals("GET /api/fail"))
+    Assert.assertEquals(1, r.getOperations().stream().filter(e -> e.name().equals("GET /api/fail"))
                             .findFirst().orElseThrow().errors());
 
     List<HistoryReader.Slow> slowest = r.getSlowest(null, 10);
     Assert.assertEquals("2 kept by the first interval, 1 by the second", 3, slowest.size());
-    Assert.assertEquals("/item/slow60", slowest.get(0).path());
+    Assert.assertEquals("GET /item/slow60", slowest.get(0).detail());
     Assert.assertTrue(slowest.get(0).nanos() >= 60_000_000);
     Assert.assertEquals(2, r.getSlowest("GET /api/item/:id", 2).size());
 
@@ -162,7 +162,7 @@ public class EndpointHistoryTest {
   @Test
   public void testScheduled() throws Exception {
     // the real clock and scheduler, intervals of a second on the second
-    history = EndpointHistory.builder().directory(dir).observe(app).interval(Duration.ofSeconds(1)).start();
+    history = OperationHistory.builder().directory(dir).observe(app).interval(Duration.ofSeconds(1)).start();
     get("/item/a");
     Thread.sleep(2500);
     history.close();

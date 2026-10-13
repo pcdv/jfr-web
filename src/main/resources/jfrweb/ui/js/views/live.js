@@ -1,11 +1,11 @@
 // @ts-check
 /**
- * The endpoints of the apps observed, over the last minutes, kept by counters
+ * The operations of the application, over the last minutes, kept by counters
  * whether a session records or not.
  */
 import * as api from '../api.js';
 import {h, replace, errorBox} from '../dom.js';
-import {endpointsTable} from '../components/endpoints.js';
+import {operationsTable} from '../components/operations.js';
 import {readSetting, writeSetting} from '../settings.js';
 
 /** How often the statistics refresh, in ms. */
@@ -22,7 +22,7 @@ export function renderLive(root) {
   let window_ = Number(readSetting(WINDOW_KEY) || 5);
   const toolbar = h('div', {class: 'toolbar'});
   const content = h('div');
-  root.append(h('h1', null, 'Live endpoints'), toolbar, content);
+  root.append(h('h1', null, 'Live operations'), toolbar, content);
 
   /** @type {number | undefined} */
   let timer;
@@ -40,9 +40,10 @@ export function renderLive(root) {
         refresh();
       }));
       replace(content, live.observing
-        ? endpointsTable(live.endpoints, undefined, `No request in the last ${plural(live.window, 'minute')}.`)
+        ? operationsTable(live.operations, undefined, `No operation in the last ${plural(live.window, 'minute')}.`)
         : h('p', {class: 'empty'},
-            'No app is observed. Pass the flak apps to observe to the profiler: ',
+            'No operation yet. Begin them with ', h('code', null, 'Operations.begin(name)'),
+            ', or pass the flak apps to observe to the profiler: ',
             h('code', null, 'Profiler.builder().observe(app)'), '.'));
       timer = window.setTimeout(refresh, POLL);
     }

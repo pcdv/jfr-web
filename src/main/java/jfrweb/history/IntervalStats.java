@@ -12,18 +12,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import jfrweb.stats.Histogram;
 
 /**
- * The requests that ended during one interval: per endpoint, their number,
+ * The operations that ended during one interval: per name, their number,
  * durations and sizes; and the slowest of them all.
  */
 final class IntervalStats {
 
   private final Instant start;
   private final int slowestKept;
-  private final Map<String, Endpoint> endpoints = new ConcurrentHashMap<>();
+  private final Map<String, Name> names = new ConcurrentHashMap<>();
 
-  /** The slowest requests, the fastest of them first. */
+  /** The slowest operations, the fastest of them first. */
   private final PriorityQueue<Slow> slowest = new PriorityQueue<>(Comparator.comparingLong(Slow::nanos));
-  /** Below it, a request cannot be among the slowest: no need to lock. */
+  /** Below it, an operation cannot be among the slowest: no need to lock. */
   private volatile long slowThreshold;
 
   IntervalStats(Instant start, int slowestKept) {
@@ -31,9 +31,9 @@ final class IntervalStats {
     this.slowestKept = slowestKept;
   }
 
-  record Slow(Instant end, String endpoint, String path, int status, long nanos, String thread) {}
+  record Slow(Instant end, String name, String detail, int status, boolean failed, long nanos, String thread) {}
 
-  private static final class Endpoint {
+  private static final class Name {
     int count;
     long totalNanos;
     long maxNanos;
@@ -48,25 +48,28 @@ final class IntervalStats {
   }
 
   /**
-   * The number of requests recorded so far.
+   * The number of operations recorded so far.
    */
   int count() {
     int n = 0;
-    for (Endpoint e : endpoints.values())
+    for (Name e : names.values())
       synchronized (e) {
         n += e.count;
       }
     return n;
   }
 
-  void record(String endpoint, String path, int status, long nanos, long bytesIn, long bytesOut,
+  /**
+   * @param status the HTTP status of a request, 0 for other operations
+   */
+  void record(String name, String detail, int status, boolean failed, long nanos, long bytesIn, long bytesOut,
               Instant end, String thread) {
-    Endpoint e = endpoints.computeIfAbsent(endpoint, k -> new Endpoint());
+    Name e = names.computeIfAbsent(name, k -> new Name());
     synchronized (e) {
       e.count++;
       e.totalNanos += nanos;
       e.maxNanos = Math.max(e.maxNanos, nanos);
-      if (status >= 500)
+      if (failed)
         e.errors++;
       e.bytesIn += bytesIn;
       e.bytesOut += bytesOut;
@@ -75,7 +78,7 @@ final class IntervalStats {
 
     if (slowestKept > 0 && nanos > slowThreshold) {
       synchronized (slowest) {
-        slowest.add(new Slow(end, endpoint, path, status, nanos, thread));
+        slowest.add(new Slow(end, name, detail, status, failed, nanos, thread));
         if (slowest.size() > slowestKept)
           slowest.poll();
         if (slowest.size() == slowestKept)
@@ -86,18 +89,18 @@ final class IntervalStats {
 
   /**
    * The interval as one line of the history: times in ISO-8601, durations
-   * in milliseconds, endpoints by total time.
+   * in milliseconds, operations by total time.
    */
   Map<String, Object> toJson(Instant end) {
-    List<Map.Entry<String, Endpoint>> sorted = new ArrayList<>(endpoints.entrySet());
-    sorted.sort(Comparator.comparingLong((Map.Entry<String, Endpoint> x) -> x.getValue().totalNanos).reversed());
+    List<Map.Entry<String, Name>> sorted = new ArrayList<>(names.entrySet());
+    sorted.sort(Comparator.comparingLong((Map.Entry<String, Name> x) -> x.getValue().totalNanos).reversed());
 
     List<Object> rows = new ArrayList<>();
-    for (Map.Entry<String, Endpoint> x : sorted) {
-      Endpoint e = x.getValue();
+    for (Map.Entry<String, Name> x : sorted) {
+      Name e = x.getValue();
       synchronized (e) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("endpoint", x.getKey());
+        m.put("name", x.getKey());
         m.put("count", e.count);
         m.put("total", ms(e.totalNanos));
         m.put("p50", ms(Math.min(e.durations.percentile(50), e.maxNanos)));
@@ -120,9 +123,10 @@ final class IntervalStats {
     for (Slow s : slow) {
       Map<String, Object> m = new LinkedHashMap<>();
       m.put("end", s.end());
-      m.put("endpoint", s.endpoint());
-      m.put("path", s.path());
+      m.put("operation", s.name());
+      m.put("detail", s.detail());
       m.put("status", s.status());
+      m.put("failed", s.failed());
       m.put("duration", ms(s.nanos()));
       m.put("thread", s.thread());
       slowRows.add(m);
@@ -131,7 +135,7 @@ final class IntervalStats {
     Map<String, Object> line = new LinkedHashMap<>();
     line.put("start", start);
     line.put("end", end);
-    line.put("endpoints", rows);
+    line.put("operations", rows);
     line.put("slowest", slowRows);
     return line;
   }

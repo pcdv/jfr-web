@@ -27,13 +27,13 @@ public final class Main {
   private static final String USAGE = String.join("\n",
     "Usage:",
     "  jfr-web report <file.jfr> [--events]",
-    "      how the file was recorded, and its endpoints sorted by total time",
-    "  jfr-web flame <file.jfr> [-o <file.html>] [--endpoint <regex>] [--thread <regex>]",
+    "      how the file was recorded, and its operations sorted by total time",
+    "  jfr-web flame <file.jfr> [-o <file.html>] [--operation <regex>] [--thread <regex>]",
     "                           [--all] [--collapsed]",
-    "      wall-clock flame graph of the samples taken in requests, rooted by",
-    "      endpoint (e.g. \"GET /api/user/:id\"); --all adds the other samples",
-    "  jfr-web history <dir> [--from <time>] [--to <time>] [--endpoint <endpoint>]",
-    "      the endpoints and slowest requests of a period of an endpoint history,",
+    "      wall-clock flame graph of the samples taken in operations, rooted by",
+    "      operation (e.g. \"GET /api/user/:id\"); --all adds the other samples",
+    "  jfr-web history <dir> [--from <time>] [--to <time>] [--operation <name>]",
+    "      the operations and slowest operations of a period of an operation history,",
     "      the last hour by default; times like 2026-10-13T10:00 (local time) or",
     "      2026-10-13T08:00:00Z");
 
@@ -85,13 +85,13 @@ public final class Main {
   private static int history(Path dir, List<String> options, PrintStream stdout) throws IOException {
     Instant from;
     Instant to;
-    String endpoint;
+    String operation;
     try {
       String v = takeValue(options, "--to");
       to = v == null ? Instant.now() : time(v);
       v = takeValue(options, "--from");
       from = v == null ? to.minus(Duration.ofHours(1)) : time(v);
-      endpoint = takeValue(options, "--endpoint");
+      operation = takeValue(options, "--operation");
     }
     catch (IllegalArgumentException e) {
       System.err.println(e.getMessage());
@@ -99,7 +99,7 @@ public final class Main {
     }
     if (!checkNoneLeft(options))
       return 2;
-    HistoryReport.print(dir, from, to, endpoint, stdout);
+    HistoryReport.print(dir, from, to, operation, stdout);
     return 0;
   }
 
@@ -129,9 +129,9 @@ public final class Main {
       String v;
       if ((v = takeValue(options, "-o")) != null)
         output = Path.of(v);
-      if ((v = takeValue(options, "--endpoint")) != null) {
+      if ((v = takeValue(options, "--operation")) != null) {
         Pattern p = Pattern.compile(v);
-        o.requests(r -> p.matcher(r.endpoint()).matches());
+        o.operations(op -> p.matcher(op.name()).matches());
         title += ", " + v;
       }
       if ((v = takeValue(options, "--thread")) != null) {
@@ -143,7 +143,7 @@ public final class Main {
       System.err.println(e.getMessage());
       return 2;
     }
-    o.outsideRequests(options.remove("--all"));
+    o.outsideOperations(options.remove("--all"));
     o.collapsed(options.remove("--collapsed"));
     if (!checkNoneLeft(options))
       return 2;

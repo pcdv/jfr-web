@@ -13,7 +13,7 @@ import flak.App;
 import flak.AppFactory;
 import flak.Flak;
 import flak.annotations.Route;
-import jfrweb.history.EndpointHistory;
+import jfrweb.history.OperationHistory;
 import jfrweb.snapshot.Snapshots;
 
 /**
@@ -80,7 +80,7 @@ public class Demo {
     // what production would run: kept across runs of the demo, in intervals
     // of 10 s to see something soon
     Path historyDir = Path.of(System.getProperty("demo.history", "build/demo-history"));
-    EndpointHistory history = EndpointHistory.builder()
+    OperationHistory history = OperationHistory.builder()
                                              .directory(historyDir)
                                              .interval(Duration.ofSeconds(10))
                                              .observe(app)
@@ -123,7 +123,8 @@ public class Demo {
     }
     if (Boolean.getBoolean("demo.session")) {
       // records a short session by itself, e.g. to look at the interface
-      profiler.getSessions().start("demo");
+      // its own id: the snapshots of earlier runs are listed first
+      int session = profiler.getSessions().start("demo").getId();
       // three clients calling the endpoints at random, for 8 seconds
       String[] paths = {"/sort/2000", "/sort/200", "/files", "/hello", "/hello", "/load"};
       long end = System.currentTimeMillis() + 8000;
@@ -145,8 +146,8 @@ public class Demo {
       }
       for (Thread c : clients)
         c.join();
-      profiler.getSessions().stop(1);
-      System.out.println("Recorded session 1");
+      profiler.getSessions().stop(session);
+      System.out.println("Recorded session " + session);
     }
     Thread.currentThread().join();
   }

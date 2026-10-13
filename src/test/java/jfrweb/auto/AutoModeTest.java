@@ -18,6 +18,9 @@ import flak.App;
 import flak.AppFactory;
 import flak.Flak;
 import flak.annotations.Route;
+import jfrweb.analysis.RecordedOperation;
+import jfrweb.ops.Operation;
+import jfrweb.ops.Operations;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
 import org.junit.After;
@@ -91,8 +94,38 @@ public class AutoModeTest {
     Assert.assertEquals(1, sessions.list().size());
 
     // the request that triggered the session is in it, whole
-    Assert.assertEquals(1, s.getAnalysis().getRequests().stream()
-                             .filter(r -> r.endpoint().equals("GET /busy")).count());
+    Assert.assertEquals(1, s.getAnalysis().getOperations().stream()
+                             .filter(r -> r.name().equals("GET /busy")).count());
+  }
+
+  @Test
+  public void testAsyncOperationOfTheApi() throws Exception {
+    auto.arm(new Trigger(List.of("quote"), null, false, Duration.ofMillis(300), Duration.ofSeconds(10)));
+
+    Operation op = Operations.beginAsync("quote").detail("ACME");
+    Assert.assertNotNull("recording before the operation runs", sessions.getRecording());
+    Thread worker = new Thread(op.wrap(() -> {
+      try {
+        Thread.sleep(100);
+      }
+      catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+      op.close();
+    }));
+    worker.start();
+    worker.join();
+
+    Session s = sessions.list().get(0);
+    Assert.assertEquals("auto: quote", s.getTrigger());
+    await(() -> s.getState() == Session.State.STOPPED);
+
+    // in it, whole, with the segment of the worker
+    RecordedOperation r = s.getAnalysis().getOperations().stream()
+                           .filter(o -> o.name().equals("quote")).findFirst().orElseThrow();
+    Assert.assertTrue(r.async());
+    Assert.assertEquals("ACME", r.detail());
+    Assert.assertEquals(1, s.getAnalysis().getSegments(r).size());
   }
 
   @Test

@@ -1,7 +1,7 @@
 // @ts-check
 /**
- * The timeline of a session: requests in flight per time bucket, stacked by
- * endpoint, or the samples of Java code when no request was recorded. Hovering
+ * The timeline of a session: operations in flight per time bucket, stacked by
+ * name, or the samples of Java code when no operation was recorded. Hovering
  * a bucket details it; dragging selects an interval.
  */
 import {h, replace} from '../dom.js';
@@ -46,24 +46,24 @@ export function timelineChart(data, onSelect, options = {}) {
   const label = options.timeLabel ?? (t => `${t} s`);
   const unit = options.unit ?? '';
   /** @type {Series[]} */
-  const series = data.series.map((s, i) => ({name: s.endpoint, values: s.values, color: `var(--series-${i + 1})`}));
+  const series = data.series.map((s, i) => ({name: s.name, values: s.values, color: `var(--series-${i + 1})`}));
   if (data.other)
-    series.push({name: 'Other endpoints', values: data.other, color: 'var(--series-other)'});
-  const requests = series.length > 0;
-  if (!requests)
+    series.push({name: 'Other operations', values: data.other, color: 'var(--series-other)'});
+  const operations = series.length > 0;
+  if (!operations)
     series.push({name: 'Samples of Java code', values: data.javaSamples ?? new Array(data.buckets).fill(0),
                  color: 'var(--series-1)'});
 
   const bucketSec = data.bucket / 1000;
   const n = data.buckets;
   const totals = Array.from({length: n}, (_, i) => series.reduce((sum, s) => sum + s.values[i], 0));
-  const yMax = axisCeiling(Math.max(...totals, requests ? 1 : 10));
+  const yMax = axisCeiling(Math.max(...totals, operations ? 1 : 10));
   const bw = PLOT_W / n;
   const x = (/** @type {number} */ i) => LEFT + i * bw;
   const y = (/** @type {number} */ v) => TOP + PLOT_H - v / yMax * PLOT_H;
 
   const svg = svgEl('svg', {viewBox: `0 0 ${W} ${H}`, class: 'timeline', role: 'img',
-                            'aria-label': requests ? 'Requests in flight over time, by endpoint'
+                            'aria-label': operations ? 'Operations in flight over time, by name'
                                                    : 'Samples of Java code over time'});
 
   // recessive grid, one axis
@@ -165,12 +165,12 @@ export function timelineChart(data, onSelect, options = {}) {
         ? `${label(i * bucketSec)}–${label((i + 1) * bucketSec)}`
         : `${round(i * bucketSec)}–${round((i + 1) * bucketSec)} s`),
       rows.length === 0
-        ? h('div', {class: 'hint'}, requests ? 'No request in flight' : 'No sample')
+        ? h('div', {class: 'hint'}, operations ? 'No operation in flight' : 'No sample')
         : rows.map(s => h('div', {class: 'tooltip-row'},
             h('span', {class: 'swatch', style: `background: ${s.color}`}),
             h('span', {class: 'tooltip-name'}, s.name),
             h('span', {class: 'tooltip-value'}, formatCount(s.values[i]) + unit))),
-      requests && rows.length > 1
+      operations && rows.length > 1
         ? h('div', {class: 'tooltip-row total'}, h('span'), h('span', {class: 'tooltip-name'}, 'Total'),
             h('span', {class: 'tooltip-value'}, formatCount(totals[i]) + unit))
         : null);
@@ -183,9 +183,9 @@ export function timelineChart(data, onSelect, options = {}) {
   }
 
   return h('div', null,
-    h('p', {class: 'hint'}, options.hint ? options.hint : requests
-      ? `Requests in flight, on average per ${fmt.duration(data.bucket)}, by endpoint. Drag to select an interval: the sections below show only it; click to clear it.`
-      : `No request recorded: samples of Java code per ${fmt.duration(data.bucket)}. Drag to select an interval: the sections below show only it; click to clear it.`),
+    h('p', {class: 'hint'}, options.hint ? options.hint : operations
+      ? `Operations in flight, on average per ${fmt.duration(data.bucket)}, by name. Drag to select an interval: the sections below show only it; click to clear it.`
+      : `No operation recorded: samples of Java code per ${fmt.duration(data.bucket)}. Drag to select an interval: the sections below show only it; click to clear it.`),
     legend(series),
     wrapper);
 }

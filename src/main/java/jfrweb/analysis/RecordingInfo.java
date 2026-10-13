@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+import jfrweb.ops.Operations;
+
 /**
  * How a recording was made: the JVM, its arguments, and the settings of the
  * events, which every report must state.
@@ -15,16 +17,19 @@ public final class RecordingInfo {
 
   public static final String EXECUTION_SAMPLE = "jdk.ExecutionSample";
   public static final String NATIVE_SAMPLE = "jdk.NativeMethodSample";
-  public static final String REQUEST = "flak.Request";
+  public static final String FLAK_REQUEST = "flak.Request";
+  public static final String OPERATION = Operations.EVENT;
+  public static final String OPERATION_SEGMENT = Operations.SEGMENT_EVENT;
 
   /**
    * What sampling with JFR hides or distorts, stated by every report.
    */
   public static final List<String> KNOWN_BIASES = List.of(
-    "JFR samples a few threads per period, not all of them: a short request gets few samples, or none.",
+    "JFR samples a few threads per period, not all of them: a short operation gets few samples, or none.",
     "Threads blocked on a lock, sleeping or parked are not sampled: only Java code and native calls show.",
     "Idle threads blocked in native code (selectors, accept) take part of the native samples.",
-    "Work handed to another thread (executor) is not attributed to the request that started it.",
+    "Work handed to another thread (executor) is not attributed to the operation that started it, "
+    + "unless it runs in a segment of an asynchronous operation.",
     "A sample whose stack JFR fails to walk is dropped: tight loops and intrinsics (e.g. hashing) "
     + "get few samples, or none, and are under-represented.");
 

@@ -14,28 +14,28 @@ public final class SamplingSummary {
 
   private long javaSamples;
   private long nativeSamples;
-  private long javaInRequests;
-  private long nativeInRequests;
-  private long nativeWhileRequests;
+  private long javaInOperations;
+  private long nativeInOperations;
+  private long nativeWhileOperations;
   private final Map<String, Long> byThread = new TreeMap<>();
 
   private SamplingSummary() {}
 
   public static SamplingSummary of(Analysis analysis) throws IOException {
     SamplingSummary s = new SamplingSummary();
-    analysis.visitSamples((sample, thread, request, weight) -> {
+    analysis.visitSamples((sample, thread, operation, weight) -> {
       boolean java = sample.getEventType().getName().equals(EXECUTION_SAMPLE);
       if (java) {
         s.javaSamples++;
-        if (request != null)
-          s.javaInRequests++;
+        if (operation != null)
+          s.javaInOperations++;
       }
       else {
         s.nativeSamples++;
-        if (request != null)
-          s.nativeInRequests++;
-        if (analysis.isRequestRunning(sample.getStartTime()))
-          s.nativeWhileRequests++;
+        if (operation != null)
+          s.nativeInOperations++;
+        if (analysis.isOperationRunning(sample.getStartTime()))
+          s.nativeWhileOperations++;
       }
       s.byThread.merge(String.valueOf(thread.getJavaName()), 1L, Long::sum);
     });
@@ -50,21 +50,21 @@ public final class SamplingSummary {
     return nativeSamples;
   }
 
-  public long getJavaInRequests() {
-    return javaInRequests;
+  public long getJavaInOperations() {
+    return javaInOperations;
   }
 
-  public long getNativeInRequests() {
-    return nativeInRequests;
+  public long getNativeInOperations() {
+    return nativeInOperations;
   }
 
   /**
-   * The share of the native samples that the threads serving requests got,
-   * among those taken while some request ran, or null if none was. JFR
+   * The share of the native samples that the threads working for operations
+   * got, among those taken while some operation ran, or null if none was. JFR
    * samples one thread in native code per period: idle threads take the rest.
    */
-  public Double getRequestShareOfNative() {
-    return nativeWhileRequests == 0 ? null : (double) nativeInRequests / nativeWhileRequests;
+  public Double getOperationShareOfNative() {
+    return nativeWhileOperations == 0 ? null : (double) nativeInOperations / nativeWhileOperations;
   }
 
   /**

@@ -1,12 +1,12 @@
 // @ts-check
 /**
- * The endpoint history: what was called during a period, from the files the
+ * The operation history: what ran during a period, from the files the
  * history writes, even when nothing was recorded with JFR.
  */
 import * as api from '../api.js';
 import {h, replace, errorBox} from '../dom.js';
 import * as fmt from '../format.js';
-import {endpointsTable} from '../components/endpoints.js';
+import {operationsTable, outcomeCell} from '../components/operations.js';
 import {timelineChart} from '../components/timeline.js';
 import {section} from '../components/section.js';
 import {readSetting, writeSetting} from '../settings.js';
@@ -17,7 +17,7 @@ const PRESETS = [1, 6, 24, 24 * 7];
 /** What the timeline measures, kept per browser. */
 const MEASURE_KEY = 'jfrweb.history.measure';
 
-/** @typedef {'requests' | 'time'} Measure */
+/** @typedef {'count' | 'time'} Measure */
 
 /**
  * @typedef {{from: Date, to: Date}} Period
@@ -38,12 +38,12 @@ export function renderHistory(root) {
   /** @type {Period[]} periods zoomed out of, the latest last */
   const zooms = [];
   /** @type {string | undefined} */
-  let endpoint;
+  let name;
 
   async function load() {
     replace(toolbar, periodPicker());
     try {
-      const history = await api.getHistory(period.from, period.to, endpoint);
+      const history = await api.getHistory(period.from, period.to, name);
       replace(content, render(history));
     }
     catch (e) {
@@ -81,7 +81,7 @@ export function renderHistory(root) {
       zooms.length = 0;
     period = p;
     preset = hours;
-    endpoint = undefined;
+    name = undefined;
     load();
   }
 
@@ -95,7 +95,7 @@ export function renderHistory(root) {
   function render(history) {
     if (!history.available)
       return h('p', {class: 'empty'}, 'No history: pass its directory to the profiler, ',
-        h('code', null, 'Profiler.builder().history(dir)'), ', where an ', h('code', null, 'EndpointHistory'),
+        h('code', null, 'Profiler.builder().history(dir)'), ', where an ', h('code', null, 'OperationHistory'),
         ' writes it.');
     if (!history.intervals)
       return h('p', {class: 'empty'}, `Nothing in the history from ${period.from.toLocaleString()} to ${period.to.toLocaleString()}: it was not written then.`);
@@ -109,41 +109,41 @@ export function renderHistory(root) {
       pick({from: new Date((start + f) * 1000), to: new Date((start + t) * 1000)}, null, false);
     };
 
-    // the number of requests, or the time they took: what is called most is
-    // not always what costs most
+    // the number of operations, or the time they took: what runs most is not
+    // always what costs most
     const chart = h('div');
     const measures = h('span', {class: 'segmented'});
     const showMeasure = (/** @type {Measure} */ m) => {
       writeSetting(MEASURE_KEY, m);
-      replace(measures, 'Show ', ['requests', 'time'].map(x => h('button', {
+      replace(measures, 'Show ', ['count', 'time'].map(x => h('button', {
         class: x === m ? 'selected' : null,
         onclick: () => showMeasure(/** @type {Measure} */ (x)),
-      }, x === 'requests' ? 'Requests' : 'Time')));
+      }, x === 'count' ? 'Count' : 'Time')));
       const time = m === 'time';
       replace(chart, timelineChart(time ? {...timeline, series: timeline.seriesSeconds, other: timeline.otherSeconds} : timeline, zoom, {
         hint: time
-          ? `Seconds spent serving requests per ${fmt.duration(timeline.bucket)}, by endpoint. Drag to zoom in.`
-          : `Requests per ${fmt.duration(timeline.bucket)}, by endpoint. Drag to zoom in.`,
+          ? `Seconds spent in operations per ${fmt.duration(timeline.bucket)}, by name. Drag to zoom in.`
+          : `Operations per ${fmt.duration(timeline.bucket)}, by name. Drag to zoom in.`,
         unit: time ? ' s' : '',
         timeLabel: t => clock(new Date((start + t) * 1000), period.to.getTime() - period.from.getTime()),
         startEpoch: start,
       }));
     };
-    showMeasure(readSetting(MEASURE_KEY) === 'time' ? 'time' : 'requests');
+    showMeasure(readSetting(MEASURE_KEY) === 'time' ? 'time' : 'count');
 
     return h('div', null,
       h('p', {class: 'summary'},
         `${history.intervals} intervals from ${period.from.toLocaleString()} to ${period.to.toLocaleString()}, in `,
         h('code', null, history.directory ?? '')),
-      section('history-timeline', 'Requests over time', h('div', {class: 'toolbar'}, measures), chart),
-      section('history-endpoints', 'Endpoints', endpointsTable(/** @type {api.EndpointRow[]} */ (history.endpoints),
-        e => {
-          endpoint = e;
+      section('history-timeline', 'Operations over time', h('div', {class: 'toolbar'}, measures), chart),
+      section('history-operations', 'Operations', operationsTable(/** @type {api.OperationRow[]} */ (history.operations),
+        n => {
+          name = n;
           load();
-        }, 'No request in this period.')),
-      section('history-slowest', endpoint ? h('span', null, 'Slowest requests', h('span', {class: 'mono'}, ` · ${endpoint}`)) : 'Slowest requests',
+        }, 'No operation in this period.')),
+      section('history-slowest', name ? h('span', null, 'Slowest operations', h('span', {class: 'mono'}, ` · ${name}`)) : 'Slowest operations',
         slowestTable(/** @type {api.HistorySlow[]} */ (history.slowest)),
-        endpoint ? h('button', {onclick: () => { endpoint = undefined; load(); }}, 'All endpoints') : null));
+        name ? h('button', {onclick: () => { name = undefined; load(); }}, 'All operations') : null));
   }
 
   load();
@@ -154,17 +154,17 @@ export function renderHistory(root) {
  */
 function slowestTable(rows) {
   if (rows.length === 0)
-    return h('p', {class: 'empty'}, 'No request in this period.');
+    return h('p', {class: 'empty'}, 'No operation in this period.');
   return h('table', {class: 'grid'},
     h('thead', null, h('tr', null,
-      h('th', null, 'Ended'), h('th', {class: 'num'}, 'Duration'), h('th', {class: 'num'}, 'Status'),
-      h('th', null, 'Endpoint'), h('th', null, 'Path'), h('th', null, 'Thread'))),
+      h('th', null, 'Ended'), h('th', {class: 'num'}, 'Duration'), h('th', {class: 'num'}, 'Outcome'),
+      h('th', null, 'Operation'), h('th', null, 'Detail'), h('th', null, 'Thread'))),
     h('tbody', null, rows.map(r => h('tr', null,
       h('td', null, new Date(r.end).toLocaleString()),
       h('td', {class: 'num'}, fmt.duration(r.duration)),
-      h('td', {class: r.status >= 500 ? 'num bad' : 'num'}, r.status),
-      h('td', {class: 'mono'}, r.endpoint),
-      h('td', {class: 'mono wrap'}, r.path),
+      outcomeCell(r),
+      h('td', {class: 'mono'}, r.name),
+      h('td', {class: 'mono wrap'}, r.detail ?? ''),
       h('td', null, r.thread)))));
 }
 

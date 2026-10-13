@@ -74,7 +74,8 @@ public final class Profiler implements AutoCloseable {
   }
 
   /**
-   * The statistics of the endpoints of the apps observed, see
+   * The statistics of the operations of the application: those of the
+   * jfrweb.ops API, and the requests of the flak apps observed, see
    * {@link Builder#observe(App...)}.
    */
   public LiveStats getLiveStats() {
@@ -82,15 +83,14 @@ public final class Profiler implements AutoCloseable {
   }
 
   /**
-   * The automatic start of sessions, triggered by the requests of the apps
-   * observed.
+   * The automatic start of sessions, triggered by operations.
    */
   public AutoMode getAutoMode() {
     return auto;
   }
 
   /**
-   * Stops the session recording, if any, observing the apps, and the web
+   * Stops the session recording, if any, observing operations, and the web
    * interface. The .jfr files stay.
    */
   @Override
@@ -118,10 +118,11 @@ public final class Profiler implements AutoCloseable {
     private Builder() {}
 
     /**
-     * Flak apps whose endpoints get live statistics, kept by counters as
-     * requests end, without recording, and whose requests can start sessions
-     * by themselves (auto mode). Manual sessions do not need it: recordings get
-     * the route of each request from flak's request event.
+     * Flak apps whose requests count as operations: live statistics, kept by
+     * counters as requests end, without recording, and sessions started by
+     * themselves (auto mode). Manual sessions do not need it: recordings get
+     * the route of each request from flak's request event. The operations of
+     * the jfrweb.ops API count with no need for this.
      */
     public Builder observe(App... apps) {
       observed.addAll(List.of(apps));
@@ -194,9 +195,9 @@ public final class Profiler implements AutoCloseable {
     }
 
     /**
-     * The directory of an endpoint history, to browse it from the interface:
-     * that of an {@link jfrweb.history.EndpointHistory} writing it in this
-     * JVM, or one only read.
+     * The directory of an operation history, to browse it from the
+     * interface: that of an {@link jfrweb.history.OperationHistory} writing it
+     * in this JVM, or one only read.
      */
     public Builder history(Path directory) {
       this.history = directory;

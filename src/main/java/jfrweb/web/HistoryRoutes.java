@@ -14,11 +14,11 @@ import flak.HttpException;
 import flak.Query;
 import flak.annotations.OutputFormat;
 import flak.annotations.Route;
-import jfrweb.analysis.EndpointStats;
+import jfrweb.analysis.OperationStats;
 import jfrweb.history.HistoryReader;
 
 /**
- * The REST API browsing an endpoint history. Durations are in milliseconds,
+ * The REST API browsing an operation history. Durations are in milliseconds,
  * times in ISO-8601.
  */
 public class HistoryRoutes {
@@ -33,11 +33,11 @@ public class HistoryRoutes {
   }
 
   /**
-   * A period of the history: its endpoints, its slowest requests, and its
-   * requests over time.
+   * A period of the history: its operations by name, its slowest operations,
+   * and its operations over time.
    * <p>
    * Query: {@code from} and {@code to}, ISO-8601 times, the last hour by
-   * default; {@code endpoint} to keep the slowest requests of one.
+   * default; {@code name} to keep the slowest operations of a name.
    */
   @Route("/api/history")
   @OutputFormat(ProfilerRoutes.JSON)
@@ -53,18 +53,19 @@ public class HistoryRoutes {
       throw new HttpException(400, "from must be before to");
     HistoryReader r = HistoryReader.read(directory, from, to);
 
-    List<Object> endpoints = new ArrayList<>();
-    for (EndpointStats e : r.getEndpoints())
-      endpoints.add(ProfilerRoutes.endpointRow(e));
+    List<Object> operations = new ArrayList<>();
+    for (OperationStats o : r.getOperations())
+      operations.add(ProfilerRoutes.operationRow(o));
 
-    String endpoint = q.get("endpoint");
+    String name = q.get("name");
     List<Object> slowest = new ArrayList<>();
-    for (HistoryReader.Slow s : r.getSlowest(endpoint == null || endpoint.isEmpty() ? null : endpoint, SLOWEST)) {
+    for (HistoryReader.Slow s : r.getSlowest(name == null || name.isEmpty() ? null : name, SLOWEST)) {
       Map<String, Object> m = new LinkedHashMap<>();
       m.put("end", s.end());
-      m.put("endpoint", s.endpoint());
-      m.put("path", s.path());
+      m.put("name", s.name());
+      m.put("detail", s.detail());
       m.put("status", s.status());
+      m.put("failed", s.failed());
       m.put("duration", ProfilerRoutes.ms(s.nanos()));
       m.put("thread", s.thread());
       slowest.add(m);
@@ -78,7 +79,7 @@ public class HistoryRoutes {
     timeline.put("start", t.start());
     timeline.put("bucket", t.bucket().toMillis());
     timeline.put("buckets", t.buckets());
-    // requests per bucket
+    // operations per bucket
     timeline.put("series", series(t.series()));
     timeline.put("other", t.other() == null ? null : list(t.other()));
     // the seconds they took
@@ -90,7 +91,7 @@ public class HistoryRoutes {
     res.put("from", from);
     res.put("to", to);
     res.put("intervals", r.getIntervalCount());
-    res.put("endpoints", endpoints);
+    res.put("operations", operations);
     res.put("slowest", slowest);
     res.put("timeline", timeline);
     return res;
@@ -107,11 +108,11 @@ public class HistoryRoutes {
     }
   }
 
-  private static List<Object> series(Map<String, double[]> byEndpoint) {
+  private static List<Object> series(Map<String, double[]> byName) {
     List<Object> res = new ArrayList<>();
-    byEndpoint.forEach((name, values) -> {
+    byName.forEach((name, values) -> {
       Map<String, Object> s = new LinkedHashMap<>();
-      s.put("endpoint", name);
+      s.put("name", name);
       s.put("values", list(values));
       res.add(s);
     });

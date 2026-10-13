@@ -27,6 +27,7 @@ import flak.App;
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
 import jfrweb.json.Json;
+import jfrweb.ops.Operations;
 
 /**
  * Records all the time, and saves the last minutes when something goes
@@ -36,7 +37,7 @@ import jfrweb.json.Json;
  * A rolling recording, with the light settings of the JDK, keeps the last
  * minutes on disk. A snapshot writes them to a .jfr file, with a .json file
  * telling why and when. Snapshots are taken by hand ({@link #save}), or by
- * themselves when a request is much slower than usual for its endpoint, or
+ * themselves when an operation is much slower than usual for its name, or
  * when errors burst (see {@link Triggers}): with no threshold to configure.
  * Automatic snapshots are spaced, and the directory is purged by number of
  * snapshots and total size.
@@ -102,15 +103,17 @@ public final class Snapshots implements AutoCloseable {
 
   /**
    * The JDK's "default" settings, light enough for production, plus flak's
-   * request event, and the load of the CPU measured every minute instead of
-   * every second: on Windows, a measure costs about 65 ms of CPU (performance
-   * counters), and every second it was 95% of the cost of the recording, about
-   * 7% of a core on an idle application server.
+   * request event, jfr-web's operation events, and the load of the CPU
+   * measured every minute instead of every second: on Windows, a measure
+   * costs about 65 ms of CPU (performance counters), and every second it was
+   * 95% of the cost of the recording, about 7% of a core on an idle application server.
    */
   public static Map<String, String> defaultSettings() {
     try {
       Map<String, String> s = new HashMap<>(Configuration.getConfiguration("default").getSettings());
       s.put("flak.Request#enabled", "true");
+      s.put(Operations.EVENT + "#enabled", "true");
+      s.put(Operations.SEGMENT_EVENT + "#enabled", "true");
       s.put("jdk.CPULoad#period", "60 s");
       return s;
     }
@@ -131,7 +134,8 @@ public final class Snapshots implements AutoCloseable {
   }
 
   /**
-   * Makes the requests of an app trigger snapshots, until closed.
+   * Makes the requests of a flak app trigger snapshots, until closed. The
+   * operations of the jfrweb.ops API do from the start.
    */
   public void observe(App app) {
     triggers.observe(app);
@@ -293,7 +297,7 @@ public final class Snapshots implements AutoCloseable {
 
     /**
      * The least time between two automatic snapshots, 15 minutes by default:
-     * an incident that lasts gives one snapshot, not one per slow request.
+     * an incident that lasts gives one snapshot, not one per slow operation.
      */
     public Builder minGap(Duration minGap) {
       this.minGap = minGap;

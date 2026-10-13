@@ -17,8 +17,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -28,32 +26,34 @@ import java.util.stream.Stream;
 import java.util.zip.GZIPOutputStream;
 
 import flak.App;
-import flak.Request;
-import flak.RequestListener;
-import flak.RequestSummary;
 import jfrweb.json.Json;
+import jfrweb.ops.Operation;
+import jfrweb.ops.OperationListener;
+import jfrweb.ops.OperationSources;
 
 /**
- * Keeps a history of the endpoints of flak apps on disk, for production: no
- * profiling, only counters fed by the requests as they end, written at a
- * regular interval. What an interval holds: per endpoint, the number of
- * requests, their durations (total, p50, p99, max, and the histogram they come
- * from, so that intervals add up) and sizes; and its slowest requests.
+ * Keeps a history of the operations of the application on disk, for
+ * production: no profiling, only counters fed by the operations as they end,
+ * those of the jfrweb.ops API and the requests of the flak apps observed,
+ * written at a regular interval. What an interval holds: per operation name,
+ * the number of operations, their durations (total, p50, p99, max, and the
+ * histogram they come from, so that intervals add up) and sizes; and its
+ * slowest operations.
  * <p>
  * Each interval is one JSON line of an hourly file, {@code
  * <directory>/<yyyy-MM-dd>/<HH>.jsonl}, dates and hours in UTC. The file of an
  * hour is gzipped once the hour is over. Days older than the maximum age are
  * deleted, then the oldest hours while the whole exceeds the maximum size.
  * <pre>
- * EndpointHistory history = EndpointHistory.builder()
- *                                          .directory(Path.of("logs/endpoints"))
- *                                          .observe(app)
- *                                          .start();
+ * OperationHistory history = OperationHistory.builder()
+ *                                            .directory(Path.of("logs/operations"))
+ *                                            .observe(app)
+ *                                            .start();
  * </pre>
  */
-public final class EndpointHistory implements AutoCloseable {
+public final class OperationHistory implements AutoCloseable {
 
-  private static final System.Logger log = System.getLogger(EndpointHistory.class.getName());
+  private static final System.Logger log = System.getLogger(OperationHistory.class.getName());
 
   private final Path directory;
   private final Duration interval;
@@ -65,11 +65,11 @@ public final class EndpointHistory implements AutoCloseable {
   private final ReadWriteLock swap = new ReentrantReadWriteLock();
   private IntervalStats current;
 
-  private final List<Map.Entry<App, RequestListener>> observed = new CopyOnWriteArrayList<>();
+  private final OperationSources sources;
   private final ScheduledExecutorService scheduler;
   private long lastHousekeepingHour = Long.MIN_VALUE;
 
-  private EndpointHistory(Builder b) {
+  private OperationHistory(Builder b) {
     this.directory = b.directory;
     this.interval = b.interval;
     this.maxAge = b.maxAge;
@@ -79,11 +79,24 @@ public final class EndpointHistory implements AutoCloseable {
     this.current = new IntervalStats(clock.instant(), slowest);
     this.scheduler = b.scheduled
       ? Executors.newSingleThreadScheduledExecutor(r -> {
-          Thread t = new Thread(r, "jfr-web endpoint history");
+          Thread t = new Thread(r, "jfr-web operation history");
           t.setDaemon(true);
           return t;
         })
       : null;
+    this.sources = new OperationSources(new OperationListener() {
+      @Override
+      public void onEnd(Operation op) {
+        swap.readLock().lock();
+        try {
+          current.record(op.getName(), op.getDetail(), op.getStatus(), op.isFailed(), op.getDurationNanos(),
+                         op.getBytesIn(), op.getBytesOut(), clock.instant(), op.getEndThread());
+        }
+        finally {
+          swap.readLock().unlock();
+        }
+      }
+    });
   }
 
   public static Builder builder() {
@@ -99,27 +112,11 @@ public final class EndpointHistory implements AutoCloseable {
   }
 
   /**
-   * Counts the requests of an app, until closed.
+   * Counts the requests of a flak app, until closed. The operations of the
+   * jfrweb.ops API are counted from the start.
    */
   public void observe(App app) {
-    RequestListener l = new RequestListener() {
-      @Override
-      public void onEnd(Request request, RequestSummary s) {
-        // grouped as in recordings, see RecordedRequest.endpoint()
-        String endpoint = request.getMethod() + " " +
-                          (s.getRoute() == null ? "(no route)" : app.getPath() + s.getRoute());
-        swap.readLock().lock();
-        try {
-          current.record(endpoint, request.getPath(), s.getStatus(), s.getDurationNanos(),
-                         s.getBytesIn(), s.getBytesOut(), clock.instant(), Thread.currentThread().getName());
-        }
-        finally {
-          swap.readLock().unlock();
-        }
-      }
-    };
-    observed.add(Map.entry(app, l));
-    app.addRequestListener(l);
+    sources.observe(app);
   }
 
   private void start() throws IOException {
@@ -142,14 +139,14 @@ public final class EndpointHistory implements AutoCloseable {
         flush(Instant.ofEpochMilli(boundary));
       }
       catch (RuntimeException e) {
-        log.log(System.Logger.Level.WARNING, "Could not write the endpoint history", e);
+        log.log(System.Logger.Level.WARNING, "Could not write the operation history", e);
       }
       scheduleNext();
     }, boundary - now, TimeUnit.MILLISECONDS);
   }
 
   /**
-   * The number of requests of the interval in progress, for tests.
+   * The number of operations of the interval in progress, for tests.
    */
   int pending() {
     swap.readLock().lock();
@@ -187,7 +184,7 @@ public final class EndpointHistory implements AutoCloseable {
                         StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     }
     catch (IOException e) {
-      log.log(System.Logger.Level.WARNING, "Could not write the endpoint history to " + file, e);
+      log.log(System.Logger.Level.WARNING, "Could not write the operation history to " + file, e);
     }
   }
 
@@ -205,7 +202,7 @@ public final class EndpointHistory implements AutoCloseable {
       purge(now);
     }
     catch (IOException | RuntimeException e) {
-      log.log(System.Logger.Level.WARNING, "Could not tidy the endpoint history in " + directory, e);
+      log.log(System.Logger.Level.WARNING, "Could not tidy the operation history in " + directory, e);
     }
   }
 
@@ -267,13 +264,11 @@ public final class EndpointHistory implements AutoCloseable {
   }
 
   /**
-   * Stops observing the apps, and writes the interval in progress.
+   * Stops observing, and writes the interval in progress.
    */
   @Override
   public void close() {
-    for (Map.Entry<App, RequestListener> e : observed)
-      e.getKey().removeRequestListener(e.getValue());
-    observed.clear();
+    sources.close();
     if (scheduler != null)
       scheduler.shutdownNow();
     flush(clock.instant());
@@ -329,7 +324,7 @@ public final class EndpointHistory implements AutoCloseable {
     }
 
     /**
-     * How many of the slowest requests each interval keeps, 10 by default.
+     * How many of the slowest operations each interval keeps, 10 by default.
      */
     public Builder slowest(int n) {
       this.slowest = n;
@@ -348,10 +343,10 @@ public final class EndpointHistory implements AutoCloseable {
       return this;
     }
 
-    public EndpointHistory start() throws IOException {
+    public OperationHistory start() throws IOException {
       if (directory == null)
         throw new IllegalStateException("No directory");
-      EndpointHistory h = new EndpointHistory(this);
+      OperationHistory h = new OperationHistory(this);
       h.start();
       apps.forEach(h::observe);
       return h;

@@ -9,17 +9,18 @@ import java.util.Locale;
 import java.util.Map;
 
 import jfrweb.analysis.Analysis;
-import jfrweb.analysis.EndpointStats;
+import jfrweb.analysis.OperationStats;
 import jfrweb.analysis.RecordingInfo;
 import jfrweb.analysis.SamplingSummary;
 
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
+import static jfrweb.analysis.RecordingInfo.FLAK_REQUEST;
 import static jfrweb.analysis.RecordingInfo.NATIVE_SAMPLE;
-import static jfrweb.analysis.RecordingInfo.REQUEST;
+import static jfrweb.analysis.RecordingInfo.OPERATION;
 
 /**
  * The report of a recording as text: how it was recorded, then its
- * endpoints.
+ * operations.
  */
 final class TextReport {
 
@@ -34,7 +35,7 @@ final class TextReport {
   void print(boolean allEvents) throws IOException {
     printHeader(allEvents);
     out.println();
-    printEndpoints(EndpointStats.of(analysis.getRequests()), out);
+    printOperations(OperationStats.of(analysis.getOperations()), out);
   }
 
   private void printHeader(boolean allEvents) throws IOException {
@@ -54,19 +55,20 @@ final class TextReport {
     out.println();
     out.println("Sampling:");
     out.println("  Java code      " + period(EXECUTION_SAMPLE) + ", " + s.getJavaSamples() +
-                " samples, " + s.getJavaInRequests() + " in requests");
+                " samples, " + s.getJavaInOperations() + " in operations");
     out.println("  native calls   " + period(NATIVE_SAMPLE) + ", " + s.getNativeSamples() +
-                " samples, " + s.getNativeInRequests() + " in requests");
-    if (s.getRequestShareOfNative() != null)
+                " samples, " + s.getNativeInOperations() + " in operations");
+    if (s.getOperationShareOfNative() != null)
       out.println(String.format(Locale.ROOT,
-                                "                 one thread sampled per period: while requests ran, " +
+                                "                 one thread sampled per period: while operations ran, " +
                                 "their threads got %.0f%% of the native samples, idle threads the rest." +
-                                "%n                 Read native time in requests as proportions, " +
+                                "%n                 Read native time in operations as proportions, " +
                                 "not as absolute time.",
-                                100 * s.getRequestShareOfNative()));
-    out.println("  requests       " + (info.isEnabled(REQUEST)
-                                       ? analysis.getRequests().size() + " (" + REQUEST + ")"
-                                       : REQUEST + " not enabled: no route context"));
+                                100 * s.getOperationShareOfNative()));
+    out.println("  operations     " + (info.isEnabled(FLAK_REQUEST) || info.isEnabled(OPERATION)
+                                       ? analysis.getOperations().size() + " (" + FLAK_REQUEST + ", " + OPERATION + ")"
+                                       : "neither " + FLAK_REQUEST + " nor " + OPERATION +
+                                         " enabled: no operation context"));
 
     out.println();
     out.println("Known biases:");
@@ -95,21 +97,21 @@ final class TextReport {
   }
 
   /**
-   * The endpoints as a table, in the order given.
+   * The operations as a table, in the order given.
    */
-  static void printEndpoints(List<EndpointStats> stats, PrintStream out) {
+  static void printOperations(List<OperationStats> stats, PrintStream out) {
     if (stats.isEmpty()) {
-      out.println("No requests.");
+      out.println("No operations.");
       return;
     }
 
-    int width = Math.max("Endpoint".length(),
-                         stats.stream().mapToInt(s -> s.endpoint().length()).max().orElse(0));
+    int width = Math.max("Operation".length(),
+                         stats.stream().mapToInt(s -> s.name().length()).max().orElse(0));
     String format = "%-" + width + "s %7s %10s %9s %9s %9s %6s %9s %9s%n";
-    out.printf(format, "Endpoint", "Count", "Total", "p50", "p99", "Max", "5xx", "In", "Out");
-    for (EndpointStats s : stats) {
+    out.printf(format, "Operation", "Count", "Total", "p50", "p99", "Max", "Errors", "In", "Out");
+    for (OperationStats s : stats) {
       out.printf(format,
-                 s.endpoint(),
+                 s.name(),
                  s.count(),
                  ms(s.totalNanos()),
                  ms(s.p50Nanos()),

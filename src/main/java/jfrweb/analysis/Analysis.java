@@ -17,22 +17,31 @@ import jdk.jfr.EventType;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordedThread;
 import jdk.jfr.consumer.RecordingFile;
+import jfrweb.ops.FlakOperations;
 
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
+import static jfrweb.analysis.RecordingInfo.FLAK_REQUEST;
 import static jfrweb.analysis.RecordingInfo.NATIVE_SAMPLE;
-import static jfrweb.analysis.RecordingInfo.REQUEST;
+import static jfrweb.analysis.RecordingInfo.OPERATION;
+import static jfrweb.analysis.RecordingInfo.OPERATION_SEGMENT;
 
 /**
- * A recording read for analysis. Loading it reads the requests and how it was
- * recorded; the samples, which are many, are read again each time they are
- * visited instead of being held in memory.
+ * A recording read for analysis. Loading it reads the operations and how it
+ * was recorded; the samples, which are many, are read again each time they
+ * are visited instead of being held in memory.
  */
 public final class Analysis {
 
   private final Path file;
   private final RecordingInfo info = new RecordingInfo();
-  private final List<RecordedRequest> requests = new ArrayList<>();
-  private final RequestIndex index = new RequestIndex();
+  private final List<RecordedOperation> operations = new ArrayList<>();
+  private final OperationIndex index = new OperationIndex();
+
+  /** The asynchronous operations by id, and the segments read, until linked. */
+  private final Map<Long, RecordedOperation> asyncById = new HashMap<>();
+  private final List<RawSegment> rawSegments = new ArrayList<>();
+
+  private record RawSegment(long id, long threadId, String threadName, long startNanos, long endNanos) {}
 
   /** Times of the samples, to measure how often they were really taken. */
   private final LongList javaSampleTimes = new LongList();
@@ -47,7 +56,7 @@ public final class Analysis {
 
   public static Analysis load(Path file) throws IOException {
     Analysis a = new Analysis(file);
-    a.readRequestsAndInfo();
+    a.readOperationsAndInfo();
     return a;
   }
 
@@ -60,13 +69,13 @@ public final class Analysis {
   }
 
   /**
-   * The requests of the recording, in no particular order.
+   * The operations of the recording, in no particular order.
    */
-  public List<RecordedRequest> getRequests() {
-    return Collections.unmodifiableList(requests);
+  public List<RecordedOperation> getOperations() {
+    return Collections.unmodifiableList(operations);
   }
 
-  private void readRequestsAndInfo() throws IOException {
+  private void readOperationsAndInfo() throws IOException {
     Map<Long, String> eventNames = new HashMap<>();
 
     try (RecordingFile rf = new RecordingFile(file)) {
@@ -78,8 +87,17 @@ public final class Analysis {
         updateBounds(e);
 
         switch (e.getEventType().getName()) {
-          case REQUEST:
-            addRequest(e);
+          case FLAK_REQUEST:
+            addFlakRequest(e);
+            break;
+          case OPERATION:
+            addOperation(e);
+            break;
+          case OPERATION_SEGMENT:
+            RecordedThread t = e.getThread();
+            if (t != null)
+              rawSegments.add(new RawSegment(e.getLong("id"), t.getJavaThreadId(), t.getJavaName(),
+                                             nanos(e.getStartTime()), nanos(e.getEndTime())));
             break;
           case EXECUTION_SAMPLE:
             javaSampleTimes.add(nanos(e.getStartTime()));
@@ -106,6 +124,7 @@ public final class Analysis {
       }
     }
 
+    linkSegments();
     index.seal();
     info.javaInterval = observedRoundInterval(javaSampleTimes);
     info.nativeInterval = observedSampleInterval(nativeSampleTimes);
@@ -170,21 +189,68 @@ public final class Analysis {
     return Math.max(1, ms);
   }
 
-  private void addRequest(RecordedEvent e) {
+  private void addFlakRequest(RecordedEvent e) {
     RecordedThread t = e.getThread();
-    RecordedRequest r = new RecordedRequest(t == null ? -1 : t.getJavaThreadId(),
-                                            t == null ? null : t.getJavaName(),
-                                            nanos(e.getStartTime()),
-                                            nanos(e.getEndTime()),
-                                            e.getString("app"),
-                                            e.getString("method"),
-                                            e.getString("route"),
-                                            e.getString("path"),
-                                            e.getInt("status"),
-                                            e.getLong("bytesIn"),
-                                            e.getLong("bytesOut"));
-    requests.add(r);
-    index.add(r);
+    String method = e.getString("method");
+    int status = e.getInt("status");
+    add(new RecordedOperation(t == null ? -1 : t.getJavaThreadId(),
+                              t == null ? null : t.getJavaName(),
+                              nanos(e.getStartTime()),
+                              nanos(e.getEndTime()),
+                              FlakOperations.name(e.getString("app"), method, e.getString("route")),
+                              method + " " + e.getString("path"),
+                              status,
+                              status >= 500,
+                              status >= 500 ? "HTTP " + status : null,
+                              e.getLong("bytesIn"),
+                              e.getLong("bytesOut"),
+                              false));
+  }
+
+  private void addOperation(RecordedEvent e) {
+    RecordedThread t = e.getThread();
+    RecordedOperation op = new RecordedOperation(t == null ? -1 : t.getJavaThreadId(),
+                                                 t == null ? null : t.getJavaName(),
+                                                 nanos(e.getStartTime()),
+                                                 nanos(e.getEndTime()),
+                                                 e.getString("name"),
+                                                 e.getString("detail"),
+                                                 0,
+                                                 e.getBoolean("failed"),
+                                                 e.getString("error"),
+                                                 e.getLong("bytesIn"),
+                                                 e.getLong("bytesOut"),
+                                                 e.getBoolean("async"));
+    if (op.async()) {
+      operations.add(op);
+      asyncById.put(e.getLong("id"), op);
+    }
+    else {
+      add(op);
+    }
+  }
+
+  /**
+   * A synchronous operation: its thread worked for it from start to end.
+   */
+  private void add(RecordedOperation op) {
+    operations.add(op);
+    index.add(new OperationIndex.Segment(op.threadId(), op.threadName(), op.startNanos(), op.endNanos(), op));
+  }
+
+  /**
+   * Gives the asynchronous operations their segments, once all are read. The
+   * segments of an operation that had not ended when the recording stopped
+   * belong to none.
+   */
+  private void linkSegments() {
+    for (RawSegment s : rawSegments) {
+      RecordedOperation op = asyncById.get(s.id());
+      if (op != null)
+        index.add(new OperationIndex.Segment(s.threadId(), s.threadName(), s.startNanos(), s.endNanos(), op));
+    }
+    rawSegments.clear();
+    asyncById.clear();
   }
 
   /**
@@ -194,13 +260,13 @@ public final class Analysis {
   public interface SampleVisitor {
 
     /**
-     * @param sample  the sample event, with its stack trace
-     * @param thread  the thread sampled
-     * @param request the request the thread was serving, or null
-     * @param weight  the time the sample stands for: the sampling period of
-     *                its event, in milliseconds
+     * @param sample    the sample event, with its stack trace
+     * @param thread    the thread sampled
+     * @param operation the operation the thread was working for, or null
+     * @param weight    the time the sample stands for: the sampling period of
+     *                  its event, in milliseconds
      */
-    void visit(RecordedEvent sample, RecordedThread thread, RecordedRequest request, long weight);
+    void visit(RecordedEvent sample, RecordedThread thread, RecordedOperation operation, long weight);
   }
 
   /**
@@ -220,8 +286,8 @@ public final class Analysis {
         RecordedThread t = e.getThread("sampledThread");
         if (t == null)
           continue;
-        RecordedRequest r = index.find(t.getJavaThreadId(), nanos(e.getStartTime()));
-        visitor.visit(e, t, r, java ? javaWeight : nativeWeight);
+        RecordedOperation op = index.find(t.getJavaThreadId(), nanos(e.getStartTime()));
+        visitor.visit(e, t, op, java ? javaWeight : nativeWeight);
       }
     }
   }
@@ -240,10 +306,18 @@ public final class Analysis {
   }
 
   /**
-   * Whether some request was running at that time, on any thread.
+   * Whether some thread was working for an operation at that time.
    */
-  public boolean isRequestRunning(Instant time) {
+  public boolean isOperationRunning(Instant time) {
     return index.isAnyRunning(nanos(time));
+  }
+
+  /**
+   * The threads that worked for an operation, and when, the earliest first:
+   * the whole operation if synchronous, its segments otherwise.
+   */
+  public List<OperationIndex.Segment> getSegments(RecordedOperation op) {
+    return index.segmentsOf(op);
   }
 
   /**
@@ -254,7 +328,7 @@ public final class Analysis {
   }
 
   /**
-   * A time in nanoseconds since the epoch, as {@link RecordedRequest} holds
+   * A time in nanoseconds since the epoch, as {@link RecordedOperation} holds
    * them.
    */
   public static long nanos(Instant i) {

@@ -4,8 +4,8 @@
  *
  *   #/              the sessions
  *   #/sessions/3    the report of session 3
- *   #/live          the endpoints of the apps observed, live
- *   #/history       the endpoint history written to disk
+ *   #/live          the operations of the application, live
+ *   #/history       the operation history written to disk
  */
 import {renderSessions} from './views/sessions.js';
 import {renderSession} from './views/session.js';
