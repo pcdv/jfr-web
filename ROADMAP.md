@@ -135,8 +135,8 @@ thread of periodic events uses 0.09 s of CPU per minute, about 0.15% of a core. 
   the threads that worked for it
 - [x] Demo without HTTP: an order server over TCP (`./gradlew tcpDemo`)
 - [ ] Nested operations on a thread (an operation inside a request), shown by the innermost
-- [ ] Other frameworks as sources: they emit their own events and counters, jfr-web adapts to
-  them
+- [ ] Other frameworks (e.g. RPC), through a bridge module that starts jfr-web and feeds the
+  API from the framework's hooks: services never depend on jfr-web
 
 Renamed while no one used it: `EndpointHistory` is `OperationHistory`, and the REST API, the
 history files and the command line changed their keys (files written before still read). Applications

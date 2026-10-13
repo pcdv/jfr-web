@@ -96,8 +96,12 @@ operations are grouped by (like the route of a request), a start, a duration, an
     the whole, waiting included; its samples are those of its segments, the times when a thread
     declares working for it (`jfrweb.OperationSegment` events, `op.wrap(task)` for an
     executor).
-- Other sources adapt to it rather than depend on jfr-web: e.g. an RPC framework would emit its
-  own JFR events and counters, with an adapter on the jfr-web side.
+- Frameworks do not depend on jfr-web: a bridge module, the only one that knows both sides,
+  starts jfr-web and drives the API from the framework's own hooks. E.g. an RPC framework:
+  it tells when a call begins, when its synchronous part ends and when it replies; the bridge
+  begins an asynchronous operation, a segment around the synchronous part, and ends it at the
+  reply. In the same process, nothing is lost: live views are exact, and auto mode starts a
+  session before the call runs.
 
 ## Operation statistics (without profiling)
 
