@@ -1,6 +1,7 @@
 package jfrweb.live;
 
 import jfrweb.analysis.EndpointStats;
+import jfrweb.stats.Histogram;
 
 /**
  * The requests of one endpoint, counted per minute over the last hour.

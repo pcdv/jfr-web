@@ -48,7 +48,7 @@ import static jfrweb.analysis.RecordingInfo.REQUEST;
  */
 public class ProfilerRoutes {
 
-  /** Name of the output formatter writing {@link Json}. */
+  /** Name of the output formatter writing {@link jfrweb.json.Json}. */
   public static final String JSON = "JSON";
 
   private final Sessions sessions;

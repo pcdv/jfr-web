@@ -19,7 +19,7 @@ import flak.util.CrossOriginProtection;
 import jfrweb.auto.AutoMode;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Sessions;
-import jfrweb.web.Json;
+import jfrweb.json.Json;
 import jfrweb.web.LoopbackOnly;
 import jfrweb.web.ProfilerRoutes;
 

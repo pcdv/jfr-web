@@ -99,23 +99,6 @@ public class LiveStatsTest {
     Assert.assertTrue(live.getEndpoints(60).isEmpty());
   }
 
-  @Test
-  public void testHistogram() {
-    Histogram h = new Histogram();
-    for (int i = 1; i <= 100; i++)
-      h.add(i * 1_000_000L);
-    // within a bucket, about 19%, of the exact values
-    assertAbout(50_000_000, h.percentile(50));
-    assertAbout(99_000_000, h.percentile(99));
-    Assert.assertEquals(0, new Histogram().percentile(50));
-    Assert.assertEquals(0, Histogram.index(0));
-    Assert.assertEquals(Histogram.BUCKETS - 1, Histogram.index(Long.MAX_VALUE));
-  }
-
-  private static void assertAbout(long expected, long actual) {
-    Assert.assertTrue(actual + " vs " + expected, actual >= expected && actual <= expected * 1.2);
-  }
-
   /**
    * The listener runs once the response is sent, which the client may see
    * first.
