@@ -7,10 +7,7 @@ In a [flak](https://github.com/pcdv/flak) application, it also knows which endpo
 sample belongs to, with no annotation: most expensive endpoints, timeline of requests, flame
 graph per route or per slow request.
 
-## Status
-
-M5: embedded, with manual or automatic sessions, flak-aware views, and an endpoint history for
-production.
+## Features
 
 ```java
 Profiler.builder().observe(app).start();   // serves the interface on loopback, logs its URL
@@ -18,17 +15,40 @@ Profiler.builder().observe(app).start();   // serves the interface on loopback, 
 
 - **Live endpoints**: the endpoints of the apps observed over the last 1 to 60 minutes (count,
   total time, p50/p99/max, 5xx, bytes), kept by counters whether a session records or not.
+
+  ![Live endpoints](docs/screenshots/live.png)
+
 - **Sessions**: start one, use the application, stop it. Its report states how it was recorded,
   shows a timeline of the requests in flight by endpoint (drag to select an interval), lists the
   endpoints by total time and their slowest requests, and shows flame graphs by endpoint, thread,
   interval or single request. A request also shows the exceptions it created and its slow file
   and socket accesses. The `.jfr` file can be downloaded, e.g. for JDK Mission Control.
+
+  ![Report of a session: how it was recorded, timeline](docs/screenshots/report.png)
+
+  An interval selected on the timeline, or zoomed in on, narrows the sections below it:
+
+  ![Interval selected on the timeline](docs/screenshots/interval.png)
+
+  Flame graph of an endpoint, picked in the table:
+
+  ![Flame graph of an endpoint](docs/screenshots/flame.png)
+
+  A single request, with its exceptions, slow file and socket accesses, and flame graph:
+
+  ![A request and its flame graph](docs/screenshots/request.png)
+
 - **Auto mode**: sessions start by themselves when a matching request comes (endpoint patterns,
   and/or only the requests of the browser armed), before its handler runs, and stop once no
   matching request has run for a few seconds; once or every time.
+
+  ![Sessions, with the auto mode panel](docs/screenshots/sessions.png)
+
 - **Endpoint history**, for production: no profiling, only the endpoints' counters written to
   disk at a regular interval, in hourly files purged by age and size. It runs alone; the
   profiler's History page and the `history` command read it.
+
+  ![History page](docs/screenshots/history.png)
 
 ```java
 EndpointHistory.builder()
@@ -49,6 +69,7 @@ Profiler.builder().observe(app).history(Path.of("logs/endpoints")).start();   //
   light settings, and saves them when something goes wrong, with nothing to configure: a request
   4 times slower than its endpoint's usual p99 (and over 1 s), or a burst of errors. Also saved by
   hand, e.g. right after a problem. They are listed with the sessions, with why they were taken.
+  The sessions page above shows one, with the button to take one by hand.
 
 ```java
 Snapshots snapshots = Snapshots.builder()
@@ -73,7 +94,9 @@ application on Netty should then pick its backend explicitly: `Flak.getFactory()
 one it finds on the classpath.
 
 To try it: `./gradlew demo -Pdemo.session=true` runs a small flak app with the profiler, records
-a first session, and prints the URLs.
+a first session, and prints the URLs. The screenshots above come from it, with
+`-Pdemo.load=true` for background traffic: `node docs/screenshots/capture.mjs <profiler URL>`
+takes them again, in headless Edge or Chrome.
 
 ### Offline analysis
 
