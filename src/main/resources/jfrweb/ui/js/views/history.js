@@ -9,9 +9,15 @@ import * as fmt from '../format.js';
 import {endpointsTable} from '../components/endpoints.js';
 import {timelineChart} from '../components/timeline.js';
 import {section} from '../components/section.js';
+import {readSetting, writeSetting} from '../settings.js';
 
 /** The periods offered, in hours. */
 const PRESETS = [1, 6, 24, 24 * 7];
+
+/** What the timeline measures, kept per browser. */
+const MEASURE_KEY = 'jfrweb.history.measure';
+
+/** @typedef {'requests' | 'time'} Measure */
 
 /**
  * @typedef {{from: Date, to: Date}} Period
@@ -103,15 +109,33 @@ export function renderHistory(root) {
       pick({from: new Date((start + f) * 1000), to: new Date((start + t) * 1000)}, null, false);
     };
 
+    // the number of requests, or the time they took: what is called most is
+    // not always what costs most
+    const chart = h('div');
+    const measures = h('span', {class: 'segmented'});
+    const showMeasure = (/** @type {Measure} */ m) => {
+      writeSetting(MEASURE_KEY, m);
+      replace(measures, 'Show ', ['requests', 'time'].map(x => h('button', {
+        class: x === m ? 'selected' : null,
+        onclick: () => showMeasure(/** @type {Measure} */ (x)),
+      }, x === 'requests' ? 'Requests' : 'Time')));
+      const time = m === 'time';
+      replace(chart, timelineChart(time ? {...timeline, series: timeline.seriesSeconds, other: timeline.otherSeconds} : timeline, zoom, {
+        hint: time
+          ? `Seconds spent serving requests per ${fmt.duration(timeline.bucket)}, by endpoint. Drag to zoom in.`
+          : `Requests per ${fmt.duration(timeline.bucket)}, by endpoint. Drag to zoom in.`,
+        unit: time ? ' s' : '',
+        timeLabel: t => clock(new Date((start + t) * 1000), period.to.getTime() - period.from.getTime()),
+        startEpoch: start,
+      }));
+    };
+    showMeasure(readSetting(MEASURE_KEY) === 'time' ? 'time' : 'requests');
+
     return h('div', null,
       h('p', {class: 'summary'},
         `${history.intervals} intervals from ${period.from.toLocaleString()} to ${period.to.toLocaleString()}, in `,
         h('code', null, history.directory ?? '')),
-      section('history-timeline', 'Requests over time', timelineChart(timeline, zoom, {
-        hint: `Requests per ${fmt.duration(timeline.bucket)}, by endpoint. Drag to zoom in.`,
-        timeLabel: t => clock(new Date((start + t) * 1000), period.to.getTime() - period.from.getTime()),
-        startEpoch: start,
-      })),
+      section('history-timeline', 'Requests over time', h('div', {class: 'toolbar'}, measures), chart),
       section('history-endpoints', 'Endpoints', endpointsTable(/** @type {api.EndpointRow[]} */ (history.endpoints),
         e => {
           endpoint = e;

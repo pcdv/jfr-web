@@ -179,7 +179,15 @@ public class AnalysisTest {
     Assert.assertEquals(expected, seconds, expected * 0.001);
     Assert.assertTrue(Arrays.stream(t.getJavaSamples()).sum() > 0);
 
-    Assert.assertEquals(100_000_000, Timeline.bucketFor(1_000_000_000));
+    // zoomed in on 200 ms: it starts there, in the finest buckets
+    java.time.Instant from = analysis.getInfo().getStart().plusMillis(200);
+    Timeline zoomed = Timeline.of(analysis, from, from.plusMillis(200));
+    Assert.assertEquals(from, zoomed.getStart());
+    Assert.assertEquals("10 ms buckets", 20, zoomed.getBuckets());
+    Assert.assertEquals("the same colors as the whole", t.getSeries().keySet(), zoomed.getSeries().keySet());
+
+    Assert.assertEquals(10_000_000, Timeline.bucketFor(1_000_000_000));
+    Assert.assertEquals("10 s in 300 buckets: 33 ms at least", 50_000_000, Timeline.bucketFor(10_000_000_000L));
     Assert.assertEquals(1_000_000_000, Timeline.bucketFor(299_000_000_000L));
     Assert.assertEquals(2_000_000_000, Timeline.bucketFor(301_000_000_000L));
   }

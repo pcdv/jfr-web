@@ -267,11 +267,16 @@ public class ProfilerRoutes {
   /**
    * The activity of a session over time: requests in flight by endpoint, and
    * samples of Java code, in buckets of a round duration.
+   * <p>
+   * Query: {@code from} and {@code to}, in seconds since the start of the
+   * recording, to zoom in on a part of it, in finer buckets.
    */
   @Route("/api/sessions/:id/timeline")
   @OutputFormat(JSON)
-  public Map<String, Object> timeline(int id) throws IOException {
-    Timeline t = Timeline.of(stopped(id).getAnalysis());
+  public Map<String, Object> timeline(int id, Query q) throws IOException {
+    Analysis a = stopped(id).getAnalysis();
+    Instant start = a.getInfo().getStart();
+    Timeline t = Timeline.of(a, offset(start, q.get("from")), offset(start, q.get("to")));
 
     List<Object> series = new ArrayList<>();
     t.getSeries().forEach((endpoint, values) -> {

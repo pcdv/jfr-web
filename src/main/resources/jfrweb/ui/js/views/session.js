@@ -8,7 +8,7 @@ import {h, replace, errorBox} from '../dom.js';
 import * as fmt from '../format.js';
 import {endpointsPanel} from '../components/endpoints.js';
 import {flamePanel} from '../components/flame.js';
-import {timelineChart} from '../components/timeline.js';
+import {sessionTimeline} from '../components/sessionTimeline.js';
 import {requestsPanel} from '../components/requests.js';
 import {section} from '../components/section.js';
 
@@ -31,16 +31,17 @@ export function renderSession(root, params) {
         requests.showEndpoint(e);
         flame.showEndpoint(e);
       });
-      // the interval selected on the timeline narrows everything below it
-      const showInterval = (/** @type {number | undefined} */ from, /** @type {number | undefined} */ to) => {
-        endpoints.showInterval({from, to});
-        requests.showInterval({from, to});
-        flame.showInterval(from, to);
+      // the interval selected on the timeline, or zoomed in on, narrows
+      // everything below it
+      const showInterval = (/** @type {api.Interval} */ i) => {
+        endpoints.showInterval(i);
+        requests.showInterval(i);
+        flame.showInterval(i.from, i.to);
       };
       replace(content,
         summary(report),
         recording(report),
-        section('timeline', 'Timeline', timelineChart(timeline, showInterval)),
+        section('timeline', 'Timeline', sessionTimeline(id, timeline, showInterval)),
         endpoints.element,
         requests.element,
         section('flame', 'Flame graph', flame.element));

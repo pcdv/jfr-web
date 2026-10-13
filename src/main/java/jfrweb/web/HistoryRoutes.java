@@ -71,13 +71,6 @@ public class HistoryRoutes {
     }
 
     HistoryReader.CountTimeline t = r.getTimeline();
-    List<Object> series = new ArrayList<>();
-    t.series().forEach((name, values) -> {
-      Map<String, Object> s = new LinkedHashMap<>();
-      s.put("endpoint", name);
-      s.put("values", list(values));
-      series.add(s);
-    });
     List<Boolean> covered = new ArrayList<>();
     for (boolean c : t.covered())
       covered.add(c);
@@ -85,8 +78,12 @@ public class HistoryRoutes {
     timeline.put("start", t.start());
     timeline.put("bucket", t.bucket().toMillis());
     timeline.put("buckets", t.buckets());
-    timeline.put("series", series);
+    // requests per bucket
+    timeline.put("series", series(t.series()));
     timeline.put("other", t.other() == null ? null : list(t.other()));
+    // the seconds they took
+    timeline.put("seriesSeconds", series(t.seconds()));
+    timeline.put("otherSeconds", t.otherSeconds() == null ? null : list(t.otherSeconds()));
     timeline.put("covered", covered);
 
     res.put("directory", directory.toString());
@@ -110,10 +107,22 @@ public class HistoryRoutes {
     }
   }
 
+  private static List<Object> series(Map<String, double[]> byEndpoint) {
+    List<Object> res = new ArrayList<>();
+    byEndpoint.forEach((name, values) -> {
+      Map<String, Object> s = new LinkedHashMap<>();
+      s.put("endpoint", name);
+      s.put("values", list(values));
+      res.add(s);
+    });
+    return res;
+  }
+
   private static List<Double> list(double[] values) {
     List<Double> res = new ArrayList<>(values.length);
     for (double v : values)
-      res.add(v);
+      // seconds to the millisecond: sums of doubles otherwise read 0.30000000000000004
+      res.add(Math.round(v * 1000) / 1000.0);
     return res;
   }
 }

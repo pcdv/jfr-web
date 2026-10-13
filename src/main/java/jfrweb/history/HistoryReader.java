@@ -210,9 +210,14 @@ public final class HistoryReader {
     List<String> top = getEndpoints().stream().limit(MAX_SERIES).map(EndpointStats::endpoint)
                                      .collect(Collectors.toList());
     Map<String, double[]> series = new LinkedHashMap<>();
-    for (String e : top)
+    Map<String, double[]> seconds = new LinkedHashMap<>();
+    for (String e : top) {
       series.put(e, new double[buckets]);
-    double[] other = getEndpoints().size() > MAX_SERIES ? new double[buckets] : null;
+      seconds.put(e, new double[buckets]);
+    }
+    boolean others = getEndpoints().size() > MAX_SERIES;
+    double[] other = others ? new double[buckets] : null;
+    double[] otherSeconds = others ? new double[buckets] : null;
     boolean[] covered = new boolean[buckets];
 
     for (Interval i : intervals) {
@@ -221,20 +226,23 @@ public final class HistoryReader {
         continue;
       covered[(int) b] = true;
       for (Row r : i.rows()) {
-        double[] values = series.getOrDefault(r.endpoint(), other);
-        values[(int) b] += r.count();
+        series.getOrDefault(r.endpoint(), other)[(int) b] += r.count();
+        seconds.getOrDefault(r.endpoint(), otherSeconds)[(int) b] += r.totalNanos() / 1e9;
       }
     }
-    return new CountTimeline(from, Duration.ofSeconds(bucket), buckets, series, other, covered);
+    return new CountTimeline(from, Duration.ofSeconds(bucket), buckets, series, other, seconds, otherSeconds, covered);
   }
 
   /**
-   * Requests per bucket, by endpoint.
+   * Requests per bucket, by endpoint: their number, and the time they took.
    *
-   * @param covered whether the history was written during each bucket
+   * @param seconds      the time the requests took, by endpoint
+   * @param otherSeconds the same for the other endpoints, or null
+   * @param covered      whether the history was written during each bucket
    */
   public record CountTimeline(Instant start, Duration bucket, int buckets, Map<String, double[]> series,
-                              double[] other, boolean[] covered) {}
+                              double[] other, Map<String, double[]> seconds, double[] otherSeconds,
+                              boolean[] covered) {}
 
   /**
    * The intervals' starting times, for tests.

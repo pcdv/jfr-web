@@ -33,6 +33,7 @@ const PLOT_H = H - TOP - BOTTOM;
  *           start: clock times rather than "12 s"
  * @property {number} [startEpoch] the start in seconds since the epoch, so that ticks fall
  *           on round clock times
+ * @property {string} [unit] after the values, e.g. " s"
  */
 
 /**
@@ -43,6 +44,7 @@ const PLOT_H = H - TOP - BOTTOM;
  */
 export function timelineChart(data, onSelect, options = {}) {
   const label = options.timeLabel ?? (t => `${t} s`);
+  const unit = options.unit ?? '';
   /** @type {Series[]} */
   const series = data.series.map((s, i) => ({name: s.endpoint, values: s.values, color: `var(--series-${i + 1})`}));
   if (data.other)
@@ -67,7 +69,7 @@ export function timelineChart(data, onSelect, options = {}) {
   // recessive grid, one axis
   for (const v of [0, yMax / 2, yMax]) {
     svg.append(svgEl('line', {x1: LEFT, x2: W - RIGHT, y1: y(v), y2: y(v), class: 'grid-line'}));
-    svg.append(svgText(LEFT - 6, y(v) + 4, formatCount(v), 'axis-label end'));
+    svg.append(svgText(LEFT - 6, y(v) + 4, formatCount(v) + unit, 'axis-label end'));
   }
   for (const t of timeTicks(n * bucketSec, options.startEpoch ?? 0))
     svg.append(svgText(LEFT + t / bucketSec * bw, H - 6, label(t), 'axis-label middle'));
@@ -167,10 +169,10 @@ export function timelineChart(data, onSelect, options = {}) {
         : rows.map(s => h('div', {class: 'tooltip-row'},
             h('span', {class: 'swatch', style: `background: ${s.color}`}),
             h('span', {class: 'tooltip-name'}, s.name),
-            h('span', {class: 'tooltip-value'}, formatCount(s.values[i])))),
+            h('span', {class: 'tooltip-value'}, formatCount(s.values[i]) + unit))),
       requests && rows.length > 1
         ? h('div', {class: 'tooltip-row total'}, h('span'), h('span', {class: 'tooltip-name'}, 'Total'),
-            h('span', {class: 'tooltip-value'}, formatCount(totals[i])))
+            h('span', {class: 'tooltip-value'}, formatCount(totals[i]) + unit))
         : null);
     tooltip.hidden = false;
     const r = wrapper.getBoundingClientRect();

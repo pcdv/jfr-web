@@ -280,7 +280,9 @@ export function getReport(id) {
  * @property {number} [intervals] written during the period: none means the history was not written then
  * @property {EndpointRow[]} [endpoints] sorted by total time
  * @property {HistorySlow[]} [slowest] the slowest first
- * @property {TimelineData & {covered: boolean[]}} [timeline] requests per bucket, by endpoint
+ * @property {TimelineData & {covered: boolean[], seriesSeconds: TimelineData['series'],
+ *            otherSeconds: number[] | null}} [timeline] requests per bucket, by endpoint, and
+ *           the seconds they took
  */
 
 /**
@@ -297,10 +299,13 @@ export function getHistory(from, to, endpoint) {
 
 /**
  * @param {number} id
- * @returns {Promise<TimelineData>}
+ * @param {Interval} [range] a part of the session, in finer buckets: to zoom in
+ * @returns {Promise<TimelineData>} its start is that of the part
  */
-export function getTimeline(id) {
-  return call(`api/sessions/${id}/timeline`);
+export function getTimeline(id, range = {}) {
+  const q = new URLSearchParams();
+  addInterval(q, range);
+  return call(`api/sessions/${id}/timeline?${q}`);
 }
 
 /**

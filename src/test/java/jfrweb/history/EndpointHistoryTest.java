@@ -247,6 +247,7 @@ public class EndpointHistoryTest {
                                                        Instant.parse("2026-10-13T10:10:00Z")).getTimeline();
     Assert.assertEquals("never finer than an interval, here a whole minute", Duration.ofMinutes(1), t.bucket());
     Assert.assertEquals(2, t.series().get("GET /api/item/:id")[0], 0);
+    Assert.assertTrue("the time they took too", t.seconds().get("GET /api/item/:id")[0] > 0);
     Assert.assertEquals(1, t.series().get("GET /api/fail")[(int) (Duration.ofMinutes(5).toSeconds() / t.bucket().toSeconds())], 0);
     Assert.assertTrue(t.covered()[2]);
     Assert.assertFalse("not written then", t.covered()[7]);

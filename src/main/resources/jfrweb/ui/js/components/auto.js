@@ -5,6 +5,7 @@
  */
 import * as api from '../api.js';
 import {h, replace} from '../dom.js';
+import {readSetting, writeSetting} from '../settings.js';
 
 /** Last arming, kept per browser to arm again in one click. */
 const ARMING_KEY = 'jfrweb.auto.arming';
@@ -121,31 +122,4 @@ function readArming() {
 /** @param {api.AutoArming} a */
 function writeArming(a) {
   writeSetting(ARMING_KEY, JSON.stringify(a));
-}
-
-/**
- * Browser storage can be unavailable (private mode, blocked site data).
- *
- * @param {string} key
- */
-function readSetting(key) {
-  try {
-    return localStorage.getItem(key);
-  }
-  catch (e) {
-    return null;
-  }
-}
-
-/**
- * @param {string} key
- * @param {string} value
- */
-function writeSetting(key, value) {
-  try {
-    localStorage.setItem(key, value);
-  }
-  catch (e) {
-    // only a convenience
-  }
 }

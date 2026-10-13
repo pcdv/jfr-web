@@ -6,6 +6,7 @@
 import * as api from '../api.js';
 import {h, replace, errorBox} from '../dom.js';
 import {endpointsTable} from '../components/endpoints.js';
+import {readSetting, writeSetting} from '../settings.js';
 
 /** How often the statistics refresh, in ms. */
 const POLL = 2000;
@@ -77,31 +78,4 @@ function windowPicker(live, onPick) {
  */
 function plural(n, unit) {
   return `${n} ${unit}${n > 1 ? 's' : ''}`;
-}
-
-/**
- * Browser storage can be unavailable (private mode, blocked site data).
- *
- * @param {string} key
- */
-function readSetting(key) {
-  try {
-    return localStorage.getItem(key);
-  }
-  catch (e) {
-    return null;
-  }
-}
-
-/**
- * @param {string} key
- * @param {string} value
- */
-function writeSetting(key, value) {
-  try {
-    localStorage.setItem(key, value);
-  }
-  catch (e) {
-    // only a convenience
-  }
 }

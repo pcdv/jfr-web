@@ -24,9 +24,12 @@ public final class Timeline {
   /** At most this many buckets. */
   static final int MAX_BUCKETS = 300;
 
-  /** The bucket durations to choose from, in ms. */
-  private static final long[] STEPS = {100, 200, 500, 1000, 2000, 5000, 10_000, 15_000, 30_000, 60_000,
-                                       120_000, 300_000, 600_000, 900_000, 1_800_000, 3_600_000};
+  /**
+   * The bucket durations to choose from, in ms: from 10 ms, so that zooming in
+   * on a second or two still shows more detail.
+   */
+  private static final long[] STEPS = {10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10_000, 15_000, 30_000,
+                                       60_000, 120_000, 300_000, 600_000, 900_000, 1_800_000, 3_600_000};
 
   private final Instant start;
   private final Duration bucket;
@@ -43,9 +46,26 @@ public final class Timeline {
   }
 
   public static Timeline of(Analysis analysis) throws IOException {
+    return of(analysis, null, null);
+  }
+
+  /**
+   * The timeline of a part of the recording, in buckets as fine as its span
+   * allows: to zoom in. The endpoints with a series of their own are those of
+   * the whole recording, so that each keeps its color.
+   *
+   * @param from the start of the part, or null from the start of the recording
+   * @param to   the end of the part, or null to the end of the recording
+   */
+  public static Timeline of(Analysis analysis, Instant from, Instant to) throws IOException {
     RecordingInfo info = analysis.getInfo();
     Instant start = info.getStart();
-    long span = start == null ? 0 : Duration.between(start, info.getEnd()).toNanos();
+    Instant end = info.getEnd();
+    if (start != null && from != null && from.isAfter(start))
+      start = from;
+    if (end != null && to != null && to.isBefore(end))
+      end = to;
+    long span = start == null || end.isBefore(start) ? 0 : Duration.between(start, end).toNanos();
     long bucketNanos = bucketFor(span);
     int buckets = (int) Math.max(1, (span + bucketNanos - 1) / bucketNanos);
     Timeline t = new Timeline(start != null ? start : Instant.EPOCH, Duration.ofNanos(bucketNanos), buckets);
@@ -67,10 +87,10 @@ public final class Timeline {
 
     for (RecordedRequest r : analysis.getRequests()) {
       double[] values = t.series.getOrDefault(r.endpoint(), t.other);
-      long from = Math.max(r.startNanos() - origin, 0);
-      long to = Math.min(r.endNanos() - origin, (long) buckets * bucketNanos);
-      for (long b = from / bucketNanos; b * bucketNanos < to && b < buckets; b++) {
-        long overlap = Math.min(to, (b + 1) * bucketNanos) - Math.max(from, b * bucketNanos);
+      long begin = Math.max(r.startNanos() - origin, 0);
+      long finish = Math.min(r.endNanos() - origin, (long) buckets * bucketNanos);
+      for (long b = begin / bucketNanos; b * bucketNanos < finish && b < buckets; b++) {
+        long overlap = Math.min(finish, (b + 1) * bucketNanos) - Math.max(begin, b * bucketNanos);
         // a request in flight for the whole bucket counts 1
         values[(int) b] += (double) overlap / bucketNanos;
       }
