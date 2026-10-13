@@ -31,6 +31,9 @@ public final class Session {
   /** While recording. */
   Recording recording;
 
+  /** Recorded elsewhere, e.g. a snapshot: its file may be purged. */
+  boolean external;
+
   /** Loaded on demand, and dropped under memory pressure. */
   private SoftReference<Analysis> analysis = new SoftReference<>(null);
 

@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -165,11 +165,28 @@ public final class Sessions implements AutoCloseable {
   }
 
   /**
+   * Adds a recording made elsewhere, e.g. a snapshot of a rolling recording,
+   * as a session already stopped. It is dropped from the list once its file
+   * is deleted.
+   *
+   * @param trigger why it was recorded, e.g. "snapshot: GET /x took 9 s"
+   */
+  public synchronized Session register(Instant start, Instant end, String trigger, Path file) {
+    Session s = new Session(++lastId, start, trigger, file);
+    s.external = true;
+    s.stopped(end);
+    sessions.add(s);
+    return s;
+  }
+
+  /**
    * All the sessions, the latest first.
    */
   public synchronized List<Session> list() {
+    // the files of others may have been purged
+    sessions.removeIf(s -> s.external && !Files.exists(s.getFile()));
     List<Session> res = new ArrayList<>(sessions);
-    Collections.reverse(res);
+    res.sort(Comparator.comparing(Session::getStart).reversed());
     return res;
   }
 

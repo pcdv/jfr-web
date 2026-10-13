@@ -1,0 +1,88 @@
+package jfrweb.snapshot;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.junit.Assert;
+import org.junit.Test;
+
+public class TriggersTest {
+
+  private static final long MS = 1_000_000;
+
+  private final List<String> triggered = new ArrayList<>();
+  private Instant now = Instant.parse("2026-10-13T10:00:00Z");
+  private final Clock clock = new Clock() {
+    @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+    @Override public Clock withZone(ZoneId zone) { return this; }
+    @Override public Instant instant() { return now; }
+  };
+  private final Triggers triggers = new Triggers(clock, triggered::add);
+
+  @Test
+  public void testWithoutUsualLevelOnlyVerySlowRequests() {
+    triggers.ended("GET /x", 2_000 * MS, 200);
+    Assert.assertEquals(List.of(), triggered);
+    triggers.ended("GET /x", 11_000 * MS, 200);
+    Assert.assertEquals(List.of("GET /x took 11.0 s"), triggered);
+  }
+
+  @Test
+  public void testSlowerThanUsual() {
+    for (int i = 0; i < 30; i++)
+      triggers.ended("GET /x", 300 * MS, 200);
+    now = now.plusSeconds(60);
+    triggers.refreshBaselines();
+
+    triggers.ended("GET /x", 900 * MS, 200);
+    Assert.assertEquals("3x its usual p99 only", List.of(), triggered);
+    triggers.ended("GET /y", 900 * MS, 200);
+    Assert.assertEquals(List.of(), triggered);
+
+    triggers.ended("GET /x", 2_000 * MS, 200);
+    Assert.assertEquals(1, triggered.size());
+    Assert.assertTrue(triggered.get(0), triggered.get(0).matches("GET /x took 2\\.0 s, \\dx its usual p99 of 0\\.\\d s"));
+  }
+
+  @Test
+  public void testFastEndpointUnderOneSecondNeverTriggers() {
+    for (int i = 0; i < 30; i++)
+      triggers.ended("GET /fast", 1 * MS, 200);
+    now = now.plusSeconds(60);
+    triggers.refreshBaselines();
+    // 500 times its usual p99, but under a second: not worth a snapshot
+    triggers.ended("GET /fast", 500 * MS, 200);
+    Assert.assertEquals(List.of(), triggered);
+  }
+
+  @Test
+  public void testErrorBurst() {
+    for (int i = 0; i < 100; i++)
+      triggers.ended("GET /x", 10 * MS, 200);
+    triggers.ended("GET /x", 10 * MS, 500);
+    now = now.plusSeconds(60);
+
+    for (int i = 0; i < 10; i++)
+      triggers.ended("GET /x", 10 * MS, 200);
+    for (int i = 0; i < 6; i++)
+      triggers.ended("GET /x", 10 * MS, 503);
+    Assert.assertEquals("once, at the 5th", 1, triggered.size());
+    Assert.assertTrue(triggered.get(0), triggered.get(0).startsWith("5 errors (5xx) in a minute, 33% of the requests, usually 1.0%"));
+  }
+
+  @Test
+  public void testErrorsAsUsualDoNotTrigger() {
+    // a flaky endpoint failing half of the time: not a burst
+    for (int m = 0; m < 3; m++) {
+      for (int i = 0; i < 10; i++)
+        triggers.ended("GET /flaky", 10 * MS, i % 2 == 0 ? 500 : 200);
+      now = now.plusSeconds(60);
+    }
+    Assert.assertEquals(1, triggered.size());
+    Assert.assertTrue("only the first minute, with nothing usual yet", triggered.get(0).contains("usually 0.0%"));
+  }
+}
