@@ -58,17 +58,22 @@ rounds, since rounds with no Java thread running leave no sample), the span of a
 from its first to its last committed event, and reports state which share of the native samples
 the request threads got.
 
-For M2: on Windows, run the sleeping thread while a session records, and only then. Before M2,
-jfr-web could ship it as a Java agent (`-javaagent`, or loaded into a running JVM through the
-Attach API), which could also start the recording.
+Done in M2: on Windows, the sleeping thread runs while a session records, and only then. For an
+application that does not embed jfr-web, it could ship as a Java agent (`-javaagent`, or loaded
+into a running JVM through the Attach API), which could also start the recording.
 
 ## M2: embedded, manual sessions
 
-- [ ] `Profiler.start()`: UI on loopback, URL logged
-- [ ] Mounting on an existing flak server instead
-- [ ] Security: loopback-only default, pluggable guard, `CrossOriginProtection`
-- [ ] Manual sessions (start / stop), sessions list, download of the `.jfr`
-- [ ] Flame graph per session, time interval and thread
+- [x] `Profiler.start()`: UI on loopback, URL logged
+- [x] Mounting on an existing flak server instead
+- [x] Security: loopback-only default, pluggable guard, `CrossOriginProtection`
+- [x] Manual sessions (start / stop), sessions list, download of the `.jfr`
+- [x] Flame graph per session, time interval and thread
+
+Recordings use the JDK's `profile` settings, plus flak's request event and native calls sampled
+every 5 ms. The interface is plain JS modules served from the jar, type-checked from their JSDoc
+(`jsconfig.json`), with no build step. Picking an interval is a pair of numbers for now: the
+timeline of M3 will let it be selected.
 
 ## M3: flak-aware views
 

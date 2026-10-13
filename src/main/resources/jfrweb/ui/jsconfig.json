@@ -1,0 +1,12 @@
+{
+  "//": "Type-checks the JS modules with their JSDoc annotations, in editors, or with: npx -p typescript tsc -p jsconfig.json",
+  "compilerOptions": {
+    "checkJs": true,
+    "strict": true,
+    "target": "es2020",
+    "module": "es2020",
+    "lib": ["es2020", "dom", "dom.iterable"],
+    "noEmit": true
+  },
+  "include": ["js/**/*.js"]
+}

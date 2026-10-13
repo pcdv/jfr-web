@@ -112,6 +112,24 @@ public class ProfilerTest {
   }
 
   @Test
+  public void testWebInterface() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+
+    HttpResponse<String> index = get("");
+    Assert.assertEquals(200, index.statusCode());
+    Assert.assertTrue(index.body().contains("<script type=\"module\" src=\"js/main.js\">"));
+
+    // browsers refuse a module served with another type
+    for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
+                                      "components/endpoints", "components/flame"}) {
+      HttpResponse<String> js = get("js/" + module + ".js");
+      Assert.assertEquals(module, 200, js.statusCode());
+      Assert.assertEquals(module, "application/javascript", js.headers().firstValue("Content-Type").orElse(null));
+    }
+    Assert.assertEquals(200, get("css/style.css").statusCode());
+  }
+
+  @Test
   public void testOtherSitesCannotStartSessions() throws Exception {
     profiler = Profiler.builder().directory(dir).start();
     HttpResponse<String> r = http.send(request("api/sessions")

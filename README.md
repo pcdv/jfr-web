@@ -9,7 +9,36 @@ graph per route or per slow request.
 
 ## Status
 
-M1: offline analysis of a recording, from the command line. Nothing is embedded yet.
+M2: embedded, with manual sessions.
+
+```java
+Profiler.start();   // serves the interface on loopback, on a free port, and logs its URL
+```
+
+From the interface, start a session, use the application, stop the session: its report states
+how it was recorded, lists the endpoints by total time, and shows flame graphs by endpoint,
+thread and time interval. The `.jfr` file can be downloaded, e.g. for JDK Mission Control.
+
+A builder sets the rest: address, port, guard, directory of the recordings, JFR settings, or
+mounting on an existing flak server:
+
+```java
+Profiler.builder()
+        .mount(factory, "/profiler")     // one more app on the server of an AppFactory
+        .guard(loginCheck)               // a BeforeHook; by default, non-local clients are refused
+        .start();
+```
+
+jfr-web depends on flak's JDK backend, so that `Profiler.start()` works in any application. A flak
+application on Netty should then pick its backend explicitly: `Flak.getFactory()` takes the first
+one it finds on the classpath.
+
+To try it: `./gradlew demo -Pdemo.session=true` runs a small flak app with the profiler, records
+a first session, and prints the URLs.
+
+### Offline analysis
+
+A recording made outside jfr-web can be analyzed from the command line:
 
 ```sh
 ./gradlew run --args="report app.jfr"                    # how it was recorded, endpoints table

@@ -47,6 +47,20 @@ application {
   mainClass = 'jfrweb.cli.Main'
 }
 
+// a flak app to profile, and the profiler: see Demo. Ports and the
+// recording of a first session: -Pdemo.port=, -Pprofiler.port=, -Pdemo.session=true
+tasks.register('demo', JavaExec) {
+  group = 'application'
+  description = 'Runs a flak app with the profiler, to try the web interface.'
+  classpath = sourceSets.test.runtimeClasspath
+  mainClass = 'jfrweb.Demo'
+  ['demo.port', 'profiler.port', 'demo.session'].each { name ->
+    def value = providers.gradleProperty(name)
+    if (value.present)
+      systemProperty name, value.get()
+  }
+}
+
 test {
   // see AnalysisTest
   def keep = providers.systemProperty('jfrweb.keepRecording')

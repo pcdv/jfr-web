@@ -47,7 +47,7 @@ final class TextReport {
     out.println("JVM:            " + info.getJvmVersion());
     out.println("JVM arguments:  " + info.getJvmArguments());
     out.println("Java arguments: " + info.getJavaArguments());
-    out.println("OS:             " + os(info.getOs()));
+    out.println("OS:             " + info.getOs());
 
     SamplingSummary s = SamplingSummary.of(analysis);
 
@@ -136,12 +136,5 @@ final class TextReport {
     if (n < 1024 * 1024)
       return String.format(Locale.ROOT, "%.1f KiB", n / 1024.0);
     return String.format(Locale.ROOT, "%.1f MiB", n / (1024.0 * 1024));
-  }
-
-  /**
-   * The OS on one line, without the "OS:" that starts it on Windows.
-   */
-  private static String os(String s) {
-    return s == null ? null : s.trim().replaceFirst("^OS:\\s*", "").replaceAll("\\s*\\R\\s*", " ");
   }
 }

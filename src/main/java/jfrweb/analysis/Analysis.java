@@ -98,7 +98,7 @@ public final class Analysis {
             info.javaArguments = e.getString("javaArguments");
             break;
           case "jdk.OSInformation":
-            info.os = e.getString("osVersion");
+            info.os = oneLine(e.getString("osVersion"));
             break;
         }
       }
@@ -229,6 +229,13 @@ public final class Analysis {
    */
   public boolean isRequestRunning(Instant time) {
     return index.isAnyRunning(nanos(time));
+  }
+
+  /**
+   * The OS on one line, without the "OS:" that starts it on Windows.
+   */
+  private static String oneLine(String os) {
+    return os == null ? null : os.trim().replaceFirst("^OS:\\s*", "").replaceAll("\\s*\\R\\s*", " ");
   }
 
   static long nanos(Instant i) {

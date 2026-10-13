@@ -1,0 +1,101 @@
+// @ts-check
+/**
+ * The sessions: start one, stop the one recording, open a report.
+ */
+import * as api from '../api.js';
+import {h, replace, errorBox} from '../dom.js';
+import * as fmt from '../format.js';
+
+/** How often the list refreshes while a session records, in ms. */
+const POLL = 1000;
+
+/**
+ * @param {HTMLElement} root
+ * @returns {() => void}
+ */
+export function renderSessions(root) {
+  const content = h('div');
+  root.append(h('h1', null, 'Sessions'), content);
+
+  /** @type {number | undefined} */
+  let timer;
+  let stopped = false;
+
+  async function refresh() {
+    clearTimeout(timer);
+    try {
+      const sessions = await api.listSessions();
+      if (stopped)
+        return;
+      replace(content, toolbar(sessions, refresh), table(sessions, refresh));
+      if (sessions.some(s => s.state === 'RECORDING'))
+        timer = window.setTimeout(refresh, POLL);
+    }
+    catch (e) {
+      replace(content, errorBox(e));
+    }
+  }
+
+  refresh();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
+}
+
+/**
+ * @param {api.Session[]} sessions
+ * @param {() => void} refresh
+ */
+function toolbar(sessions, refresh) {
+  const recording = sessions.some(s => s.state === 'RECORDING');
+  return h('div', {class: 'toolbar'},
+    h('button', {
+      class: 'primary',
+      disabled: recording,
+      title: recording ? 'A session is already recording' : null,
+      onclick: () => act(() => api.startSession(), refresh),
+    }, 'Start a session'));
+}
+
+/**
+ * @param {api.Session[]} sessions
+ * @param {() => void} refresh
+ */
+function table(sessions, refresh) {
+  if (sessions.length === 0)
+    return h('p', {class: 'empty'}, 'No session yet. Start one, use the application, then stop it.');
+
+  return h('table', {class: 'grid'},
+    h('thead', null, h('tr', null,
+      h('th', {class: 'num'}, '#'), h('th', null, 'State'), h('th', null, 'Started'),
+      h('th', {class: 'num'}, 'Duration'), h('th', {class: 'num'}, 'Size'),
+      h('th', null, 'Trigger'), h('th', null, ''))),
+    h('tbody', null, sessions.map(s => h('tr', null,
+      h('td', {class: 'num'}, s.id),
+      h('td', null, h('span', {class: `state ${s.state.toLowerCase()}`}, s.state.toLowerCase())),
+      h('td', null, fmt.time(s.start)),
+      h('td', {class: 'num'}, fmt.duration(s.duration)),
+      h('td', {class: 'num'}, s.state === 'STOPPED' ? fmt.bytes(s.size) : ''),
+      h('td', null, s.trigger),
+      h('td', {class: 'actions'}, s.state === 'RECORDING'
+        ? h('button', {onclick: () => act(() => api.stopSession(s.id), refresh)}, 'Stop')
+        : [h('a', {href: `#/sessions/${s.id}`}, 'Report'), ' ',
+           h('a', {href: api.downloadUrl(s.id), download: true}, 'Download .jfr')])))));
+}
+
+/**
+ * Runs an action, then refreshes, or reports the failure.
+ *
+ * @param {() => Promise<unknown>} action
+ * @param {() => void} refresh
+ */
+async function act(action, refresh) {
+  try {
+    await action();
+  }
+  catch (e) {
+    alert(e instanceof Error ? e.message : String(e));
+  }
+  refresh();
+}

@@ -1,0 +1,40 @@
+// @ts-check
+/**
+ * Formatting of durations, sizes and times.
+ */
+
+/**
+ * @param {number} ms
+ * @returns {string} e.g. "0.4 ms", "350 ms", "12.3 s"
+ */
+export function duration(ms) {
+  if (ms >= 10_000) return `${(ms / 1000).toFixed(1)} s`;
+  if (ms >= 100) return `${Math.round(ms)} ms`;
+  return `${ms.toFixed(1)} ms`;
+}
+
+/**
+ * @param {number} n
+ * @returns {string} e.g. "512 B", "1.5 KiB"
+ */
+export function bytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+/**
+ * @param {string} iso
+ * @returns {string} in the local time of the browser
+ */
+export function time(iso) {
+  return new Date(iso).toLocaleString();
+}
+
+/**
+ * @param {number} ratio between 0 and 1
+ * @returns {string}
+ */
+export function percent(ratio) {
+  return `${Math.round(ratio * 100)}%`;
+}

@@ -172,11 +172,12 @@ flak app, also its request count and, in auto mode, its trigger.
 - JFR drops a sample whose stack it fails to walk: tight loops and intrinsics (e.g. hashing)
   get few samples, or none.
 
-## Open questions
+## Decisions
 
-- **JSON: flak-jackson or hand-written?** flak has no JSON support outside flak-jackson.
-  - flak-jackson: no code to write, but host applications get a Jackson version imposed (some
-    apps already ship their own Jackson).
-  - Hand-written: no dependency. The profiler only produces JSON (its inputs are query
-    parameters), in a few fixed shapes (sessions, endpoint rows, timeline buckets), so a small
-    writer with string escaping is enough. It is a hassle only if the shapes multiply.
+- **JSON is written by hand**, with no dependency: flak-jackson would impose a Jackson version
+  on host applications (some already ship their own). The profiler only produces JSON (its
+  inputs are query parameters), in a few fixed shapes, so a small writer with string escaping
+  is enough. To revisit only if the shapes multiply.
+- **The web interface is plain JavaScript, with no build step**: ES modules served from the
+  jar, one per view or component rather than one big page, type-checked from their JSDoc
+  annotations (`jsconfig.json`, `// @ts-check`). Moving to TypeScript stays a mechanical step.
