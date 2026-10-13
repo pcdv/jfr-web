@@ -76,6 +76,10 @@ export function flamePanel(report) {
       request = undefined;
       endpoint.value = e;
       update();
+      // asked for: shown even if its section was folded
+      const folded = frame.closest('details');
+      if (folded)
+        folded.open = true;
       frame.scrollIntoView({behavior: 'smooth'});
     },
     showInterval(f, t) {

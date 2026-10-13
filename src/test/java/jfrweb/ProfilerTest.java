@@ -160,7 +160,8 @@ public class ProfilerTest {
     // browsers refuse a module served with another type
     for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
                                       "views/live", "components/endpoints", "components/flame",
-                                      "components/timeline", "components/requests", "components/auto"}) {
+                                      "components/timeline", "components/requests", "components/auto",
+                                      "components/section"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assert.assertEquals(module, 200, js.statusCode());
       Assert.assertEquals(module, "application/javascript", js.headers().firstValue("Content-Type").orElse(null));

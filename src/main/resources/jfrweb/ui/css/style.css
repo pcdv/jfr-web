@@ -278,6 +278,21 @@ table.grid {
   overflow-wrap: anywhere;
 }
 
+details.section > summary {
+  cursor: pointer;
+  list-style-position: outside;
+  margin-left: 16px;
+}
+
+details.section > summary h2 {
+  display: inline-block;
+  margin: 24px 0 8px;
+}
+
+details.section > summary::marker {
+  color: var(--muted);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);

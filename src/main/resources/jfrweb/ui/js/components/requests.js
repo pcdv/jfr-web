@@ -7,6 +7,7 @@
 import * as api from '../api.js';
 import {h, replace, errorBox} from '../dom.js';
 import * as fmt from '../format.js';
+import {section} from './section.js';
 
 const LIMIT = 20;
 
@@ -26,7 +27,7 @@ const FEW_SAMPLES = 10;
  * @returns {RequestsPanel}
  */
 export function requestsPanel(sessionId, onPick) {
-  const title = h('h2');
+  const title = h('span');
   const list = h('div');
   const detail = h('div');
 
@@ -59,7 +60,7 @@ export function requestsPanel(sessionId, onPick) {
   }
 
   showEndpoint(undefined);
-  return {element: h('div', null, title, list, detail), showEndpoint};
+  return {element: section('requests', title, list, detail), showEndpoint};
 }
 
 /**

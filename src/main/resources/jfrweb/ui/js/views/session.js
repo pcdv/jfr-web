@@ -10,6 +10,7 @@ import {endpointsTable} from '../components/endpoints.js';
 import {flamePanel} from '../components/flame.js';
 import {timelineChart} from '../components/timeline.js';
 import {requestsPanel} from '../components/requests.js';
+import {section} from '../components/section.js';
 
 /**
  * @param {HTMLElement} root
@@ -29,16 +30,13 @@ export function renderSession(root, params) {
       replace(content,
         summary(report),
         recording(report),
-        h('h2', null, 'Timeline'),
-        timelineChart(timeline, flame.showInterval),
-        h('h2', null, 'Endpoints'),
-        endpointsTable(report.endpoints, e => {
+        section('timeline', 'Timeline', timelineChart(timeline, flame.showInterval)),
+        section('endpoints', 'Endpoints', endpointsTable(report.endpoints, e => {
           requests.showEndpoint(e);
           flame.showEndpoint(e);
-        }),
+        })),
         requests.element,
-        h('h2', null, 'Flame graph'),
-        flame.element);
+        section('flame', 'Flame graph', flame.element));
     },
     e => replace(content, errorBox(e)));
 }
