@@ -10,6 +10,12 @@ a few lines (see [Any application](#any-application-operations)). It then shows 
 expensive operations, a timeline of those in flight, and flame graphs per operation or per
 slow one.
 
+**[Demo](https://pcdv.github.io/jfr-web/)**: a static export of the TCP demo below, rebuilt on each
+push. It is limited compared to a live run: one recorded session and a few minutes of history,
+no interval to select or zoom in on, one flame graph filter at a time, and no live statistics,
+auto mode or snapshots. Run `./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true` for all of
+it.
+
 ## Getting it
 
 Java 17 or later. Released on [JitPack](https://jitpack.io/#pcdv/jfr-web), with flak:

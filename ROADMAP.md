@@ -147,7 +147,7 @@ already wired must follow.
 - [x] `jfr-web export`: the interface and recordings as a static site, the responses computed
   beforehand for what can be reached by clicking
 - [x] The TCP demo exports itself (`-Pdemo.export=dir`), without the environment of the JVM
-- [ ] Published on GitHub Pages, rebuilt by a workflow
+- [x] Published on GitHub Pages, rebuilt by a workflow
 
 ## Later
 

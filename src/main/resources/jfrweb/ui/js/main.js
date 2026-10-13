@@ -60,8 +60,9 @@ function staticMode() {
   }
   const note = document.createElement('p');
   note.className = 'static-note';
-  note.textContent = 'Static export of recordings: what takes a free input (an interval, combined filters) ' +
-                     'is not available. Run jfr-web on the recordings for everything.';
+  note.textContent = 'Static export, limited compared to a live run: no interval to select or zoom in on, ' +
+                     'one flame graph filter at a time, no live statistics, auto mode or snapshots. ' +
+                     'Run jfr-web on the recordings for everything.';
   document.querySelector('header')?.after(note);
 }
 
