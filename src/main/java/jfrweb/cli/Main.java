@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
 
 import jfrweb.analysis.Analysis;
 import jfrweb.analysis.FlameGraphs;
+import jfrweb.export.StaticExport;
 
 /**
  * Analyzes a recording offline.
@@ -35,7 +36,12 @@ public final class Main {
     "  jfr-web history <dir> [--from <time>] [--to <time>] [--operation <name>]",
     "      the operations and slowest operations of a period of an operation history,",
     "      the last hour by default; times like 2026-10-13T10:00 (local time) or",
-    "      2026-10-13T08:00:00Z");
+    "      2026-10-13T08:00:00Z",
+    "  jfr-web export <file.jfr>... -o <dir> [--history <dir>] [--no-recordings]",
+    "      the web interface and the recordings as a static site, with the responses",
+    "      computed beforehand: served by any web server, with no Java behind it.",
+    "      A recording holds the environment variables and system properties of the",
+    "      JVM unless turned off: --no-recordings leaves the .jfr files out");
 
   private Main() {}
 
@@ -76,10 +82,43 @@ public final class Main {
       case "history":
         return history(file, options, stdout);
 
+      case "export":
+        return export(file, options);
+
       default:
         System.err.println("Unknown command: " + command + "\n" + USAGE);
         return 2;
     }
+  }
+
+  private static int export(Path first, List<String> options) throws IOException {
+    Path out;
+    Path history;
+    try {
+      String v = takeValue(options, "-o");
+      if (v == null)
+        throw new IllegalArgumentException("Missing -o <dir>");
+      out = Path.of(v);
+      v = takeValue(options, "--history");
+      history = v == null ? null : Path.of(v);
+    }
+    catch (IllegalArgumentException e) {
+      System.err.println(e.getMessage());
+      return 2;
+    }
+    boolean withRecordings = !options.remove("--no-recordings");
+    List<Path> recordings = new ArrayList<>();
+    recordings.add(first);
+    for (String o : List.copyOf(options))
+      if (!o.startsWith("-")) {
+        recordings.add(Path.of(o));
+        options.remove(o);
+      }
+    if (!checkNoneLeft(options))
+      return 2;
+    StaticExport.export(recordings, history, out, withRecordings);
+    System.err.println("Wrote " + out + ": serve it with any web server");
+    return 0;
   }
 
   private static int history(Path dir, List<String> options, PrintStream stdout) throws IOException {

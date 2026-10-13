@@ -55,9 +55,32 @@ export function flamePanel(report) {
     });
   }
 
-  /** Back to the filters, as soon as one of them changes. */
-  function onFilterChange() {
+  /**
+   * A static export has the flame graphs of one filter at a time: the others
+   * are cleared.
+   *
+   * @param {EventTarget | null} keep the filter just changed
+   */
+  function onlyFilter(keep) {
+    if (!api.isStatic())
+      return;
+    if (keep !== name)
+      name.value = '';
+    if (keep !== thread)
+      thread.value = '';
+    if (keep !== all)
+      all.checked = false;
+  }
+
+  /**
+   * Back to the filters, as soon as one of them changes.
+   *
+   * @param {Event} [e]
+   */
+  function onFilterChange(e) {
     instance = undefined;
+    if (e)
+      onlyFilter(e.target);
     update();
   }
 
@@ -65,8 +88,8 @@ export function flamePanel(report) {
     instanceChip,
     h('label', null, 'Operation ', name),
     h('label', null, 'Thread ', thread),
-    h('label', null, 'From ', from, ' s'),
-    h('label', null, 'to ', to, ' s'),
+    api.isStatic() ? null : h('label', null, 'From ', from, ' s'),
+    api.isStatic() ? null : h('label', null, 'to ', to, ' s'),
     h('label', {title: 'Mostly idle threads blocked in native code: selectors, acceptors'},
       all, ' samples outside operations'));
 
@@ -76,6 +99,7 @@ export function flamePanel(report) {
     showName(n) {
       instance = undefined;
       name.value = n;
+      onlyFilter(name);
       update();
       // asked for: shown even if its section was folded
       const folded = frame.closest('details');
@@ -93,7 +117,7 @@ export function flamePanel(report) {
       instance = r.id;
       replace(instanceChip,
         `${label(r)} at ${r.start.toFixed(3)} s `,
-        h('button', {type: 'button', title: 'Back to the filters', onclick: onFilterChange}, '×'));
+        h('button', {type: 'button', title: 'Back to the filters', onclick: () => onFilterChange()}, '×'));
       update();
     },
   };

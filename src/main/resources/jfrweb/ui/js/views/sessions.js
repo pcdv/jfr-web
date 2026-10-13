@@ -32,11 +32,12 @@ export function renderSessions(root) {
       if (stopped)
         return;
       const autoJson = JSON.stringify(autoState);
-      if (autoJson !== autoShown) {
+      // a static export only shows what was recorded
+      if (autoJson !== autoShown && !api.isStatic()) {
         autoShown = autoJson;
         replace(auto, autoPanel(autoState, refresh));
       }
-      replace(content, toolbar(sessions, snapshots, refresh), table(sessions, refresh));
+      replace(content, api.isStatic() ? null : toolbar(sessions, snapshots, refresh), table(sessions, refresh));
       // snapshots may be taken by themselves at any time
       if (autoState.armed || snapshots.available || sessions.some(s => s.state === 'RECORDING'))
         timer = window.setTimeout(refresh, autoState.armed || !snapshots.available ? POLL : 5 * POLL);

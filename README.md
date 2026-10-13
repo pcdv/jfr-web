@@ -182,6 +182,25 @@ jcmd <pid> JFR.dump name=jfrweb filename=workload.jfr
 jcmd <pid> JFR.stop name=jfrweb
 ```
 
+### Static export
+
+The interface and some recordings can be written as a static site, which any web server serves
+with no Java behind it, e.g. to share a report or publish a demo:
+
+```sh
+./gradlew run --args="export app.jfr other.jfr -o site/ --history logs/operations"
+./gradlew tcpDemo -Pdemo.export=site/       # the TCP demo: a session, 3 minutes of history
+```
+
+The responses of the REST API are computed beforehand, for everything that can be reached by
+clicking. What takes a free input is left out: an interval selected on a timeline, the From and
+To of a flame graph, filters combined.
+
+Before publishing one, mind what a recording holds: the environment variables and system
+properties of the JVM, unless its settings turned them off (`jdk.InitialEnvironmentVariable`,
+`jdk.InitialSystemProperty`), and its command line. Recordings running at the same time share
+their events. `--no-recordings` leaves the `.jfr` files out of the site.
+
 - [docs/requirements.md](docs/requirements.md): what the project must do
 - [ROADMAP.md](ROADMAP.md): milestones, what is done and what comes next
 

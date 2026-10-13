@@ -142,6 +142,13 @@ Renamed while no one used it: `EndpointHistory` is `OperationHistory`, and the R
 history files and the command line changed their keys (files written before still read). Applications
 already wired must follow.
 
+## M8: static export
+
+- [x] `jfr-web export`: the interface and recordings as a static site, the responses computed
+  beforehand for what can be reached by clicking
+- [x] The TCP demo exports itself (`-Pdemo.export=dir`), without the environment of the JVM
+- [ ] Published on GitHub Pages, rebuilt by a workflow
+
 ## Later
 
 - [ ] async-profiler as an additional source on Linux and macOS

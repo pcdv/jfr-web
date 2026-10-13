@@ -12,15 +12,21 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 
+import jfrweb.export.StaticExport;
 import jfrweb.history.OperationHistory;
 import jfrweb.ops.Operation;
 import jfrweb.ops.Operations;
 import jfrweb.ops.Segment;
+import jfrweb.session.Session;
+import jfrweb.session.Sessions;
 import jfrweb.snapshot.Snapshots;
 
 /**
@@ -38,7 +44,10 @@ import jfrweb.snapshot.Snapshots;
  * that work for it, in segments.
  * <p>
  * Run with ./gradlew tcpDemo: clients of its own send orders and quotes;
- * {@code telnet localhost 9090} to send some by hand.
+ * {@code telnet localhost 9090} to send some by hand. With
+ * {@code -Pdemo.export=<dir>}, it records a session, runs 3 minutes more for
+ * the history ({@code -Pdemo.export.seconds=}), writes both as a static site,
+ * and ends.
  */
 public class TcpDemo {
 
@@ -111,7 +120,10 @@ public class TcpDemo {
   private void report(PrintWriter out) {
     try (Operation op = Operations.begin("report")) {
       try {
-        Path f = Files.createTempFile("report", ".csv");
+        // a relative directory: the path of the file shows among its slow
+        // accesses, and an export must not tell where the user's files are
+        Path dir = Files.createDirectories(Path.of("build", "tcp-demo-reports"));
+        Path f = Files.createTempFile(dir, "report", ".csv");
         try {
           Files.write(f, new byte[8 << 20]);
           op.bytesOut(reply(out, "OK report of " + Files.readAllBytes(f).length + " bytes"));
@@ -209,16 +221,31 @@ public class TcpDemo {
 
     // no app to observe: the history, the snapshots and the profiler hear of
     // the operations of the API by themselves
-    Path historyDir = Path.of(System.getProperty("demo.history", "build/tcp-demo-history"));
+    // an export starts its history afresh
+    String export = System.getProperty("demo.export");
+    Path historyDir = export != null
+      ? Files.createTempDirectory("tcp-demo").resolve("history")
+      : Path.of(System.getProperty("demo.history", "build/tcp-demo-history"));
     OperationHistory history = OperationHistory.builder()
                                                .directory(historyDir)
                                                .interval(Duration.ofSeconds(10))
                                                .start();
-    Snapshots snapshots = Snapshots.builder()
-                                   .directory(Path.of(System.getProperty("demo.snapshots", "build/tcp-demo-snapshots")))
-                                   .start();
+    // not for an export: recordings running together share their events, and
+    // the JDK's settings of the rolling recording record the environment
+    Snapshots snapshots = export != null ? null
+      : Snapshots.builder()
+                 .directory(Path.of(System.getProperty("demo.snapshots", "build/tcp-demo-snapshots")))
+                 .start();
+    // a static site is published: its recording leaves out the environment
+    // variables and system properties of the JVM
+    Map<String, String> settings = new HashMap<>(Sessions.defaultSettings());
+    if (export != null) {
+      settings.put("jdk.InitialEnvironmentVariable#enabled", "false");
+      settings.put("jdk.InitialSystemProperty#enabled", "false");
+    }
     Profiler profiler = Profiler.builder()
                                 .port(Integer.getInteger("profiler.port", 0))
+                                .settings(settings)
                                 .history(history.getDirectory())
                                 .snapshots(snapshots)
                                 .start();
@@ -227,13 +254,25 @@ public class TcpDemo {
     System.out.println("Server:   telnet localhost " + port + ", then e.g. QUOTE ACME, ORDER ACME 100, REPORT");
     System.out.println("History:  " + historyDir.toAbsolutePath());
 
-    if (Boolean.getBoolean("demo.session")) {
+    Session recorded = null;
+    if (Boolean.getBoolean("demo.session") || export != null) {
       // a short session recorded by itself, e.g. to look at the interface
       // its own id: the snapshots of earlier runs are listed first
       int session = profiler.getSessions().start("demo").getId();
       clients(port, 4, System.currentTimeMillis() + 10_000).join();
-      profiler.getSessions().stop(session);
+      recorded = profiler.getSessions().stop(session);
       System.out.println("Recorded session " + session);
+    }
+    if (export != null) {
+      // a static site of the session and of a history of a minute or so, e.g.
+      // to publish a demo
+      int seconds = Integer.getInteger("demo.export.seconds", 180);
+      clients(port, 3, System.currentTimeMillis() + seconds * 1000L).join();
+      // writes the interval in progress
+      history.close();
+      StaticExport.export(List.of(recorded.getFile()), historyDir, Path.of(export), true);
+      System.out.println("Exported to " + Path.of(export).toAbsolutePath());
+      System.exit(0);
     }
     if (Boolean.getBoolean("demo.load"))
       clients(port, 3, Long.MAX_VALUE);

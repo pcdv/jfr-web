@@ -38,8 +38,9 @@ const PLOT_H = H - TOP - BOTTOM;
 
 /**
  * @param {import('../api.js').TimelineData} data
- * @param {(from: number | undefined, to: number | undefined) => void} onSelect called with
- *        the interval dragged, in seconds since the start, or undefined when cleared
+ * @param {((from: number | undefined, to: number | undefined) => void) | null} onSelect called
+ *        with the interval dragged, in seconds since the start, or undefined when cleared; null
+ *        when nothing can be selected
  * @param {TimelineOptions} [options]
  */
 export function timelineChart(data, onSelect, options = {}) {
@@ -125,11 +126,13 @@ export function timelineChart(data, onSelect, options = {}) {
     tooltip.hidden = true;
   });
   capture.addEventListener('pointerdown', e => {
+    if (!onSelect)
+      return;
     dragFrom = bucketAt(e);
     capture.setPointerCapture(e.pointerId);
   });
   capture.addEventListener('pointerup', e => {
-    if (dragFrom === null)
+    if (dragFrom === null || !onSelect)
       return;
     const to = bucketAt(e);
     const [a, b] = [Math.min(dragFrom, to), Math.max(dragFrom, to)];
@@ -182,10 +185,11 @@ export function timelineChart(data, onSelect, options = {}) {
     tooltip.style.right = left < r.width / 2 ? '' : `${r.width - left + 16}px`;
   }
 
+  const drag = onSelect ? ' Drag to select an interval: the sections below show only it; click to clear it.' : '';
   return h('div', null,
     h('p', {class: 'hint'}, options.hint ? options.hint : operations
-      ? `Operations in flight, on average per ${fmt.duration(data.bucket)}, by name. Drag to select an interval: the sections below show only it; click to clear it.`
-      : `No operation recorded: samples of Java code per ${fmt.duration(data.bucket)}. Drag to select an interval: the sections below show only it; click to clear it.`),
+      ? `Operations in flight, on average per ${fmt.duration(data.bucket)}, by name.${drag}`
+      : `No operation recorded: samples of Java code per ${fmt.duration(data.bucket)}.${drag}`),
     legend(series),
     wrapper);
 }

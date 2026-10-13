@@ -148,6 +148,14 @@ export function getInstance(id, instance) {
  * @returns {Promise<any>}
  */
 async function call(path, init) {
+  if (staticFiles) {
+    if (init && init.method && init.method !== 'GET')
+      throw new Error('Not available in a static export');
+    const file = staticFiles[staticKey(path)];
+    if (!file)
+      throw new Error(`Not in this static export: ${staticKey(path)}`);
+    path = file;
+  }
   const resp = await fetch(path, init);
   if (!resp.ok)
     throw new Error(`${resp.status} ${(await resp.text()) || resp.statusText}`);
@@ -323,7 +331,7 @@ export function getTimeline(id, range = {}) {
  * @returns {string} where the .jfr file is downloaded from
  */
 export function downloadUrl(id) {
-  return `api/sessions/${id}/recording.jfr`;
+  return staticUrl(`api/sessions/${id}/recording.jfr`);
 }
 
 /**
@@ -340,5 +348,67 @@ export function flameUrl(id, filter) {
   if (filter.to !== undefined) q.set('to', String(filter.to));
   if (filter.all) q.set('all', 'true');
   const qs = q.toString();
-  return `api/sessions/${id}/flame${qs ? '?' + qs : ''}`;
+  return staticUrl(`api/sessions/${id}/flame${qs ? '?' + qs : ''}`);
+}
+
+/**
+ * The files of a static export, by request, null when a profiler answers:
+ * see jfrweb.export.StaticExport.
+ *
+ * @type {Record<string, string> | null}
+ */
+let staticFiles = null;
+
+/** @type {{from: string, to: string} | null} the period of the history exported */
+let staticHistory = null;
+
+/**
+ * Resolves once it is known whether the page is a static export, which a
+ * static.json next to it tells. Views wait for it.
+ */
+export const ready = fetch('static.json')
+  .then(r => r.ok ? r.json() : null)
+  .then(m => {
+    if (m) {
+      staticFiles = m.files;
+      staticHistory = m.history;
+    }
+  })
+  .catch(() => undefined);
+
+/**
+ * Whether the page is a static export: only what can be reached by clicking
+ * was computed, not what takes a free input (intervals, combined filters).
+ */
+export function isStatic() {
+  return staticFiles !== null;
+}
+
+/** @returns {{from: string, to: string} | null} the period of the history exported, if any */
+export function getStaticHistory() {
+  return staticHistory;
+}
+
+/**
+ * What a static export looks a request up by: the path, then its parameters
+ * sorted by name, not encoded.
+ *
+ * @param {string} path
+ */
+function staticKey(path) {
+  const [p, q] = path.split('?');
+  const params = [...new URLSearchParams(q ?? '')].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  return params.length ? `${p}?${params.map(([k, v]) => `${k}=${v}`).join('&')}` : p;
+}
+
+/**
+ * A URL the browser loads by itself (a flame graph, a download), mapped to
+ * its file in a static export, or to a page telling it is not there.
+ *
+ * @param {string} path
+ */
+function staticUrl(path) {
+  if (!staticFiles)
+    return path;
+  return staticFiles[staticKey(path)] ?? 'missing.html';
 }

@@ -64,6 +64,36 @@ public final class HistoryReader {
   }
 
   /**
+   * The period a history covers: from the start of its first interval to the
+   * end of its last one.
+   */
+  public record Span(Instant from, Instant to) {}
+
+  /**
+   * @return the period of the history, or null if it holds no interval
+   */
+  public static Span span(Path directory) throws IOException {
+    Instant first = null;
+    Instant last = null;
+    for (Path f : HistoryFiles.list(directory)) {
+      Instant hour = HistoryFiles.hourOf(f);
+      if (hour == null)
+        continue;
+      if (first == null || hour.isBefore(first))
+        first = hour;
+      if (last == null || hour.isAfter(last))
+        last = hour;
+    }
+    if (first == null)
+      return null;
+    HistoryReader r = read(directory, first, last.plus(Duration.ofHours(1)));
+    if (r.intervals.isEmpty())
+      return null;
+    Instant end = r.intervals.stream().map(Interval::end).max(Comparator.naturalOrder()).orElseThrow();
+    return new Span(r.intervals.get(0).start(), end);
+  }
+
+  /**
    * Reads the intervals of a history that overlap a period.
    */
   public static HistoryReader read(Path directory, Instant from, Instant to) throws IOException {

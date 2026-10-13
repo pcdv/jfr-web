@@ -7,6 +7,7 @@
  *   #/live          the operations of the application, live
  *   #/history       the operation history written to disk
  */
+import * as api from './api.js';
 import {renderSessions} from './views/sessions.js';
 import {renderSession} from './views/session.js';
 import {renderLive} from './views/live.js';
@@ -46,5 +47,26 @@ function route() {
   location.hash = '#/';
 }
 
-window.addEventListener('hashchange', route);
-route();
+/**
+ * A static export says so, and leaves out the pages it has nothing for.
+ */
+function staticMode() {
+  if (!api.isStatic())
+    return;
+  for (const a of document.querySelectorAll('header nav a')) {
+    const href = a.getAttribute('href');
+    if (href === '#/live' || (href === '#/history' && !api.getStaticHistory()))
+      a.remove();
+  }
+  const note = document.createElement('p');
+  note.className = 'static-note';
+  note.textContent = 'Static export of recordings: what takes a free input (an interval, combined filters) ' +
+                     'is not available. Run jfr-web on the recordings for everything.';
+  document.querySelector('header')?.after(note);
+}
+
+api.ready.then(() => {
+  staticMode();
+  window.addEventListener('hashchange', route);
+  route();
+});

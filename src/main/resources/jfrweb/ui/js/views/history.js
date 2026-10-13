@@ -31,8 +31,10 @@ export function renderHistory(root) {
   const content = h('div');
   root.append(h('h1', null, 'History'), toolbar, content);
 
+  // a static export has the period it was exported for, whole
+  const exported = api.getStaticHistory();
   /** @type {Period} */
-  let period = last(1);
+  let period = exported ? {from: new Date(exported.from), to: new Date(exported.to)} : last(1);
   /** @type {number | null} the preset shown, null for a period picked otherwise */
   let preset = 1;
   /** @type {Period[]} periods zoomed out of, the latest last */
@@ -41,7 +43,7 @@ export function renderHistory(root) {
   let name;
 
   async function load() {
-    replace(toolbar, periodPicker());
+    replace(toolbar, exported ? null : periodPicker());
     try {
       const history = await api.getHistory(period.from, period.to, name);
       replace(content, render(history));
@@ -120,10 +122,11 @@ export function renderHistory(root) {
         onclick: () => showMeasure(/** @type {Measure} */ (x)),
       }, x === 'count' ? 'Count' : 'Time')));
       const time = m === 'time';
-      replace(chart, timelineChart(time ? {...timeline, series: timeline.seriesSeconds, other: timeline.otherSeconds} : timeline, zoom, {
+      replace(chart, timelineChart(time ? {...timeline, series: timeline.seriesSeconds, other: timeline.otherSeconds} : timeline,
+                                   exported ? null : zoom, {
         hint: time
-          ? `Seconds spent in operations per ${fmt.duration(timeline.bucket)}, by name. Drag to zoom in.`
-          : `Operations per ${fmt.duration(timeline.bucket)}, by name. Drag to zoom in.`,
+          ? `Seconds spent in operations per ${fmt.duration(timeline.bucket)}, by name.${exported ? '' : ' Drag to zoom in.'}`
+          : `Operations per ${fmt.duration(timeline.bucket)}, by name.${exported ? '' : ' Drag to zoom in.'}`,
         unit: time ? ' s' : '',
         timeLabel: t => clock(new Date((start + t) * 1000), period.to.getTime() - period.from.getTime()),
         startEpoch: start,

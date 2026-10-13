@@ -29,6 +29,11 @@ export function sessionTimeline(sessionId, whole, onInterval) {
   /** @param {api.TimelineData} data */
   function draw(data) {
     const offset = range.from ?? 0;
+    // a static export has the timeline of the whole session only
+    if (api.isStatic()) {
+      replace(chart, timelineChart(data, null, {timeLabel: t => `${round(t)} s`}));
+      return;
+    }
     replace(chart, timelineChart(data, (from, to) => {
       selection = from === undefined || to === undefined
         ? null
@@ -75,7 +80,7 @@ export function sessionTimeline(sessionId, whole, onInterval) {
   }
 
   draw(whole);
-  return h('div', null, toolbar, chart);
+  return h('div', null, api.isStatic() ? null : toolbar, chart);
 }
 
 /** @param {number} v */
