@@ -278,6 +278,46 @@ table.grid {
   overflow-wrap: anywhere;
 }
 
+.form-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 16px;
+  align-items: baseline;
+  margin: 12px 0 4px;
+}
+
+.form-grid .label {
+  color: var(--muted);
+  text-align: right;
+}
+
+.form-grid .inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+}
+
+.form-grid input, .form-grid button {
+  font: inherit;
+}
+
+.form-grid input.wide {
+  width: 100%;
+  max-width: 40em;
+}
+
+.form-grid input.seconds {
+  width: 5em;
+}
+
+.form-grid .hint {
+  font-size: 12px;
+}
+
+.card.auto summary .state, .card.auto summary .hint {
+  font-weight: normal;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;
