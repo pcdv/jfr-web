@@ -18,10 +18,12 @@ Milestones in order. Each one is usable on its own. What the project must do is 
 Shipped in a flak release.
 
 - [x] Request hook and event contract specified (requirements, "Prerequisites in flak")
-- [ ] Hook around the whole request (begin after route matching / end after `finish()`)
-- [ ] `Request` exposes the matched route template
-- [ ] JFR event `flak.Request`, disabled by default
-- [ ] Bytes in / bytes out per request, in both backends
+- [x] Hook around the whole request (begin after route matching / end after `finish()`)
+- [x] `Request` exposes the matched route template
+- [x] JFR event `flak.Request`, disabled by default
+- [x] Bytes in / bytes out per request, in both backends
+- [ ] Released: on flak's branch `request-listener` for now, used here as 3.4.0-SNAPSHOT from
+  Maven Local
 
 M1 does not wait for the release: its tests can emit the event themselves, since only the
 contract matters.
@@ -30,10 +32,14 @@ contract matters.
 
 Validates the join between samples and requests before building any UI.
 
-- [ ] Command line on a `.jfr` file recorded with flak's request event
-- [ ] Endpoints table (count, total time, p50/p99/max, errors)
-- [ ] Flame graph per route: collapsed stacks rooted by route, rendered with `jfr-converter`
-- [ ] Report header: JDK version, JVM arguments, enabled events, sampling periods
+- [x] Command line on a `.jfr` file recorded with flak's request event
+- [x] Endpoints table (count, total time, p50/p99/max, errors)
+- [x] Flame graph per route: collapsed stacks rooted by route, rendered with `jfr-converter`
+- [x] Report header: JDK version, JVM arguments, enabled events, sampling periods
+
+Found on the way: on Windows (Zulu 17.0.14), JFR drops the samples whose stack it fails to
+walk. A tight loop got no sample at all over 1 s, sorting arrays about 60 of 100, SHA-256
+hashing 12. Reports state it among the known biases.
 
 ## M2: embedded, manual sessions
 

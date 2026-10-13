@@ -1,0 +1,7 @@
+// tells Gradle where a Java toolchain can be downloaded from when none of the
+// JDKs installed locally matches
+plugins {
+  id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'jfr-web'

@@ -167,6 +167,10 @@ flak app, also its request count and, in auto mode, its trigger.
 - JFR samples only a few threads per period, and idle threads blocked in native code (selectors,
   `accept`) take part of the native samples. Filtering by request hides them in the views but
   does not recover the lost samples.
+- Threads blocked on a lock, sleeping or parked are sampled by neither event: the wall-clock
+  view shows Java code and native calls, not waiting.
+- JFR drops a sample whose stack it fails to walk: tight loops and intrinsics (e.g. hashing)
+  get few samples, or none.
 
 ## Open questions
 

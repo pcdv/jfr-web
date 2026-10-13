@@ -1,0 +1,48 @@
+plugins {
+  id 'application'
+}
+
+group = 'com.github.pcdv'
+
+// 3.4.0 brings the request listener and the flak.Request JFR event. Until it
+// is released: publishToMavenLocal -Pversion=3.4.0-SNAPSHOT in flak
+def flakVersion = '3.4.0-SNAPSHOT'
+
+repositories {
+  mavenCentral()
+  mavenLocal {
+    content {
+      includeGroup 'com.github.pcdv.flak'
+    }
+  }
+}
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.encoding = 'UTF-8'
+}
+
+dependencies {
+  implementation 'tools.profiler:jfr-converter:4.0'
+
+  testImplementation "com.github.pcdv.flak:flak-api:$flakVersion"
+  testImplementation "com.github.pcdv.flak:flak-spi:$flakVersion"
+  testImplementation "com.github.pcdv.flak:flak-backend-jdk:$flakVersion"
+  testImplementation 'junit:junit:4.13.2'
+}
+
+application {
+  mainClass = 'jfrweb.cli.Main'
+}
+
+test {
+  // see AnalysisTest
+  def keep = providers.systemProperty('jfrweb.keepRecording')
+  if (keep.present)
+    systemProperty 'jfrweb.keepRecording', keep.get()
+}
