@@ -22,11 +22,7 @@ Shipped in a flak release.
 - [x] `Request` exposes the matched route template
 - [x] JFR event `flak.Request`, disabled by default
 - [x] Bytes in / bytes out per request, in both backends
-- [ ] Released: on flak's branch `request-listener` for now, used here as 3.4.0-SNAPSHOT from
-  Maven Local
-
-M1 does not wait for the release: its tests can emit the event themselves, since only the
-contract matters.
+- [x] Released: flak 3.4.0 (2026-10-13), from JitPack
 
 ## M1: offline analysis
 

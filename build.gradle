@@ -20,13 +20,13 @@ publishing {
   }
 }
 
-// 3.4.0 brings the request listener and the flak.Request JFR event. Until it
-// is released: publishToMavenLocal -Pversion=3.4.0-SNAPSHOT in flak
-def flakVersion = '3.4.0-SNAPSHOT'
+// 3.4.0 brings the request listener and the flak.Request JFR event
+def flakVersion = '3.4.0'
 
 repositories {
   mavenCentral()
-  mavenLocal {
+  maven {
+    url 'https://jitpack.io'
     content {
       includeGroup 'com.github.pcdv.flak'
     }
