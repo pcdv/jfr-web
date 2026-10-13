@@ -14,6 +14,7 @@ import flak.AppFactory;
 import flak.Flak;
 import flak.annotations.Route;
 import jfrweb.history.EndpointHistory;
+import jfrweb.snapshot.Snapshots;
 
 /**
  * A flak app with a few endpoints to profile, and the profiler: to try the
@@ -85,10 +86,17 @@ public class Demo {
                                              .observe(app)
                                              .start();
 
+    // what production would run too: the last minutes, saved when something goes wrong
+    Snapshots snapshots = Snapshots.builder()
+                                   .directory(Path.of(System.getProperty("demo.snapshots", "build/demo-snapshots")))
+                                   .observe(app)
+                                   .start();
+
     Profiler profiler = Profiler.builder()
                                 .port(Integer.getInteger("profiler.port", 0))
                                 .observe(app)
                                 .history(history.getDirectory())
+                                .snapshots(snapshots)
                                 .start();
 
     System.out.println("Profiler:  " + profiler.getUrl());

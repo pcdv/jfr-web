@@ -19,9 +19,11 @@ import flak.util.CrossOriginProtection;
 import jfrweb.auto.AutoMode;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Sessions;
+import jfrweb.snapshot.Snapshots;
 import jfrweb.json.Json;
 import jfrweb.web.HistoryRoutes;
 import jfrweb.web.LoopbackOnly;
+import jfrweb.web.SnapshotRoutes;
 import jfrweb.web.ProfilerRoutes;
 
 /**
@@ -110,6 +112,7 @@ public final class Profiler implements AutoCloseable {
     private Map<String, String> settings;
     private boolean highResolutionTimer = true;
     private Path history;
+    private Snapshots snapshots;
     private final List<App> observed = new ArrayList<>();
 
     private Builder() {}
@@ -200,6 +203,16 @@ public final class Profiler implements AutoCloseable {
       return this;
     }
 
+    /**
+     * The snapshots of a rolling recording of this JVM: listed with the
+     * sessions, those taken before a restart included, and taken by hand from
+     * the interface.
+     */
+    public Builder snapshots(Snapshots snapshots) {
+      this.snapshots = snapshots;
+      return this;
+    }
+
     public Profiler start() throws IOException {
       Sessions sessions = new Sessions(directory != null ? directory : Files.createTempDirectory("jfr-web"),
                                        settings != null ? settings : Sessions.defaultSettings(),
@@ -228,6 +241,12 @@ public final class Profiler implements AutoCloseable {
       }
       app.scan(new ProfilerRoutes(sessions, live, auto));
       app.scan(new HistoryRoutes(history));
+      if (snapshots != null) {
+        for (Snapshots.Snapshot s : snapshots.list())
+          register(sessions, s);
+        snapshots.addListener(s -> register(sessions, s));
+      }
+      app.scan(new SnapshotRoutes(snapshots, sessions));
       app.serveClasspath("/", "/jfrweb/ui",
                          new ResourceOptions().classLoader(Profiler.class.getClassLoader()));
       app.start();
@@ -236,6 +255,10 @@ public final class Profiler implements AutoCloseable {
       log.log(System.Logger.Level.INFO, "jfr-web profiler at " + p.getUrl() +
                                         ", recordings in " + sessions.getDirectory());
       return p;
+    }
+
+    private static void register(Sessions sessions, Snapshots.Snapshot s) {
+      sessions.register(s.start(), s.end(), "snapshot: " + s.reason(), s.file());
     }
 
     /**

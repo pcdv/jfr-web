@@ -113,6 +113,25 @@ period, and how they behaved. No profiling: the same counters, written to disk.
 - Read from the profiler's interface (a period, zoomable: endpoints, requests over time,
   slowest requests) or from the command line, e.g. on files copied off a server.
 
+## Snapshots (production)
+
+Something to investigate after a problem, with no need to have started a session beforehand,
+and nothing to configure, otherwise it would never be turned on.
+
+- A rolling recording keeps the last minutes (5 by default) on disk, with the JDK's `default`
+  settings (about 1%) plus flak's request event. A snapshot saves them as a `.jfr` file, with a
+  `.json` file telling why and when.
+- Taken by hand (e.g. right after a problem), or by themselves when:
+  - a request is much slower than usual for its endpoint: 4 times its p99 of the last hour, and
+    over 1 s; for an endpoint with too few requests to tell what is usual, over 10 s
+  - errors burst: at least 5 responses with a 5xx status in a minute, 10% of the requests of
+    that minute at least, and 4 times their usual share
+- Automatic snapshots wait 10 s to hold the aftermath, and are 15 minutes apart at least: an
+  incident gives one snapshot, not one per slow request.
+- A dedicated directory, kept across restarts (an incident is often followed by one), purged by
+  number of snapshots (20) and total size (1 GiB).
+- Listed with the sessions, with their reason; their report is that of a session.
+
 ## Profiling
 
 Collected with JFR. Wall-clock view by default: Java execution samples merged with native

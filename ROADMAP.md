@@ -110,10 +110,17 @@ arms the requests of an app on another one of the same host.
 At 1-minute intervals, a line takes about 2 KB with a few endpoints, most of it the slowest
 requests: about 3 MB a day before gzip.
 
-## M6: history of sessions
+## M6: snapshots, sessions kept
 
-- [ ] Continuous mode (rolling recording)
-- [ ] Retention by session count and disk size
+- [x] Rolling recording, saved by hand ("Save the last 5 minutes")
+- [x] Snapshots saved by themselves: request much slower than usual for its endpoint, burst of
+  errors; no threshold to configure
+- [x] Retention by snapshot count and disk size, kept across restarts
+- [ ] Measure the cost of the rolling recording and the size of a snapshot on a real application
+- [ ] Other triggers: saturation (requests in flight far above usual), JVM signals (long GC
+  pauses, CPU saturated) watched from the rolling recording itself
+- [ ] Snapshots marked on the History page's timeline
+- [ ] Manual and automatic sessions kept across restarts too
 - [ ] Diff of two flame graphs
 
 ## Later

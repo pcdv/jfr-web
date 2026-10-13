@@ -207,6 +207,23 @@ export function disarmAuto() {
   return call('api/auto', {method: 'DELETE'});
 }
 
+/**
+ * @typedef {object} SnapshotState
+ * @property {boolean} available whether a rolling recording runs, to take snapshots of
+ * @property {number} [window] what a snapshot holds: the last seconds
+ * @property {string} [directory]
+ */
+
+/** @returns {Promise<SnapshotState>} */
+export function getSnapshots() {
+  return call('api/snapshots');
+}
+
+/** @returns {Promise<Session>} the session listing the snapshot */
+export function saveSnapshot() {
+  return call('api/snapshots', {method: 'POST'});
+}
+
 /** @returns {Promise<Session[]>} the latest first */
 export function listSessions() {
   return call('api/sessions');

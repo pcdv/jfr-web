@@ -490,7 +490,7 @@ public class ProfilerRoutes {
     return s;
   }
 
-  private static Map<String, Object> session(Session s) {
+  static Map<String, Object> session(Session s) {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("id", s.getId());
     m.put("state", s.getState());

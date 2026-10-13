@@ -45,6 +45,19 @@ Profiler.builder().observe(app).history(Path.of("logs/endpoints")).start();   //
 ./gradlew run --args="history logs/endpoints --from 2026-10-13T10:00 --to 2026-10-13T11:00"
 ```
 
+- **Snapshots**, for production too: a rolling recording keeps the last 5 minutes, with the JDK's
+  light settings, and saves them when something goes wrong, with nothing to configure: a request
+  4 times slower than its endpoint's usual p99 (and over 1 s), or a burst of errors. Also saved by
+  hand, e.g. right after a problem. They are listed with the sessions, with why they were taken.
+
+```java
+Snapshots snapshots = Snapshots.builder()
+                               .directory(Path.of("logs/snapshots"))   // dedicated, kept across restarts
+                               .observe(app)
+                               .start();
+Profiler.builder().observe(app).snapshots(snapshots).start();          // to list and take them
+```
+
 A builder sets the rest: address, port, guard, directory of the recordings, JFR settings, or
 mounting on an existing flak server:
 

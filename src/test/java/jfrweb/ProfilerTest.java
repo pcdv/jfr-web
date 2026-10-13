@@ -23,6 +23,7 @@ import flak.Flak;
 import flak.HttpException;
 import flak.annotations.Route;
 import jfrweb.history.EndpointHistory;
+import jfrweb.snapshot.Snapshots;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -250,6 +251,31 @@ public class ProfilerTest {
     String text = out.toString(StandardCharsets.UTF_8);
     Assert.assertTrue(text, text.contains("GET /busy"));
     Assert.assertTrue(text, text.contains("Slowest requests:"));
+  }
+
+  @Test
+  public void testSnapshots() throws Exception {
+    try (Snapshots snapshots = Snapshots.builder().directory(dir.resolve("snapshots")).observe(app).start()) {
+      profiler = Profiler.builder().directory(dir).snapshots(snapshots).start();
+      Assert.assertTrue(get("api/snapshots").body().startsWith("{\"available\":true,\"window\":300.0,"));
+
+      busy(null);
+      HttpResponse<String> saved = post("api/snapshots");
+      Assert.assertTrue(saved.body(), saved.body().contains("\"state\":\"STOPPED\",\"trigger\":\"snapshot: saved by hand\""));
+      String id = saved.body().replaceAll("^\\{\"id\":(\\d+),.*", "$1");
+
+      String report = get("api/sessions/" + id + "/report").body();
+      Assert.assertTrue("the request made before the snapshot: " + report,
+                        report.contains("\"endpoint\":\"GET /busy\",\"count\":1"));
+      Assert.assertTrue(get("api/sessions").body().contains("snapshot: saved by hand"));
+    }
+  }
+
+  @Test
+  public void testNoSnapshots() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+    Assert.assertEquals("{\"available\":false}", get("api/snapshots").body());
+    Assert.assertEquals(409, post("api/snapshots").statusCode());
   }
 
   @Test

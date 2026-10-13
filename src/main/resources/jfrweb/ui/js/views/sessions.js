@@ -28,7 +28,7 @@ export function renderSessions(root) {
   async function refresh() {
     clearTimeout(timer);
     try {
-      const [sessions, autoState] = await Promise.all([api.listSessions(), api.getAuto()]);
+      const [sessions, autoState, snapshots] = await Promise.all([api.listSessions(), api.getAuto(), api.getSnapshots()]);
       if (stopped)
         return;
       const autoJson = JSON.stringify(autoState);
@@ -36,9 +36,10 @@ export function renderSessions(root) {
         autoShown = autoJson;
         replace(auto, autoPanel(autoState, refresh));
       }
-      replace(content, toolbar(sessions, refresh), table(sessions, refresh));
-      if (autoState.armed || sessions.some(s => s.state === 'RECORDING'))
-        timer = window.setTimeout(refresh, POLL);
+      replace(content, toolbar(sessions, snapshots, refresh), table(sessions, refresh));
+      // snapshots may be taken by themselves at any time
+      if (autoState.armed || snapshots.available || sessions.some(s => s.state === 'RECORDING'))
+        timer = window.setTimeout(refresh, autoState.armed || !snapshots.available ? POLL : 5 * POLL);
     }
     catch (e) {
       replace(content, errorBox(e));
@@ -54,17 +55,26 @@ export function renderSessions(root) {
 
 /**
  * @param {api.Session[]} sessions
+ * @param {api.SnapshotState} snapshots
  * @param {() => void} refresh
  */
-function toolbar(sessions, refresh) {
+function toolbar(sessions, snapshots, refresh) {
   const recording = sessions.some(s => s.state === 'RECORDING');
+  const minutes = snapshots.window ? Math.round(snapshots.window / 60) : 0;
   return h('div', {class: 'toolbar'},
     h('button', {
       class: 'primary',
       disabled: recording,
       title: recording ? 'A session is already recording' : null,
       onclick: () => act(() => api.startSession(), refresh),
-    }, 'Start a session'));
+    }, 'Start a session'),
+    snapshots.available
+      ? [' ', h('button', {
+          title: 'A rolling recording keeps the last minutes: save them, e.g. right after a problem. ' +
+                 'Snapshots are also saved by themselves when a request is much slower than usual, or errors burst.',
+          onclick: () => act(() => api.saveSnapshot(), refresh),
+        }, `Save the last ${minutes} minutes`)]
+      : null);
 }
 
 /**
