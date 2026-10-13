@@ -34,7 +34,7 @@ final class TextReport {
   void print(boolean allEvents) throws IOException {
     printHeader(allEvents);
     out.println();
-    printEndpoints();
+    printEndpoints(EndpointStats.of(analysis.getRequests()), out);
   }
 
   private void printHeader(boolean allEvents) throws IOException {
@@ -94,8 +94,10 @@ final class TextReport {
     return "every " + ms(p.toNanos()) + " asked, " + ms(observed.toNanos()) + " observed";
   }
 
-  private void printEndpoints() {
-    List<EndpointStats> stats = EndpointStats.of(analysis.getRequests());
+  /**
+   * The endpoints as a table, in the order given.
+   */
+  static void printEndpoints(List<EndpointStats> stats, PrintStream out) {
     if (stats.isEmpty()) {
       out.println("No requests.");
       return;

@@ -94,6 +94,25 @@ The contract any HTTP stack can emit to get route context. Fields beyond JFR's o
   by flak, not derived from a JFR recording.
 - Shown per time window, sorted by total time (count × duration).
 
+## Endpoint history (production)
+
+A mode that can stay on in production, to tell afterwards which endpoints were called during a
+period, and how they behaved. No profiling: the same counters, written to disk.
+
+- Low impact: counters updated as requests end, written once per interval (1 minute by default,
+  configurable).
+- An interval is one JSON line: per endpoint, count, total, p50/p99/max, 5xx, bytes, and the
+  histogram the percentiles come from, so that intervals add up; plus the slowest requests of
+  the interval (10 by default: time, path, status, duration, thread). An interval without
+  requests is written all the same: no line means the history was not running.
+- Hourly files in a dedicated directory, `<dir>/<yyyy-MM-dd>/<HH>.jsonl` in UTC, gzipped once
+  the hour is over. Purged by age (7 days by default) and total size (100 MiB by default),
+  both configurable.
+- Runs alone, without the web interface or JFR. The embedding application decides whether it
+  runs and how, from its own configuration.
+- Read from the profiler's interface (a period, zoomable: endpoints, requests over time,
+  slowest requests) or from the command line, e.g. on files copied off a server.
+
 ## Profiling
 
 Collected with JFR. Wall-clock view by default: Java execution samples merged with native

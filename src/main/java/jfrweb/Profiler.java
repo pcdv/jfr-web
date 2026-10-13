@@ -20,6 +20,7 @@ import jfrweb.auto.AutoMode;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Sessions;
 import jfrweb.json.Json;
+import jfrweb.web.HistoryRoutes;
 import jfrweb.web.LoopbackOnly;
 import jfrweb.web.ProfilerRoutes;
 
@@ -108,6 +109,7 @@ public final class Profiler implements AutoCloseable {
     private Path directory;
     private Map<String, String> settings;
     private boolean highResolutionTimer = true;
+    private Path history;
     private final List<App> observed = new ArrayList<>();
 
     private Builder() {}
@@ -188,6 +190,16 @@ public final class Profiler implements AutoCloseable {
       return this;
     }
 
+    /**
+     * The directory of an endpoint history, to browse it from the interface:
+     * that of an {@link jfrweb.history.EndpointHistory} writing it in this
+     * JVM, or one only read.
+     */
+    public Builder history(Path directory) {
+      this.history = directory;
+      return this;
+    }
+
     public Profiler start() throws IOException {
       Sessions sessions = new Sessions(directory != null ? directory : Files.createTempDirectory("jfr-web"),
                                        settings != null ? settings : Sessions.defaultSettings(),
@@ -215,6 +227,7 @@ public final class Profiler implements AutoCloseable {
         auto.observe(a);
       }
       app.scan(new ProfilerRoutes(sessions, live, auto));
+      app.scan(new HistoryRoutes(history));
       app.serveClasspath("/", "/jfrweb/ui",
                          new ResourceOptions().classLoader(Profiler.class.getClassLoader()));
       app.start();

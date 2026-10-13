@@ -215,6 +215,20 @@ public class EndpointHistoryTest {
   }
 
   @Test
+  public void testTimelineBucketsHoldWholeIntervals() throws Exception {
+    clock.now = Instant.parse("2026-10-13T10:00:00Z");
+    history = builder().interval(Duration.ofSeconds(10)).start();
+    for (int s = 10; s <= 120; s += 10)
+      history.flush(Instant.parse("2026-10-13T10:00:00Z").plusSeconds(s));
+
+    HistoryReader.CountTimeline t = HistoryReader.read(dir, Instant.parse("2026-10-13T10:00:00Z"),
+                                                       Instant.parse("2026-10-13T11:00:00Z")).getTimeline();
+    // an hour in at most 300 buckets: 12 s at least; 15 s would hold 1 or 2
+    // intervals of 10 s in turn
+    Assert.assertEquals(Duration.ofSeconds(30), t.bucket());
+  }
+
+  @Test
   public void testTimeline() throws Exception {
     history = builder().start();
     get("/item/a");

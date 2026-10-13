@@ -99,7 +99,18 @@ ones about 10 ms: arming warms JFR up. The idle time and the grace period are on
 cookie of an armed browser has `Path=/`, and cookies ignore ports: the profiler on its own port
 arms the requests of an app on another one of the same host.
 
-## M5: history
+## M5: endpoint history for production
+
+- [x] Endpoints written per interval to hourly files, no JFR: counts, durations with their
+  histogram, sizes, slowest requests
+- [x] Gzipped hours, purge by age and total size
+- [x] History page: a period, zoomable timeline of requests, endpoints, slowest requests
+- [x] Command line: `jfr-web history <dir> --from ... --to ...`
+
+At 1-minute intervals, a line takes about 2 KB with a few endpoints, most of it the slowest
+requests: about 3 MB a day before gzip.
+
+## M6: history of sessions
 
 - [ ] Continuous mode (rolling recording)
 - [ ] Retention by session count and disk size

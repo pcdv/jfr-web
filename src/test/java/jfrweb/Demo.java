@@ -5,6 +5,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -12,6 +13,7 @@ import flak.App;
 import flak.AppFactory;
 import flak.Flak;
 import flak.annotations.Route;
+import jfrweb.history.EndpointHistory;
 
 /**
  * A flak app with a few endpoints to profile, and the profiler: to try the
@@ -74,13 +76,43 @@ public class Demo {
     app.scan(new Handlers());
     app.start();
 
+    // what production would run: kept across runs of the demo, in intervals
+    // of 10 s to see something soon
+    Path historyDir = Path.of(System.getProperty("demo.history", "build/demo-history"));
+    EndpointHistory history = EndpointHistory.builder()
+                                             .directory(historyDir)
+                                             .interval(Duration.ofSeconds(10))
+                                             .observe(app)
+                                             .start();
+
     Profiler profiler = Profiler.builder()
                                 .port(Integer.getInteger("profiler.port", 0))
                                 .observe(app)
+                                .history(history.getDirectory())
                                 .start();
 
     System.out.println("Profiler:  " + profiler.getUrl());
     System.out.println("Endpoints: " + app.getRootUrl() + "/sort/500, /files, /hello, /load");
+    System.out.println("History:   " + historyDir.toAbsolutePath());
+
+    if (Boolean.getBoolean("demo.load")) {
+      // a client calling an endpoint every 300 ms or so, to fill the history
+      Thread load = new Thread(() -> {
+        String[] paths = {"/sort/1000", "/sort/100", "/files", "/hello", "/hello", "/hello", "/load"};
+        Random random = new Random();
+        while (true) {
+          try {
+            call(app.getRootUrl() + paths[random.nextInt(paths.length)]);
+            Thread.sleep(random.nextInt(600));
+          }
+          catch (Exception e) {
+            return;
+          }
+        }
+      }, "demo load");
+      load.setDaemon(true);
+      load.start();
+    }
     if (Boolean.getBoolean("demo.session")) {
       // records a short session by itself, e.g. to look at the interface
       profiler.getSessions().start("demo");

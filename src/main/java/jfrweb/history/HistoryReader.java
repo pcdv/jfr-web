@@ -197,9 +197,11 @@ public final class HistoryReader {
     long interval = Math.max(1, intervals.stream()
                                          .mapToLong(i -> Duration.between(i.start(), i.end()).getSeconds())
                                          .max().orElse(1));
+    // a whole number of intervals: otherwise buckets would hold one or two
+    // intervals in turn, a sawtooth that is not in the traffic
     long bucket = STEPS[STEPS.length - 1];
     for (long s : STEPS)
-      if (s >= interval && span <= s * MAX_BUCKETS) {
+      if (s >= interval && s % interval == 0 && span <= s * MAX_BUCKETS) {
         bucket = s;
         break;
       }

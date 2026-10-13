@@ -241,8 +241,42 @@ export function getReport(id) {
  * @property {{endpoint: string, values: number[]}[]} series requests in flight per bucket,
  *           on average, by endpoint, the most time first
  * @property {number[] | null} other the same for the other endpoints, null if none
- * @property {number[]} javaSamples samples of Java code per bucket
+ * @property {number[]} [javaSamples] samples of Java code per bucket, for a session
  */
+
+/**
+ * @typedef {object} HistorySlow
+ * @property {string} end ISO-8601, when it ended
+ * @property {string} endpoint
+ * @property {string} path
+ * @property {number} status
+ * @property {number} duration in ms
+ * @property {string} thread
+ */
+
+/**
+ * @typedef {object} History
+ * @property {boolean} available whether the profiler was given a history
+ * @property {string} [directory]
+ * @property {string} [from] ISO-8601
+ * @property {string} [to] ISO-8601
+ * @property {number} [intervals] written during the period: none means the history was not written then
+ * @property {EndpointRow[]} [endpoints] sorted by total time
+ * @property {HistorySlow[]} [slowest] the slowest first
+ * @property {TimelineData & {covered: boolean[]}} [timeline] requests per bucket, by endpoint
+ */
+
+/**
+ * @param {Date} from
+ * @param {Date} to
+ * @param {string} [endpoint] keeps the slowest requests of one
+ * @returns {Promise<History>}
+ */
+export function getHistory(from, to, endpoint) {
+  const q = new URLSearchParams({from: from.toISOString(), to: to.toISOString()});
+  if (endpoint) q.set('endpoint', endpoint);
+  return call(`api/history?${q}`);
+}
 
 /**
  * @param {number} id

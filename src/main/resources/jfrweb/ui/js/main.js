@@ -5,10 +5,12 @@
  *   #/              the sessions
  *   #/sessions/3    the report of session 3
  *   #/live          the endpoints of the apps observed, live
+ *   #/history       the endpoint history written to disk
  */
 import {renderSessions} from './views/sessions.js';
 import {renderSession} from './views/session.js';
 import {renderLive} from './views/live.js';
+import {renderHistory} from './views/history.js';
 
 /**
  * A view renders itself into the root, and may return a function that stops
@@ -21,6 +23,7 @@ import {renderLive} from './views/live.js';
 const routes = [
   [/^#\/sessions\/(\d+)$/, renderSession],
   [/^#\/live$/, renderLive],
+  [/^#\/history$/, renderHistory],
   [/^(#\/?)?$/, renderSessions],
 ];
 

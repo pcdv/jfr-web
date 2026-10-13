@@ -62,14 +62,16 @@ application {
   mainClass = 'jfrweb.cli.Main'
 }
 
-// a flak app to profile, and the profiler: see Demo. Ports and the
-// recording of a first session: -Pdemo.port=, -Pprofiler.port=, -Pdemo.session=true
+// a flak app to profile, and the profiler: see Demo. Ports, the recording of a
+// first session, background traffic, and the directory of the endpoint history
+// (build/demo-history by default): -Pdemo.port=, -Pprofiler.port=,
+// -Pdemo.session=true, -Pdemo.load=true, -Pdemo.history=
 tasks.register('demo', JavaExec) {
   group = 'application'
   description = 'Runs a flak app with the profiler, to try the web interface.'
   classpath = sourceSets.test.runtimeClasspath
   mainClass = 'jfrweb.Demo'
-  ['demo.port', 'profiler.port', 'demo.session'].each { name ->
+  ['demo.port', 'profiler.port', 'demo.session', 'demo.load', 'demo.history'].each { name ->
     def value = providers.gradleProperty(name)
     if (value.present)
       systemProperty name, value.get()

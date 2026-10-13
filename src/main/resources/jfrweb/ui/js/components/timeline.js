@@ -27,18 +27,30 @@ const PLOT_H = H - TOP - BOTTOM;
  */
 
 /**
+ * @typedef {object} TimelineOptions
+ * @property {string} [hint] what the chart shows, instead of the text for a session
+ * @property {(seconds: number) => string} [timeLabel] labels a time, in seconds since the
+ *           start: clock times rather than "12 s"
+ * @property {number} [startEpoch] the start in seconds since the epoch, so that ticks fall
+ *           on round clock times
+ */
+
+/**
  * @param {import('../api.js').TimelineData} data
  * @param {(from: number | undefined, to: number | undefined) => void} onSelect called with
  *        the interval dragged, in seconds since the start, or undefined when cleared
+ * @param {TimelineOptions} [options]
  */
-export function timelineChart(data, onSelect) {
+export function timelineChart(data, onSelect, options = {}) {
+  const label = options.timeLabel ?? (t => `${t} s`);
   /** @type {Series[]} */
   const series = data.series.map((s, i) => ({name: s.endpoint, values: s.values, color: `var(--series-${i + 1})`}));
   if (data.other)
     series.push({name: 'Other endpoints', values: data.other, color: 'var(--series-other)'});
   const requests = series.length > 0;
   if (!requests)
-    series.push({name: 'Samples of Java code', values: data.javaSamples, color: 'var(--series-1)'});
+    series.push({name: 'Samples of Java code', values: data.javaSamples ?? new Array(data.buckets).fill(0),
+                 color: 'var(--series-1)'});
 
   const bucketSec = data.bucket / 1000;
   const n = data.buckets;
@@ -57,8 +69,8 @@ export function timelineChart(data, onSelect) {
     svg.append(svgEl('line', {x1: LEFT, x2: W - RIGHT, y1: y(v), y2: y(v), class: 'grid-line'}));
     svg.append(svgText(LEFT - 6, y(v) + 4, formatCount(v), 'axis-label end'));
   }
-  for (const t of timeTicks(n * bucketSec))
-    svg.append(svgText(LEFT + t / bucketSec * bw, H - 6, `${t} s`, 'axis-label middle'));
+  for (const t of timeTicks(n * bucketSec, options.startEpoch ?? 0))
+    svg.append(svgText(LEFT + t / bucketSec * bw, H - 6, label(t), 'axis-label middle'));
 
   // stacked bars, with a surface gap between segments and between bars
   const gap = bw > 6 ? 2 : bw > 3 ? 1 : 0;
@@ -147,7 +159,9 @@ export function timelineChart(data, onSelect) {
   function showTooltip(e, i) {
     const rows = series.filter(s => s.values[i] > 0);
     replace(tooltip,
-      h('div', {class: 'tooltip-title'}, `${round(i * bucketSec)}–${round((i + 1) * bucketSec)} s`),
+      h('div', {class: 'tooltip-title'}, options.timeLabel
+        ? `${label(i * bucketSec)}–${label((i + 1) * bucketSec)}`
+        : `${round(i * bucketSec)}–${round((i + 1) * bucketSec)} s`),
       rows.length === 0
         ? h('div', {class: 'hint'}, requests ? 'No request in flight' : 'No sample')
         : rows.map(s => h('div', {class: 'tooltip-row'},
@@ -167,7 +181,7 @@ export function timelineChart(data, onSelect) {
   }
 
   return h('div', null,
-    h('p', {class: 'hint'}, requests
+    h('p', {class: 'hint'}, options.hint ? options.hint : requests
       ? `Requests in flight, on average per ${fmt.duration(data.bucket)}, by endpoint. Drag to select an interval: the sections below show only it; click to clear it.`
       : `No request recorded: samples of Java code per ${fmt.duration(data.bucket)}. Drag to select an interval: the sections below show only it; click to clear it.`),
     legend(series),
@@ -232,16 +246,30 @@ function niceCeiling(v) {
   return 10 * p;
 }
 
+/** Round steps between clock times, in seconds: 1 min, 5 min, 1 h... */
+const CLOCK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
+
 /**
- * Round times for the x axis, about 6 of them.
+ * Round times for the x axis, about 6 of them: since the start, or on round
+ * clock times when the start is given.
  *
  * @param {number} seconds the span
- * @returns {number[]}
+ * @param {number} startEpoch the start in seconds since the epoch, 0 if not on a clock
+ * @returns {number[]} in seconds since the start
  */
-function timeTicks(seconds) {
-  const step = niceCeiling(seconds / 6);
+function timeTicks(seconds, startEpoch) {
   const res = [];
-  for (let t = 0; t <= seconds + 1e-9; t += step)
+  if (!startEpoch) {
+    const step = niceCeiling(seconds / 6);
+    for (let t = 0; t <= seconds + 1e-9; t += step)
+      res.push(round(t));
+    return res;
+  }
+  const step = CLOCK_STEPS.find(s => s >= seconds / 6) ?? CLOCK_STEPS[CLOCK_STEPS.length - 1];
+  // in local time: an hour boundary where the browser is
+  const offset = new Date(startEpoch * 1000).getTimezoneOffset() * 60;
+  const first = Math.ceil((startEpoch - offset) / step) * step + offset - startEpoch;
+  for (let t = first; t <= seconds + 1e-9; t += step)
     res.push(round(t));
   return res;
 }

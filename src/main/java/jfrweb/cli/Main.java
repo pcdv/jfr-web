@@ -7,6 +7,11 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -26,7 +31,11 @@ public final class Main {
     "  jfr-web flame <file.jfr> [-o <file.html>] [--endpoint <regex>] [--thread <regex>]",
     "                           [--all] [--collapsed]",
     "      wall-clock flame graph of the samples taken in requests, rooted by",
-    "      endpoint (e.g. \"GET /api/user/:id\"); --all adds the other samples");
+    "      endpoint (e.g. \"GET /api/user/:id\"); --all adds the other samples",
+    "  jfr-web history <dir> [--from <time>] [--to <time>] [--endpoint <endpoint>]",
+    "      the endpoints and slowest requests of a period of an endpoint history,",
+    "      the last hour by default; times like 2026-10-13T10:00 (local time) or",
+    "      2026-10-13T08:00:00Z");
 
   private Main() {}
 
@@ -64,9 +73,50 @@ public final class Main {
       case "flame":
         return flame(file, options, stdout);
 
+      case "history":
+        return history(file, options, stdout);
+
       default:
         System.err.println("Unknown command: " + command + "\n" + USAGE);
         return 2;
+    }
+  }
+
+  private static int history(Path dir, List<String> options, PrintStream stdout) throws IOException {
+    Instant from;
+    Instant to;
+    String endpoint;
+    try {
+      String v = takeValue(options, "--to");
+      to = v == null ? Instant.now() : time(v);
+      v = takeValue(options, "--from");
+      from = v == null ? to.minus(Duration.ofHours(1)) : time(v);
+      endpoint = takeValue(options, "--endpoint");
+    }
+    catch (IllegalArgumentException e) {
+      System.err.println(e.getMessage());
+      return 2;
+    }
+    if (!checkNoneLeft(options))
+      return 2;
+    HistoryReport.print(dir, from, to, endpoint, stdout);
+    return 0;
+  }
+
+  /**
+   * An ISO-8601 instant, or a date and time in the local time zone.
+   */
+  private static Instant time(String s) {
+    try {
+      return Instant.parse(s);
+    }
+    catch (DateTimeParseException e) {
+      try {
+        return LocalDateTime.parse(s).atZone(ZoneId.systemDefault()).toInstant();
+      }
+      catch (DateTimeParseException e2) {
+        throw new IllegalArgumentException("Not a time: " + s + " (e.g. 2026-10-13T10:00 or 2026-10-13T08:00:00Z)");
+      }
     }
   }
 

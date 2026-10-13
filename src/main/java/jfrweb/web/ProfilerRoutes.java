@@ -502,7 +502,7 @@ public class ProfilerRoutes {
     return m;
   }
 
-  private static Map<String, Object> endpointRow(EndpointStats e) {
+  static Map<String, Object> endpointRow(EndpointStats e) {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("endpoint", e.endpoint());
     m.put("count", e.count());
@@ -538,7 +538,7 @@ public class ProfilerRoutes {
     }
   }
 
-  private static double ms(long nanos) {
+  static double ms(long nanos) {
     return Math.round(nanos / 1e4) / 100.0;
   }
 }

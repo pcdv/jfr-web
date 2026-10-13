@@ -1,12 +1,15 @@
 package jfrweb;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -19,6 +22,7 @@ import flak.AppFactory;
 import flak.Flak;
 import flak.HttpException;
 import flak.annotations.Route;
+import jfrweb.history.EndpointHistory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -174,7 +178,7 @@ public class ProfilerTest {
     for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
                                       "views/live", "components/endpoints", "components/flame",
                                       "components/timeline", "components/requests", "components/auto",
-                                      "components/section"}) {
+                                      "components/section", "views/history"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assert.assertEquals(module, 200, js.statusCode());
       Assert.assertEquals(module, "application/javascript", js.headers().firstValue("Content-Type").orElse(null));
@@ -220,6 +224,38 @@ public class ProfilerTest {
     HttpResponse<String> disarmed = http.send(request("api/auto").DELETE().build(), HttpResponse.BodyHandlers.ofString());
     Assert.assertTrue(disarmed.body(), disarmed.body().startsWith("{\"observing\":true,\"armed\":false"));
     Assert.assertTrue(disarmed.headers().firstValue("Set-Cookie").orElse("").contains("Max-Age=0"));
+  }
+
+  @Test
+  public void testHistory() throws Exception {
+    Path historyDir = dir.resolve("history");
+    try (EndpointHistory history = EndpointHistory.builder().directory(historyDir)
+                                                  .interval(java.time.Duration.ofSeconds(1)).observe(app).start()) {
+      profiler = Profiler.builder().directory(dir).history(historyDir).start();
+      busy(null);
+      Thread.sleep(1500);
+    }
+
+    String body = get("api/history").body();
+    Assert.assertTrue(body, body.startsWith("{\"available\":true,"));
+    Assert.assertTrue(body, body.contains("\"endpoints\":[{\"endpoint\":\"GET /busy\",\"count\":1,"));
+    Assert.assertTrue(body, body.contains("\"slowest\":[{\"end\":"));
+    Assert.assertTrue(body, body.contains("\"timeline\":{\"start\":"));
+    Assert.assertEquals(400, get("api/history?from=yesterday").statusCode());
+
+    // the same from the command line
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    Assert.assertEquals(0, jfrweb.cli.MainAccess.run(new String[]{"history", historyDir.toString()},
+                                                     new PrintStream(out, true, StandardCharsets.UTF_8)));
+    String text = out.toString(StandardCharsets.UTF_8);
+    Assert.assertTrue(text, text.contains("GET /busy"));
+    Assert.assertTrue(text, text.contains("Slowest requests:"));
+  }
+
+  @Test
+  public void testNoHistory() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+    Assert.assertEquals("{\"available\":false}", get("api/history").body());
   }
 
   @Test

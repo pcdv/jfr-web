@@ -9,7 +9,8 @@ graph per route or per slow request.
 
 ## Status
 
-M4: embedded, with manual or automatic sessions and flak-aware views.
+M5: embedded, with manual or automatic sessions, flak-aware views, and an endpoint history for
+production.
 
 ```java
 Profiler.builder().observe(app).start();   // serves the interface on loopback, logs its URL
@@ -25,6 +26,24 @@ Profiler.builder().observe(app).start();   // serves the interface on loopback, 
 - **Auto mode**: sessions start by themselves when a matching request comes (endpoint patterns,
   and/or only the requests of the browser armed), before its handler runs, and stop once no
   matching request has run for a few seconds; once or every time.
+- **Endpoint history**, for production: no profiling, only the endpoints' counters written to
+  disk at a regular interval, in hourly files purged by age and size. It runs alone; the
+  profiler's History page and the `history` command read it.
+
+```java
+EndpointHistory.builder()
+               .directory(Path.of("logs/endpoints"))   // dedicated: what it holds may be deleted
+               .interval(Duration.ofMinutes(1))        // the defaults: 1 minute,
+               .maxAge(Duration.ofDays(7))             // 7 days,
+               .maxSize(100L << 20)                    // 100 MiB
+               .observe(app)
+               .start();
+Profiler.builder().observe(app).history(Path.of("logs/endpoints")).start();   // to browse it
+```
+
+```sh
+./gradlew run --args="history logs/endpoints --from 2026-10-13T10:00 --to 2026-10-13T11:00"
+```
 
 A builder sets the rest: address, port, guard, directory of the recordings, JFR settings, or
 mounting on an existing flak server:
