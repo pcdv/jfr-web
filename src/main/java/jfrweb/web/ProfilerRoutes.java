@@ -25,6 +25,7 @@ import jfrweb.analysis.EndpointStats;
 import jfrweb.analysis.FlameGraphs;
 import jfrweb.analysis.RecordingInfo;
 import jfrweb.analysis.SamplingSummary;
+import jfrweb.live.LiveStats;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
 
@@ -42,9 +43,42 @@ public class ProfilerRoutes {
   public static final String JSON = "JSON";
 
   private final Sessions sessions;
+  private final LiveStats live;
 
-  public ProfilerRoutes(Sessions sessions) {
+  public ProfilerRoutes(Sessions sessions, LiveStats live) {
     this.sessions = sessions;
+    this.live = live;
+  }
+
+  /**
+   * The endpoints of the apps observed, over the last minutes.
+   * <p>
+   * Query: {@code window}, a number of minutes among {@link LiveStats#WINDOWS}.
+   */
+  @Route("/api/live")
+  @OutputFormat(JSON)
+  public Map<String, Object> live(Query q) {
+    int window;
+    try {
+      window = Integer.parseInt(q.get("window", "5"));
+    }
+    catch (NumberFormatException e) {
+      throw new HttpException(400, "Not a number of minutes: " + q.get("window"));
+    }
+    if (!LiveStats.WINDOWS.contains(window))
+      throw new HttpException(400, "Window not among " + LiveStats.WINDOWS + ": " + window);
+
+    List<Object> endpoints = new ArrayList<>();
+    for (EndpointStats e : live.getEndpoints(window))
+      endpoints.add(endpointRow(e));
+
+    Map<String, Object> res = new LinkedHashMap<>();
+    res.put("observing", live.isObserving());
+    res.put("apps", live.getAppPaths());
+    res.put("window", window);
+    res.put("windows", LiveStats.WINDOWS);
+    res.put("endpoints", endpoints);
+    return res;
   }
 
   @Route("/api/sessions")
@@ -124,19 +158,8 @@ public class ProfilerRoutes {
     });
 
     List<Object> endpoints = new ArrayList<>();
-    for (EndpointStats e : EndpointStats.of(a.getRequests())) {
-      Map<String, Object> m = new LinkedHashMap<>();
-      m.put("endpoint", e.endpoint());
-      m.put("count", e.count());
-      m.put("total", ms(e.totalNanos()));
-      m.put("p50", ms(e.p50Nanos()));
-      m.put("p99", ms(e.p99Nanos()));
-      m.put("max", ms(e.maxNanos()));
-      m.put("errors", e.errors());
-      m.put("bytesIn", e.bytesIn());
-      m.put("bytesOut", e.bytesOut());
-      endpoints.add(m);
-    }
+    for (EndpointStats e : EndpointStats.of(a.getRequests()))
+      endpoints.add(endpointRow(e));
 
     Map<String, Object> res = new LinkedHashMap<>();
     res.put("session", session(s));
@@ -208,6 +231,20 @@ public class ProfilerRoutes {
     m.put("end", s.getEnd());
     m.put("duration", s.getDuration().toMillis());
     m.put("size", s.getSize());
+    return m;
+  }
+
+  private static Map<String, Object> endpointRow(EndpointStats e) {
+    Map<String, Object> m = new LinkedHashMap<>();
+    m.put("endpoint", e.endpoint());
+    m.put("count", e.count());
+    m.put("total", ms(e.totalNanos()));
+    m.put("p50", ms(e.p50Nanos()));
+    m.put("p99", ms(e.p99Nanos()));
+    m.put("max", ms(e.maxNanos()));
+    m.put("errors", e.errors());
+    m.put("bytesIn", e.bytesIn());
+    m.put("bytesOut", e.bytesOut());
     return m;
   }
 

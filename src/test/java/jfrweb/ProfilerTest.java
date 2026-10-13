@@ -121,12 +121,28 @@ public class ProfilerTest {
 
     // browsers refuse a module served with another type
     for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
-                                      "components/endpoints", "components/flame"}) {
+                                      "views/live", "components/endpoints", "components/flame"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assert.assertEquals(module, 200, js.statusCode());
       Assert.assertEquals(module, "application/javascript", js.headers().firstValue("Content-Type").orElse(null));
     }
     Assert.assertEquals(200, get("css/style.css").statusCode());
+  }
+
+  @Test
+  public void testLiveEndpoints() throws Exception {
+    profiler = Profiler.builder().directory(dir).observe(app).start();
+    http.send(HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/busy")).build(),
+              HttpResponse.BodyHandlers.ofString());
+
+    String live = "";
+    for (int i = 0; i < 100 && !live.contains("GET /busy"); i++) {
+      Thread.sleep(20);
+      live = get("api/live?window=1").body();
+    }
+    Assert.assertTrue(live, live.startsWith("{\"observing\":true,\"apps\":[\"\"],\"window\":1,"));
+    Assert.assertTrue(live, live.contains("\"endpoint\":\"GET /busy\",\"count\":1"));
+    Assert.assertEquals(400, get("api/live?window=7").statusCode());
   }
 
   @Test

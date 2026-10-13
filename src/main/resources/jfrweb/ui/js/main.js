@@ -4,9 +4,11 @@
  *
  *   #/              the sessions
  *   #/sessions/3    the report of session 3
+ *   #/live          the endpoints of the apps observed, live
  */
 import {renderSessions} from './views/sessions.js';
 import {renderSession} from './views/session.js';
+import {renderLive} from './views/live.js';
 
 /**
  * A view renders itself into the root, and may return a function that stops
@@ -18,6 +20,7 @@ import {renderSession} from './views/session.js';
 /** @type {[RegExp, View][]} */
 const routes = [
   [/^#\/sessions\/(\d+)$/, renderSession],
+  [/^#\/live$/, renderLive],
   [/^(#\/?)?$/, renderSessions],
 ];
 

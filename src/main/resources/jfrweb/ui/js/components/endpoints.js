@@ -7,22 +7,23 @@ import * as fmt from '../format.js';
 
 /**
  * @param {import('../api.js').EndpointRow[]} rows
- * @param {(endpoint: string) => void} onSelect called when a row is clicked
+ * @param {(endpoint: string) => void} [onSelect] called when a row is clicked
+ * @param {string} [empty] the message shown when there is no row
  */
-export function endpointsTable(rows, onSelect) {
+export function endpointsTable(rows, onSelect, empty = 'No request recorded.') {
   if (rows.length === 0)
-    return h('p', {class: 'empty'}, 'No request recorded.');
+    return h('p', {class: 'empty'}, empty);
 
   return h('table', {class: 'grid'},
     h('thead', null, h('tr', null,
       h('th', null, 'Endpoint'), h('th', {class: 'num'}, 'Count'), h('th', {class: 'num'}, 'Total'),
       h('th', {class: 'num'}, 'p50'), h('th', {class: 'num'}, 'p99'), h('th', {class: 'num'}, 'Max'),
       h('th', {class: 'num'}, '5xx'), h('th', {class: 'num'}, 'In'), h('th', {class: 'num'}, 'Out'))),
-    h('tbody', null, rows.map(r => h('tr', {
+    h('tbody', null, rows.map(r => h('tr', onSelect ? {
         class: 'clickable',
         title: 'Show the flame graph of this endpoint',
         onclick: () => onSelect(r.endpoint),
-      },
+      } : null,
       h('td', {class: 'mono'}, r.endpoint),
       h('td', {class: 'num'}, r.count),
       h('td', {class: 'num'}, fmt.duration(r.total)),

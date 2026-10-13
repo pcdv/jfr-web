@@ -6,6 +6,8 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import flak.App;
@@ -14,6 +16,7 @@ import flak.BeforeHook;
 import flak.Flak;
 import flak.ResourceOptions;
 import flak.util.CrossOriginProtection;
+import jfrweb.live.LiveStats;
 import jfrweb.session.Sessions;
 import jfrweb.web.Json;
 import jfrweb.web.LoopbackOnly;
@@ -34,10 +37,12 @@ public final class Profiler implements AutoCloseable {
 
   private final App app;
   private final Sessions sessions;
+  private final LiveStats live;
 
-  private Profiler(App app, Sessions sessions) {
+  private Profiler(App app, Sessions sessions, LiveStats live) {
     this.app = app;
     this.sessions = sessions;
+    this.live = live;
   }
 
   /**
@@ -63,12 +68,21 @@ public final class Profiler implements AutoCloseable {
   }
 
   /**
-   * Stops the session recording, if any, and the web interface. The .jfr files
-   * stay.
+   * The statistics of the endpoints of the apps observed, see
+   * {@link Builder#observe(App...)}.
+   */
+  public LiveStats getLiveStats() {
+    return live;
+  }
+
+  /**
+   * Stops the session recording, if any, observing the apps, and the web
+   * interface. The .jfr files stay.
    */
   @Override
   public void close() {
     sessions.close();
+    live.close();
     app.stop();
   }
 
@@ -82,8 +96,19 @@ public final class Profiler implements AutoCloseable {
     private Path directory;
     private Map<String, String> settings;
     private boolean highResolutionTimer = true;
+    private final List<App> observed = new ArrayList<>();
 
     private Builder() {}
+
+    /**
+     * Flak apps whose endpoints get live statistics, kept by counters as
+     * requests end, without recording. Sessions do not need it: recordings get
+     * the route of each request from flak's request event.
+     */
+    public Builder observe(App... apps) {
+      observed.addAll(List.of(apps));
+      return this;
+    }
 
     /**
      * The address to serve the interface on, loopback by default. Clients
@@ -170,12 +195,14 @@ public final class Profiler implements AutoCloseable {
         resp.addHeader("Content-Type", "application/json");
         resp.getOutputStream().write(Json.write(data).getBytes(StandardCharsets.UTF_8));
       });
-      app.scan(new ProfilerRoutes(sessions));
+      LiveStats live = new LiveStats();
+      observed.forEach(live::observe);
+      app.scan(new ProfilerRoutes(sessions, live));
       app.serveClasspath("/", "/jfrweb/ui",
                          new ResourceOptions().classLoader(Profiler.class.getClassLoader()));
       app.start();
 
-      Profiler p = new Profiler(app, sessions);
+      Profiler p = new Profiler(app, sessions, live);
       log.log(System.Logger.Level.INFO, "jfr-web profiler at " + p.getUrl() +
                                         ", recordings in " + sessions.getDirectory());
       return p;

@@ -69,6 +69,23 @@ async function call(path, init) {
   return resp.json();
 }
 
+/**
+ * @typedef {object} Live
+ * @property {boolean} observing whether the profiler observes any app
+ * @property {string[]} apps their paths, "" for an app at the root
+ * @property {number} window in minutes
+ * @property {number[]} windows those that can be asked for
+ * @property {EndpointRow[]} endpoints sorted by total time
+ */
+
+/**
+ * @param {number} window in minutes
+ * @returns {Promise<Live>} the endpoints of the apps observed, over the last minutes
+ */
+export function getLive(window) {
+  return call(`api/live?window=${window}`);
+}
+
 /** @returns {Promise<Session[]>} the latest first */
 export function listSessions() {
   return call('api/sessions');

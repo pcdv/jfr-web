@@ -56,7 +56,10 @@ public class Demo {
     app.scan(new Handlers());
     app.start();
 
-    Profiler profiler = Profiler.builder().port(Integer.getInteger("profiler.port", 0)).start();
+    Profiler profiler = Profiler.builder()
+                                .port(Integer.getInteger("profiler.port", 0))
+                                .observe(app)
+                                .start();
 
     System.out.println("Profiler:  " + profiler.getUrl());
     System.out.println("Endpoints: " + app.getRootUrl() + "/sort/500, /files, /hello");

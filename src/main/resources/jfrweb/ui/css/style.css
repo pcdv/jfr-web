@@ -46,10 +46,50 @@ a {
   background: var(--panel);
 }
 
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+}
+
 .brand {
   font-weight: 600;
   color: var(--fg);
   text-decoration: none;
+}
+
+.topbar nav a {
+  margin-right: 16px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.topbar nav a:hover {
+  color: var(--fg);
+}
+
+.segmented button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+
+.segmented button:first-of-type {
+  border-radius: 6px 0 0 6px;
+}
+
+.segmented button:last-of-type {
+  border-radius: 0 6px 6px 0;
+}
+
+.segmented button.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
 }
 
 main {
