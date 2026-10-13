@@ -403,6 +403,16 @@ svg.timeline .selection {
   opacity: 0.15;
 }
 
+/* the operation picked among the slowest: an outline, not a selection */
+svg.timeline .mark {
+  fill: var(--fg);
+  fill-opacity: 0.08;
+  stroke: var(--fg);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;

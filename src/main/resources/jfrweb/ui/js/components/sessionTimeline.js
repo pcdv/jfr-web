@@ -14,6 +14,8 @@ import {timelineChart} from './timeline.js';
  * @param {api.TimelineData} whole the timeline of the whole session
  * @param {(interval: api.Interval) => void} onInterval called with what the sections
  *        below should show: the selection, else the range zoomed in on, else all
+ * @returns {{element: HTMLElement, mark: (op: api.InstanceRow | null) => void}} the timeline,
+ *          and what outlines the span of one operation on it, or removes the outline
  */
 export function sessionTimeline(sessionId, whole, onInterval) {
   const toolbar = h('div', {class: 'toolbar timeline-toolbar'});
@@ -25,22 +27,40 @@ export function sessionTimeline(sessionId, whole, onInterval) {
   const zooms = [];
   /** @type {api.Interval | null} the interval dragged, in seconds since the start of the session */
   let selection = null;
+  /** @type {api.InstanceRow | null} the operation outlined */
+  let marked = null;
+  /** @type {ReturnType<typeof timelineChart> | null} */
+  let drawn = null;
+
+  function applyMark() {
+    if (!drawn)
+      return;
+    const offset = range.from ?? 0;
+    if (marked)
+      drawn.mark(marked.start - offset, marked.start + marked.duration / 1000 - offset);
+    else
+      drawn.mark();
+  }
 
   /** @param {api.TimelineData} data */
   function draw(data) {
     const offset = range.from ?? 0;
     // a static export has the timeline of the whole session only
     if (api.isStatic()) {
-      replace(chart, timelineChart(data, null, {timeLabel: t => `${round(t)} s`}));
+      drawn = timelineChart(data, null, {timeLabel: t => `${round(t)} s`});
+      replace(chart, drawn);
+      applyMark();
       return;
     }
-    replace(chart, timelineChart(data, (from, to) => {
+    drawn = timelineChart(data, (from, to) => {
       selection = from === undefined || to === undefined
         ? null
         : {from: round(offset + from), to: round(offset + to)};
       drawToolbar();
       onInterval(selection ?? range);
-    }, {timeLabel: t => `${round(offset + t)} s`}));
+    }, {timeLabel: t => `${round(offset + t)} s`});
+    replace(chart, drawn);
+    applyMark();
     drawToolbar();
   }
 
@@ -80,7 +100,13 @@ export function sessionTimeline(sessionId, whole, onInterval) {
   }
 
   draw(whole);
-  return h('div', null, api.isStatic() ? null : toolbar, chart);
+  return {
+    element: h('div', null, api.isStatic() ? null : toolbar, chart),
+    mark(op) {
+      marked = op;
+      applyMark();
+    },
+  };
 }
 
 /** @param {number} v */

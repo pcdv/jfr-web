@@ -14,14 +14,16 @@ import {label} from './slowest.js';
  * @property {(from: number | undefined, to: number | undefined) => void} showInterval
  *           selects an interval, in seconds since the start, or the whole session
  * @property {(op: api.InstanceRow) => void} showInstance shows one operation, until a
- *           filter changes
+ *           filter changes, and brings the flame graph into view
  */
 
 /**
  * @param {api.Report} report
+ * @param {(op: api.InstanceRow | null) => void} [onInstance] told of the operation shown
+ *        alone, and with null once the flame graph is back to the filters
  * @returns {FlamePanel}
  */
-export function flamePanel(report) {
+export function flamePanel(report, onInstance = () => {}) {
   const id = report.session.id;
   const seconds = Math.ceil(report.session.duration / 1000);
 
@@ -78,7 +80,7 @@ export function flamePanel(report) {
    * @param {Event} [e]
    */
   function onFilterChange(e) {
-    instance = undefined;
+    clearInstance();
     if (e)
       onlyFilter(e.target);
     update();
@@ -93,22 +95,33 @@ export function flamePanel(report) {
     h('label', {title: 'Mostly idle threads blocked in native code: selectors, acceptors'},
       all, ' samples outside operations'));
 
+  function clearInstance() {
+    if (instance === undefined)
+      return;
+    instance = undefined;
+    onInstance(null);
+  }
+
+  /** Asked for: shown even if its section was folded. */
+  function reveal() {
+    const folded = frame.closest('details');
+    if (folded)
+      folded.open = true;
+    frame.scrollIntoView({behavior: 'smooth'});
+  }
+
   update();
   return {
     element: h('div', null, form, frame),
     showName(n) {
-      instance = undefined;
+      clearInstance();
       name.value = n;
       onlyFilter(name);
       update();
-      // asked for: shown even if its section was folded
-      const folded = frame.closest('details');
-      if (folded)
-        folded.open = true;
-      frame.scrollIntoView({behavior: 'smooth'});
+      reveal();
     },
     showInterval(f, t) {
-      instance = undefined;
+      clearInstance();
       from.value = f === undefined ? '' : String(f);
       to.value = t === undefined ? '' : String(t);
       update();
@@ -119,6 +132,8 @@ export function flamePanel(report) {
         `${label(r)} at ${r.start.toFixed(3)} s `,
         h('button', {type: 'button', title: 'Back to the filters', onclick: () => onFilterChange()}, '×'));
       update();
+      onInstance(r);
+      reveal();
     },
   };
 }

@@ -42,6 +42,8 @@ const PLOT_H = H - TOP - BOTTOM;
  *        with the interval dragged, in seconds since the start, or undefined when cleared; null
  *        when nothing can be selected
  * @param {TimelineOptions} [options]
+ * @returns {HTMLDivElement & {mark: (from?: number, to?: number) => void}} the chart, whose
+ *          mark() outlines a span, in seconds since the start, or removes it when undefined
  */
 export function timelineChart(data, onSelect, options = {}) {
   const label = options.timeLabel ?? (t => `${t} s`);
@@ -96,9 +98,28 @@ export function timelineChart(data, onSelect, options = {}) {
 
   const selection = svgEl('rect', {y: TOP, height: PLOT_H, class: 'selection', visibility: 'hidden'});
   const hover = svgEl('rect', {y: TOP, height: PLOT_H, width: bw, class: 'hover', visibility: 'hidden'});
+  const marked = svgEl('rect', {y: TOP, height: PLOT_H, class: 'mark', visibility: 'hidden'});
   // catches the pointer over the whole plot, above the marks
   const capture = svgEl('rect', {x: LEFT, y: TOP, width: PLOT_W, height: PLOT_H, fill: 'transparent'});
-  svg.append(hover, selection, capture);
+  svg.append(hover, selection, marked, capture);
+
+  /**
+   * @param {number} [from] in seconds since the start
+   * @param {number} [to]
+   */
+  function mark(from, to) {
+    const span = n * bucketSec;
+    if (from === undefined || to === undefined || to < 0 || from > span) {
+      marked.setAttribute('visibility', 'hidden');
+      return;
+    }
+    const a = LEFT + Math.max(0, from) / span * PLOT_W;
+    const b = LEFT + Math.min(span, to) / span * PLOT_W;
+    // a short operation stays visible
+    marked.setAttribute('x', String(Math.min(a, LEFT + PLOT_W - 3)));
+    marked.setAttribute('width', String(Math.max(b - a, 3)));
+    marked.setAttribute('visibility', 'visible');
+  }
 
   const tooltip = h('div', {class: 'tooltip', hidden: true});
   const wrapper = h('div', {class: 'timeline-wrapper'}, svg, tooltip);
@@ -186,12 +207,12 @@ export function timelineChart(data, onSelect, options = {}) {
   }
 
   const drag = onSelect ? ' Drag to select an interval: the sections below show only it; click to clear it.' : '';
-  return h('div', null,
+  return Object.assign(h('div', null,
     h('p', {class: 'hint'}, options.hint ? options.hint : operations
       ? `Operations in flight, on average per ${fmt.duration(data.bucket)}, by name.${drag}`
       : `No operation recorded: samples of Java code per ${fmt.duration(data.bucket)}.${drag}`),
     legend(series),
-    wrapper);
+    wrapper), {mark});
 }
 
 /** @param {Series[]} series */

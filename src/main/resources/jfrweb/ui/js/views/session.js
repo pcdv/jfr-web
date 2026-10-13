@@ -25,12 +25,6 @@ export function renderSession(root, params) {
 
   Promise.all([api.getReport(id), api.getTimeline(id)]).then(
     ([report, timeline]) => {
-      const flame = flamePanel(report);
-      const slowest = slowestPanel(id, flame.showInstance);
-      const operations = operationsPanel(id, report.operations, n => {
-        slowest.showName(n);
-        flame.showName(n);
-      });
       // the interval selected on the timeline, or zoomed in on, narrows
       // everything below it
       const showInterval = (/** @type {api.Interval} */ i) => {
@@ -38,10 +32,19 @@ export function renderSession(root, params) {
         slowest.showInterval(i);
         flame.showInterval(i.from, i.to);
       };
+      const timelinePanel = sessionTimeline(id, timeline, showInterval);
+      // the operation picked among the slowest is outlined on the timeline
+      // while its flame graph shows
+      const flame = flamePanel(report, op => timelinePanel.mark(op));
+      const slowest = slowestPanel(id, flame.showInstance);
+      const operations = operationsPanel(id, report.operations, n => {
+        slowest.showName(n);
+        flame.showName(n);
+      });
       replace(content,
         summary(report),
         recording(report),
-        section('timeline', 'Timeline', sessionTimeline(id, timeline, showInterval)),
+        section('timeline', 'Timeline', timelinePanel.element),
         operations.element,
         slowest.element,
         section('flame', 'Flame graph', flame.element));
