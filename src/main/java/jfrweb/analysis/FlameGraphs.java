@@ -2,6 +2,7 @@ package jfrweb.analysis;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.time.Instant;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
@@ -34,6 +35,8 @@ public final class FlameGraphs {
   public static final class Options {
     Predicate<RecordedRequest> requests = r -> true;
     Pattern thread;
+    Instant from;
+    Instant to;
     boolean outsideRequests;
     boolean collapsed;
     String title = "Wall clock";
@@ -51,6 +54,18 @@ public final class FlameGraphs {
      */
     public Options thread(Pattern name) {
       this.thread = name;
+      return this;
+    }
+
+    /**
+     * Keeps the samples taken in an interval.
+     *
+     * @param from inclusive, or null from the start
+     * @param to   exclusive, or null to the end
+     */
+    public Options interval(Instant from, Instant to) {
+      this.from = from;
+      this.to = to;
       return this;
     }
 
@@ -82,7 +97,7 @@ public final class FlameGraphs {
 
   /**
    * Writes a flame graph, whose widths are in milliseconds: each sample
-   * weighs the sampling period of its event.
+   * weighs the interval at which its event was sampled.
    */
   public static void write(Analysis analysis, Options o, PrintStream out) throws IOException {
     Arguments args = new Arguments();
@@ -95,6 +110,9 @@ public final class FlameGraphs {
 
     analysis.visitSamples((sample, thread, request, weight) -> {
       if (o.thread != null && !o.thread.matcher(String.valueOf(thread.getJavaName())).matches())
+        return;
+      Instant time = sample.getStartTime();
+      if ((o.from != null && time.isBefore(o.from)) || (o.to != null && !time.isBefore(o.to)))
         return;
 
       if (request != null) {

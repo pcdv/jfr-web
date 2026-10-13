@@ -11,6 +11,7 @@ import java.util.Map;
 import jfrweb.analysis.Analysis;
 import jfrweb.analysis.EndpointStats;
 import jfrweb.analysis.RecordingInfo;
+import jfrweb.analysis.SamplingSummary;
 
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
 import static jfrweb.analysis.RecordingInfo.NATIVE_SAMPLE;
@@ -48,30 +49,21 @@ final class TextReport {
     out.println("Java arguments: " + info.getJavaArguments());
     out.println("OS:             " + os(info.getOs()));
 
-    // Java, native; then in requests; then native while a request ran
-    long[] counts = new long[5];
-    analysis.visitSamples((sample, thread, request, weight) -> {
-      boolean java = sample.getEventType().getName().equals(EXECUTION_SAMPLE);
-      counts[java ? 0 : 1]++;
-      if (request != null)
-        counts[java ? 2 : 3]++;
-      if (!java && analysis.isRequestRunning(sample.getStartTime()))
-        counts[4]++;
-    });
+    SamplingSummary s = SamplingSummary.of(analysis);
 
     out.println();
     out.println("Sampling:");
-    out.println("  Java code      " + period(EXECUTION_SAMPLE) + ", " + counts[0] +
-                " samples, " + counts[2] + " in requests");
-    out.println("  native calls   " + period(NATIVE_SAMPLE) + ", " + counts[1] +
-                " samples, " + counts[3] + " in requests");
-    if (counts[4] > 0)
+    out.println("  Java code      " + period(EXECUTION_SAMPLE) + ", " + s.getJavaSamples() +
+                " samples, " + s.getJavaInRequests() + " in requests");
+    out.println("  native calls   " + period(NATIVE_SAMPLE) + ", " + s.getNativeSamples() +
+                " samples, " + s.getNativeInRequests() + " in requests");
+    if (s.getRequestShareOfNative() != null)
       out.println(String.format(Locale.ROOT,
                                 "                 one thread sampled per period: while requests ran, " +
                                 "their threads got %.0f%% of the native samples, idle threads the rest." +
                                 "%n                 Read native time in requests as proportions, " +
                                 "not as absolute time.",
-                                100.0 * counts[3] / counts[4]));
+                                100 * s.getRequestShareOfNative()));
     out.println("  requests       " + (info.isEnabled(REQUEST)
                                        ? analysis.getRequests().size() + " (" + REQUEST + ")"
                                        : REQUEST + " not enabled: no route context"));

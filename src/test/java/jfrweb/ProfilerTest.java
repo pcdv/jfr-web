@@ -1,0 +1,168 @@
+package jfrweb;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Random;
+import java.util.stream.Stream;
+
+import flak.App;
+import flak.AppFactory;
+import flak.Flak;
+import flak.HttpException;
+import flak.annotations.Route;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+/**
+ * Drives the profiler through its REST API, while a flak app of the same JVM
+ * serves requests.
+ */
+public class ProfilerTest {
+
+  private final HttpClient http = HttpClient.newHttpClient();
+  private Path dir;
+  private App app;
+  private Profiler profiler;
+
+  public static class Handlers {
+    static volatile long sink;
+
+    @Route("/busy")
+    public String busy() {
+      long end = System.nanoTime() + 200_000_000;
+      Random random = new Random(1);
+      while (System.nanoTime() < end) {
+        int[] a = random.ints(10_000).toArray();
+        Arrays.sort(a);
+        sink += a[0];
+      }
+      return "done";
+    }
+  }
+
+  @Before
+  public void setUp() throws IOException {
+    dir = Files.createTempDirectory("jfr-web-test");
+    AppFactory factory = Flak.getFactory();
+    factory.setLocalAddress(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+    app = factory.createApp();
+    app.scan(new Handlers());
+    app.start();
+  }
+
+  @After
+  public void tearDown() throws IOException {
+    if (profiler != null)
+      profiler.close();
+    app.stop();
+    try (Stream<Path> files = Files.walk(dir)) {
+      files.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+    }
+  }
+
+  @Test
+  public void testManualSession() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+
+    HttpResponse<String> started = post("api/sessions");
+    Assert.assertEquals(started.body(), 200, started.statusCode());
+    Assert.assertTrue(started.body(), started.body().contains("\"state\":\"RECORDING\""));
+    Assert.assertEquals("one session at a time", 409, post("api/sessions").statusCode());
+    Assert.assertEquals("still recording", 409, get("api/sessions/1/report").statusCode());
+
+    for (int i = 0; i < 3; i++)
+      Assert.assertEquals("done", http.send(HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/busy")).build(),
+                                            HttpResponse.BodyHandlers.ofString()).body());
+
+    HttpResponse<String> stopped = post("api/sessions/1/stop");
+    Assert.assertTrue(stopped.body(), stopped.body().contains("\"state\":\"STOPPED\""));
+
+    String list = get("api/sessions").body();
+    Assert.assertTrue(list, list.startsWith("[{\"id\":1,"));
+
+    HttpResponse<String> report = get("api/sessions/1/report");
+    Assert.assertEquals("application/json", report.headers().firstValue("Content-Type").orElse(null));
+    Assert.assertTrue(report.body(), report.body().contains("\"endpoint\":\"GET /busy\",\"count\":3"));
+    Assert.assertTrue(report.body(), report.body().contains("\"requestEvent\":true"));
+
+    String flame = get("api/sessions/1/flame?endpoint=GET+/busy").body();
+    Assert.assertTrue(flame.startsWith("<!DOCTYPE html>"));
+    Assert.assertTrue(flame.contains("GET /busy"));
+    Assert.assertTrue("an interval with no sample", get("api/sessions/1/flame?from=0&to=0").body()
+                                                      .startsWith("<!DOCTYPE html>"));
+    Assert.assertEquals(400, get("api/sessions/1/flame?from=x").statusCode());
+
+    HttpResponse<byte[]> jfr = http.send(request("api/sessions/1/recording.jfr").build(),
+                                         HttpResponse.BodyHandlers.ofByteArray());
+    Assert.assertEquals("FLR", new String(jfr.body(), 0, 3));
+    Assert.assertTrue(jfr.headers().firstValue("Content-Disposition").orElse("").contains(".jfr"));
+
+    Assert.assertEquals(404, get("api/sessions/9/report").statusCode());
+  }
+
+  @Test
+  public void testOtherSitesCannotStartSessions() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+    HttpResponse<String> r = http.send(request("api/sessions")
+                                         .header("Origin", "https://evil.example")
+                                         .POST(HttpRequest.BodyPublishers.noBody())
+                                         .build(),
+                                       HttpResponse.BodyHandlers.ofString());
+    Assert.assertEquals(403, r.statusCode());
+    Assert.assertNull(profiler.getSessions().getRecording());
+  }
+
+  @Test
+  public void testGuardReplacesLoopbackCheck() throws Exception {
+    profiler = Profiler.builder()
+                       .directory(dir)
+                       .guard(req -> {
+                         throw new HttpException(401, "who are you?");
+                       })
+                       .start();
+    Assert.assertEquals(401, get("api/sessions").statusCode());
+  }
+
+  @Test
+  public void testMountedOnAnExistingServer() throws Exception {
+    AppFactory factory = Flak.getFactory();
+    factory.setLocalAddress(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+    App host = factory.createApp("/host");
+    host.scan(new Handlers());
+    host.start();
+    try {
+      profiler = Profiler.builder().directory(dir).mount(factory, "/profiler").start();
+      Assert.assertTrue(profiler.getUrl(), profiler.getUrl().endsWith("/profiler/"));
+      Assert.assertEquals("[]", get("api/sessions").body());
+    }
+    finally {
+      profiler.close();
+      profiler = null;
+      host.stop();
+    }
+  }
+
+  private HttpRequest.Builder request(String path) {
+    return HttpRequest.newBuilder(URI.create(profiler.getUrl() + path));
+  }
+
+  private HttpResponse<String> get(String path) throws Exception {
+    return http.send(request(path).build(), HttpResponse.BodyHandlers.ofString());
+  }
+
+  private HttpResponse<String> post(String path) throws Exception {
+    return http.send(request(path).POST(HttpRequest.BodyPublishers.noBody()).build(),
+                     HttpResponse.BodyHandlers.ofString());
+  }
+}
