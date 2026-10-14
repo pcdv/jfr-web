@@ -30,6 +30,13 @@ dependencies {
 }
 ```
 
+To try a build of your own, publish it locally, then use version `0.1.0-SNAPSHOT`:
+
+```sh
+./gradlew publish -Pversion=0.1.0-SNAPSHOT               # to the local Ivy repository
+./gradlew publishToMavenLocal -Pversion=0.1.0-SNAPSHOT   # to the local Maven repository
+```
+
 ## Features
 
 ```java

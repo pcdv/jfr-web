@@ -1,6 +1,7 @@
 plugins {
   id 'java-library'
   id 'application'
+  id 'ivy-publish'
   id 'maven-publish'
 }
 
@@ -10,9 +11,22 @@ java {
   withSourcesJar()
 }
 
-// publishToMavenLocal (or jitpack.io) using -Pversion=x.y.z
 publishing {
+  repositories {
+    ivy {
+      name = 'local'
+      url = "${System.properties['user.home']}/.ivy2/local"
+    }
+  }
   publications {
+    // publish -Pversion=x.y.z, to the local Ivy repository, as flak does
+    ivy(IvyPublication) {
+      organisation = 'com.github.pcdv'
+      module = 'jfr-web'
+      from components.java
+    }
+
+    // publishToMavenLocal (or jitpack.io) using -Pversion=x.y.z
     maven(MavenPublication) {
       artifactId = 'jfr-web'
       from components.java
