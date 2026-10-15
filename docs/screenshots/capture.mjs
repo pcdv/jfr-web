@@ -155,7 +155,7 @@ try {
   await open('#/history');
   const first = await evaluate(`(() => {
     const plot = document.querySelector('svg.timeline').lastElementChild.getBoundingClientRect();
-    const xs = [...document.querySelectorAll('svg.timeline rect:not(.hover):not(.selection)')]
+    const xs = [...document.querySelectorAll('svg.timeline rect.bar')]
       .map(r => r.getBoundingClientRect())
       .filter(r => r.height > 0 && r.width < plot.width / 2)
       .map(r => r.left);

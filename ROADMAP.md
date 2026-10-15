@@ -159,6 +159,14 @@ already wired must follow.
   256 frames as they start, when they are first (`stackDepth()` of their builders), and reports
   tell how many stacks were cut and the JVM option otherwise
   (`-XX:FlightRecorderOptions:stackdepth=`)
+- [x] Operations tables: a bar of each operation's share of the time
+- [x] Timelines: the operation under the pointer outlined and brought forward; in a session, a
+  click on one narrows the slowest and the flame graph to it, in that bucket
+- [x] Live operations: arm a session on the next call of one of them
+- [x] Sessions named: when started, armed or later
+- [ ] Session named after the actual path of the call that started it, or a flame graph of one
+  call showing its path: parked, a session and a flame graph aggregate calls with different
+  values
 
 ## Later
 

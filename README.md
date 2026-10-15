@@ -26,15 +26,16 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.github.pcdv:jfr-web:0.1.0'
+  implementation 'com.github.pcdv:jfr-web:0.2.0'
 }
 ```
 
-To try a build of your own, publish it locally, then use version `0.1.0-SNAPSHOT`:
+To try a build of your own, publish it locally, then use version `0.3.0-SNAPSHOT`, the next
+one:
 
 ```sh
-./gradlew publish -Pversion=0.1.0-SNAPSHOT               # to the local Ivy repository
-./gradlew publishToMavenLocal -Pversion=0.1.0-SNAPSHOT   # to the local Maven repository
+./gradlew publish -Pversion=0.3.0-SNAPSHOT               # to the local Ivy repository
+./gradlew publishToMavenLocal -Pversion=0.3.0-SNAPSHOT   # to the local Maven repository
 ```
 
 ## Features
@@ -43,13 +44,15 @@ To try a build of your own, publish it locally, then use version `0.1.0-SNAPSHOT
 Profiler.builder().observe(app).start();   // serves the interface on loopback, logs its URL
 ```
 
-- **Live operations**: the operations of the last 1 to 60 minutes (count, total time,
-  p50/p99/max, errors, bytes), kept by counters whether a session records or not.
+- **Live operations**: the operations of the last 1 to 60 minutes (count, total time and its
+  share, p50/p99/max, errors, bytes), kept by counters whether a session records or not. **Arm**
+  records a session on the next call of an operation, from any client, named after it.
 
   ![Live operations](docs/screenshots/live.png)
 
-- **Sessions**: start one, use the application, stop it. Its report states how it was recorded,
-  shows a timeline of the operations in flight by name (drag to select an interval), lists the
+- **Sessions**: start one, use the application, stop it, name it if you like. Its report states
+  how it was recorded, shows a timeline of the operations in flight by name (hover to bring one
+  forward, drag to select an interval, click one to see it alone in that bucket), lists the
   operations by total time and the slowest of them, and shows flame graphs by operation, thread,
   interval or single operation. An operation also shows the exceptions it created and its slow
   file and socket accesses. The `.jfr` file can be downloaded, e.g. for JDK Mission Control.
@@ -70,7 +73,7 @@ Profiler.builder().observe(app).start();   // serves the interface on loopback, 
 
 - **Auto mode**: sessions start by themselves when a matching operation begins (name patterns,
   and/or only the requests of the browser armed), before it runs, and stop once no matching
-  operation has run for a few seconds; once or every time.
+  operation has run for a few seconds; once or every time, named or not.
 
   ![Sessions, with the auto mode panel](docs/screenshots/sessions.png)
 
