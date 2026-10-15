@@ -57,11 +57,27 @@ public class ProfilerRoutes {
   private final Sessions sessions;
   private final LiveStats live;
   private final AutoMode auto;
+  private final String app;
 
-  public ProfilerRoutes(Sessions sessions, LiveStats live, AutoMode auto) {
+  /**
+   * @param app the name of the application profiled, see {@link AppName}
+   */
+  public ProfilerRoutes(Sessions sessions, LiveStats live, AutoMode auto, String app) {
+    this.app = app;
     this.sessions = sessions;
     this.live = live;
     this.auto = auto;
+  }
+
+  /**
+   * What is profiled: the name of the application.
+   */
+  @Route("/api/about")
+  @OutputFormat(JSON)
+  public Map<String, Object> about() {
+    Map<String, Object> m = new LinkedHashMap<>();
+    m.put("app", app);
+    return m;
   }
 
   /**

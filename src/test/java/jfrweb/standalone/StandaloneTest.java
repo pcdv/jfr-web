@@ -78,6 +78,7 @@ public class StandaloneTest {
     Assert.assertEquals(attached.body(), 200, attached.statusCode());
     Assert.assertEquals("{\"app\":\"" + APP + "\",\"path\":\"" + BASE + "\"}", attached.body());
     Assert.assertTrue(get(BASE + "api/target").body().contains("\"pid\":" + pid + ","));
+    Assert.assertEquals("{\"app\":\"" + APP + "\"}", get(BASE + "api/about").body());
     Assert.assertEquals("the interface of the profiler", 200, get(BASE).statusCode());
 
     // its operations, from their events, once they end
@@ -96,6 +97,11 @@ public class StandaloneTest {
     Assert.assertEquals("no browser in events", 400, post(BASE + "api/auto?patterns=work&browser=true").statusCode());
     Assert.assertEquals(200, post(BASE + "api/auto?patterns=work&max=1&name=auto+one").statusCode());
     waitFor(BASE + "api/sessions", b -> b.contains("\"id\":2,\"state\":\"STOPPED\",\"name\":\"auto one\""));
+
+    // disconnected, then connected again
+    Assert.assertEquals(200, post("api/detach").statusCode());
+    Assert.assertTrue(get(BASE + "api/target").body().contains("\"pid\":null"));
+    Assert.assertEquals(200, post("api/jvms/" + pid + "/attach").statusCode());
 
     // the JVM ends: detached, its sessions stay
     child.destroyForcibly();

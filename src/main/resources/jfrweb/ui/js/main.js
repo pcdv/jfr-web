@@ -21,13 +21,16 @@ import {showTarget} from './components/target.js';
  * @typedef {(root: HTMLElement, params: string[]) => (void | (() => void))} View
  */
 
-/** @type {[RegExp, View][]} */
+/** @type {[RegExp, View, (params: string[]) => string][]} */
 const routes = [
-  [/^#\/sessions\/(\d+)$/, renderSession],
-  [/^#\/live$/, renderLive],
-  [/^#\/history$/, renderHistory],
-  [/^(#\/?)?$/, renderSessions],
+  [/^#\/sessions\/(\d+)$/, renderSession, p => `Session ${p[0]}`],
+  [/^#\/live$/, renderLive, () => 'Live operations'],
+  [/^#\/history$/, renderHistory, () => 'History'],
+  [/^(#\/?)?$/, renderSessions, () => 'Sessions'],
 ];
+
+/** The application profiled, in the title of the page: tabs tell them apart. */
+let appName = 'jfr-web';
 
 /** @type {void | (() => void)} */
 let stopCurrent;
@@ -38,9 +41,10 @@ function route() {
 
   const root = /** @type {HTMLElement} */ (document.getElementById('app'));
   root.replaceChildren();
-  for (const [pattern, view] of routes) {
+  for (const [pattern, view, title] of routes) {
     const m = location.hash.match(pattern);
     if (m) {
+      document.title = `${title(m.slice(1))} · ${appName}`;
       stopCurrent = view(root, m.slice(1));
       return;
     }
@@ -67,8 +71,9 @@ function staticMode() {
   document.querySelector('header')?.after(note);
 }
 
-api.ready.then(() => {
+api.ready.then(async () => {
   staticMode();
+  appName = (await api.getAbout())?.app ?? appName;
   const header = document.querySelector('header');
   if (header)
     showTarget(header);

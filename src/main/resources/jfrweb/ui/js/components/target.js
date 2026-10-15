@@ -20,7 +20,6 @@ export async function showTarget(after) {
     return;
   const bar = h('div', {class: 'target-bar'});
   after.after(bar);
-  document.title = `${target.app} · jfr-web`;
 
   /** @param {api.Target} t */
   function draw(t) {
@@ -28,10 +27,23 @@ export async function showTarget(after) {
       h('a', {href: '../../'}, '← JVMs'),
       h('strong', null, t.app),
       t.pid !== null
-        ? h('span', {class: 'hint', title: t.name ?? ''}, `JVM ${t.pid}`)
-        : [h('span', {class: 'hint'}, t.running.length ? 'no JVM attached:' : 'no JVM running, sessions only'),
+        ? [h('span', {class: 'hint', title: t.name ?? ''}, `connected to JVM ${t.pid}`),
+           h('button', {class: 'small', onclick: detach}, 'Disconnect')]
+        : [h('span', {class: 'hint'}, t.running.length ? 'not connected:' : 'no JVM running, sessions only'),
            ...t.running.map(j => h('button', {class: 'small', title: j.name,
-                                               onclick: () => attach(j.pid)}, `Attach to ${j.pid}`))]);
+                                               onclick: () => attach(j.pid)}, `Connect to ${j.pid}`))]);
+  }
+
+  async function detach() {
+    try {
+      await api.detachJvm('../../');
+      const t = await api.getTarget();
+      if (t)
+        draw(t);
+    }
+    catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
   }
 
   /** @param {number} pid */

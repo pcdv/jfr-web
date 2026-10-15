@@ -10,17 +10,21 @@ import {h, replace, errorBox} from '../dom.js';
 /** JVMs come and go: listed again that often, in ms. */
 const POLL = 3000;
 
+/** Lists the JVMs again, e.g. once one is disconnected from. */
+let refresh = () => {};
+
 /**
  * @param {HTMLElement} root
  */
 function render(root) {
   const content = h('div');
   root.append(h('h1', null, 'JVMs of this machine'), content);
+  document.title = 'JVMs · jfr-web';
 
   /** @type {number | undefined} */
   let timer;
 
-  async function refresh() {
+  refresh = async () => {
     clearTimeout(timer);
     try {
       const list = await api.listJvms();
@@ -32,7 +36,7 @@ function render(root) {
       replace(content, errorBox(e));
     }
     timer = window.setTimeout(refresh, POLL);
-  }
+  };
 
   refresh();
 }
@@ -56,8 +60,22 @@ function jvmTable(list) {
       h('td', null, j.app),
       h('td', {class: 'mono command', title: j.name}, j.name || h('span', {class: 'hint'}, 'not told')),
       h('td', {class: 'action'}, j.attached
-        ? h('a', {href: `app/${encodeURIComponent(j.app)}/`}, 'Open')
-        : h('button', {class: 'small', onclick: (/** @type {Event} */ e) => attach(j, e)}, 'Profile'))))));
+        ? [h('a', {href: `app/${encodeURIComponent(j.app)}/`}, 'Open'), ' ',
+           h('button', {class: 'small', onclick: detach}, 'Disconnect')]
+        : h('button', {class: 'small', onclick: (/** @type {Event} */ e) => attach(j, e)}, 'Connect'))))));
+}
+
+/**
+ * Disconnects from the JVM attached, then lists the JVMs again.
+ */
+async function detach() {
+  try {
+    await api.detachJvm();
+  }
+  catch (err) {
+    alert(err instanceof Error ? err.message : String(err));
+  }
+  refresh();
 }
 
 /**
@@ -69,14 +87,14 @@ function jvmTable(list) {
 async function attach(j, e) {
   const button = /** @type {HTMLButtonElement} */ (e.target);
   button.disabled = true;
-  button.textContent = 'Attaching…';
+  button.textContent = 'Connecting…';
   try {
     const r = await api.attachJvm(j.pid);
     location.href = r.path;
   }
   catch (err) {
     button.disabled = false;
-    button.textContent = 'Profile';
+    button.textContent = 'Connect';
     alert(err instanceof Error ? err.message : String(err));
   }
 }
@@ -95,7 +113,7 @@ function appTable(list) {
     h('table', {class: 'grid'},
       h('thead', null, h('tr', null,
         h('th', null, 'Application'), h('th', {class: 'num'}, 'Sessions'), h('th', null, 'Latest'),
-        h('th', null, 'Attached'), h('th', null, ''))),
+        h('th', null, 'Connected'), h('th', null, ''))),
       h('tbody', null, apps.map(a => h('tr', null,
         h('td', null, a.app),
         h('td', {class: 'num'}, a.sessions),

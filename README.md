@@ -142,9 +142,10 @@ in them and no change to their command line (JDK 17 or later, the same user):
 ./gradlew standalone                     # or: jfr-web standalone [--port 8095] [--dir ~/.jfr-web]
 ```
 
-It opens a page listing the JVMs. **Profile** attaches to one, through the attach API and JMX, as
+It opens a page listing the JVMs. **Connect** attaches to one, through the attach API and JMX, as
 JDK Mission Control does, and opens the interface of the profiler for it: sessions, reports, live
-operations, auto mode. Its operations come from the events of flak's requests (flak 3.4.0 or
+operations, auto mode. It stays connected until **Disconnect**, another JVM connected to, or the
+JVM ending. Its operations come from the events of flak's requests (flak 3.4.0 or
 later) and of the `jfrweb.ops` API, streamed as they end; a JVM with neither still gets sessions
 and flame graphs by thread. One JVM is attached at a time.
 

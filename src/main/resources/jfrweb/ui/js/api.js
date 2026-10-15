@@ -288,6 +288,25 @@ export function attachJvm(pid, root = '') {
  * @property {Jvm[]} running its JVMs running
  */
 
+/**
+ * Disconnects from the JVM attached, stopping its session if one records.
+ *
+ * @param {string} [root] the path of the page of the JVMs, relative to this one
+ */
+export function detachJvm(root = '') {
+  return call(`${root}api/detach`, {method: 'POST'});
+}
+
+/** @returns {Promise<{app: string} | null>} what is profiled, null if not told, e.g. in a static export */
+export async function getAbout() {
+  try {
+    return await call('api/about');
+  }
+  catch (e) {
+    return null;
+  }
+}
+
 /** @returns {Promise<Target | null>} null when the profiler is embedded in the JVM it profiles */
 export async function getTarget() {
   if (staticFiles)

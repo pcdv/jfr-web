@@ -38,13 +38,13 @@ final class Target implements AutoCloseable {
       public Running start(String name, Map<String, String> settings, Path file) throws IOException {
         RemoteJvm j = jvm;
         if (j == null)
-          throw new IllegalStateException("No JVM of " + app + " attached: attach one from the list of JVMs");
+          throw new IllegalStateException("No JVM of " + app + " connected: connect to one from the list of JVMs");
         return j.start(name, settings, file);
       }
     });
     this.auto = AutoMode.fed(sessions);
     this.web = factory.createApp(path());
-    ProfilerApp.install(web, null, sessions, live, auto, null, null);
+    ProfilerApp.install(web, null, app, sessions, live, auto, null, null);
     web.scan(new TargetRoutes(this));
     web.start();
   }

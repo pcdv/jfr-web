@@ -18,6 +18,7 @@ import jfrweb.live.LiveStats;
 import jfrweb.session.Sessions;
 import jfrweb.session.StackDepth;
 import jfrweb.snapshot.Snapshots;
+import jfrweb.web.AppName;
 import jfrweb.web.ProfilerApp;
 
 /**
@@ -245,7 +246,7 @@ public final class Profiler implements AutoCloseable {
         live.observe(a);
         auto.observe(a);
       }
-      ProfilerApp.install(app, guard, sessions, live, auto, history, snapshots);
+      ProfilerApp.install(app, guard, AppName.self(), sessions, live, auto, history, snapshots);
       app.start();
 
       Profiler p = new Profiler(app, sessions, live, auto);

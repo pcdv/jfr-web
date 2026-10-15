@@ -26,14 +26,15 @@ public final class ProfilerApp {
    *
    * @param guard     who may use it, null to refuse the clients that are not
    *                  local
+   * @param appName   the application profiled, see {@link AppName}
    * @param history   the directory of an operation history to browse, or null
    * @param snapshots listed with the sessions and taken from the interface,
    *                  or null
    */
-  public static void install(App app, BeforeHook guard, Sessions sessions, LiveStats live, AutoMode auto,
-                             Path history, Snapshots snapshots) {
+  public static void install(App app, BeforeHook guard, String appName, Sessions sessions, LiveStats live,
+                             AutoMode auto, Path history, Snapshots snapshots) {
     base(app, guard);
-    app.scan(new ProfilerRoutes(sessions, live, auto));
+    app.scan(new ProfilerRoutes(sessions, live, auto, appName));
     app.scan(new HistoryRoutes(history));
     if (snapshots != null) {
       for (Snapshots.Snapshot s : snapshots.list())
