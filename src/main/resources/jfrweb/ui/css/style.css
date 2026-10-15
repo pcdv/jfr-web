@@ -441,6 +441,39 @@ svg.timeline .mark {
   vector-effect: non-scaling-stroke;
 }
 
+/* the series under the pointer stands out, the others fade */
+svg.timeline .bar {
+  transition: opacity 0.1s;
+}
+
+svg.timeline.has-focus .bar:not(.focused) {
+  opacity: 0.25;
+}
+
+svg.timeline .outline {
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.legend-item.focused {
+  font-weight: 600;
+}
+
+.legend:has(.legend-item.focused) .legend-item:not(.focused) {
+  opacity: 0.45;
+}
+
+.tooltip-row.focused {
+  font-weight: 600;
+}
+
+.tooltip-row.focused .tooltip-name {
+  text-decoration: underline;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;

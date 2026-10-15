@@ -79,29 +79,98 @@ export function timelineChart(data, onSelect, options = {}) {
 
   // stacked bars, with a surface gap between segments and between bars
   const gap = bw > 6 ? 2 : bw > 3 ? 1 : 0;
+  /** @type {SVGElement[][]} the segments of each series */
+  const bars = series.map(() => []);
+  /** @type {{series: number, x: number, y: number, width: number, height: number}[][]} those of each bucket, bottom up */
+  const stacks = [];
   for (let i = 0; i < n; i++) {
+    stacks.push([]);
     let base = 0;
-    for (const s of series) {
+    series.forEach((s, si) => {
       const v = s.values[i];
       if (v <= 0)
-        continue;
+        return;
       const top = y(base + v);
       const height = y(base) - top;
       base += v;
-      svg.append(svgEl('rect', {
-        x: x(i) + gap / 2, width: Math.max(bw - gap, 0.5),
-        y: top, height: height > 2 + gap ? height - gap : height,
-        fill: s.color,
-      }));
-    }
+      const seg = {series: si, x: x(i) + gap / 2, width: Math.max(bw - gap, 0.5),
+                   y: top, height: height > 2 + gap ? height - gap : height};
+      stacks[i].push(seg);
+      const rect = svgEl('rect', {x: seg.x, width: seg.width, y: seg.y, height: seg.height, fill: s.color, class: 'bar'});
+      bars[si].push(rect);
+      svg.append(rect);
+    });
   }
 
   const selection = svgEl('rect', {y: TOP, height: PLOT_H, class: 'selection', visibility: 'hidden'});
   const hover = svgEl('rect', {y: TOP, height: PLOT_H, width: bw, class: 'hover', visibility: 'hidden'});
   const marked = svgEl('rect', {y: TOP, height: PLOT_H, class: 'mark', visibility: 'hidden'});
+  // the segment under the pointer, whose series stands out
+  const outline = svgEl('rect', {class: 'outline', visibility: 'hidden'});
   // catches the pointer over the whole plot, above the marks
   const capture = svgEl('rect', {x: LEFT, y: TOP, width: PLOT_W, height: PLOT_H, fill: 'transparent'});
-  svg.append(hover, selection, marked, capture);
+  svg.append(hover, selection, marked, outline, capture);
+
+  /** @type {number} the series in focus, -1 for none */
+  let focused = -1;
+
+  // hovering an entry of the legend focuses its series too
+  const legendItems = series.map((s, si) => h('span', {
+      class: 'legend-item',
+      onpointerenter: () => series.length > 1 && focus(si),
+      onpointerleave: () => focus(-1),
+    }, h('span', {class: 'swatch', style: `background: ${s.color}`}), s.name));
+
+  /**
+   * Brings a series forward, fading the others, in the chart and the legend.
+   *
+   * @param {number} si -1 for none
+   */
+  function focus(si) {
+    if (si === focused)
+      return;
+    if (focused >= 0) {
+      bars[focused].forEach(r => r.classList.remove('focused'));
+      legendItems[focused].classList.remove('focused');
+    }
+    focused = si;
+    svg.classList.toggle('has-focus', si >= 0);
+    if (si >= 0) {
+      bars[si].forEach(r => r.classList.add('focused'));
+      legendItems[si].classList.add('focused');
+    }
+  }
+
+  /**
+   * The segment of a bucket under the pointer, or the nearest one when a thin
+   * one is hard to hit.
+   *
+   * @param {number} i the bucket
+   * @param {number} vy the pointer, in the units of the viewBox
+   */
+  function segmentAt(i, vy) {
+    let best = null;
+    let distance = 4;
+    for (const seg of stacks[i]) {
+      const d = vy < seg.y ? seg.y - vy : vy > seg.y + seg.height ? vy - seg.y - seg.height : 0;
+      if (d < distance) {
+        best = seg;
+        distance = d;
+      }
+    }
+    return best;
+  }
+
+  /** @param {ReturnType<typeof segmentAt>} seg */
+  function showOutline(seg) {
+    if (!seg) {
+      outline.setAttribute('visibility', 'hidden');
+      return;
+    }
+    for (const k of /** @type {const} */ (['x', 'y', 'width', 'height']))
+      outline.setAttribute(k, String(seg[k]));
+    outline.setAttribute('visibility', 'visible');
+  }
 
   /**
    * @param {number} [from] in seconds since the start
@@ -138,12 +207,19 @@ export function timelineChart(data, onSelect, options = {}) {
     const i = bucketAt(e);
     hover.setAttribute('x', String(x(i)));
     hover.setAttribute('visibility', 'visible');
+    // no focus while dragging: the selection matters then
+    const r = svg.getBoundingClientRect();
+    const seg = dragFrom === null && series.length > 1 ? segmentAt(i, (e.clientY - r.top) / r.height * H) : null;
+    showOutline(seg);
+    focus(seg ? seg.series : -1);
     showTooltip(e, i);
     if (dragFrom !== null)
       showSelection(Math.min(dragFrom, i), Math.max(dragFrom, i));
   });
   capture.addEventListener('pointerleave', () => {
     hover.setAttribute('visibility', 'hidden');
+    showOutline(null);
+    focus(-1);
     tooltip.hidden = true;
   });
   capture.addEventListener('pointerdown', e => {
@@ -190,7 +266,7 @@ export function timelineChart(data, onSelect, options = {}) {
         : `${round(i * bucketSec)}–${round((i + 1) * bucketSec)} s`),
       rows.length === 0
         ? h('div', {class: 'hint'}, operations ? 'No operation in flight' : 'No sample')
-        : rows.map(s => h('div', {class: 'tooltip-row'},
+        : rows.map(s => h('div', {class: s === series[focused] ? 'tooltip-row focused' : 'tooltip-row'},
             h('span', {class: 'swatch', style: `background: ${s.color}`}),
             h('span', {class: 'tooltip-name'}, s.name),
             h('span', {class: 'tooltip-value'}, formatCount(s.values[i]) + unit))),
@@ -211,14 +287,8 @@ export function timelineChart(data, onSelect, options = {}) {
     h('p', {class: 'hint'}, options.hint ? options.hint : operations
       ? `Operations in flight, on average per ${fmt.duration(data.bucket)}, by name.${drag}`
       : `No operation recorded: samples of Java code per ${fmt.duration(data.bucket)}.${drag}`),
-    legend(series),
+    h('div', {class: 'legend'}, legendItems),
     wrapper), {mark});
-}
-
-/** @param {Series[]} series */
-function legend(series) {
-  return h('div', {class: 'legend'}, series.map(s =>
-    h('span', {class: 'legend-item'}, h('span', {class: 'swatch', style: `background: ${s.color}`}), s.name)));
 }
 
 /**
