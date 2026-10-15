@@ -1,24 +1,63 @@
 # jfr-web
 
-A profiler embedded in a JVM, with a web interface. It records with Java Flight Recorder, so
-it needs no agent or native library and runs everywhere the JDK does, Windows included.
+jfr-web is a profiler for the JVM with a web interface. It records with Java Flight Recorder,
+which ships with the JDK, so there is no agent or native library to install, and it works the
+same on Linux, macOS and Windows.
 
-It groups what it sees by **operation**: a unit of work of the application, and which operation
-every sample belongs to. In a [flak](https://github.com/pcdv/flak) application, operations are
-the requests, grouped by route, with no annotation. Any other application declares its own with
-a few lines (see [Any application](#any-application-operations)). It then shows the most
-expensive operations, a timeline of those in flight, and flame graphs per operation or per
-slow one.
+What sets it apart from a plain flame graph is that it knows about **operations**: the requests a
+server handles, the jobs it runs, the orders it processes. Every sample is tied to the operation
+it was taken in, so you can ask "where does `GET /api/repository` spend its time?" rather than
+staring at a flame graph of the whole JVM. You get the most expensive operations, a timeline of
+what was running when, the slowest calls with their exceptions and slow I/O, and flame graphs for
+one operation or a single call.
 
-**[Demo](https://pcdv.github.io/jfr-web/)**: a static export of the TCP demo below, rebuilt on each
-push. It is limited compared to a live run: one recorded session and a few minutes of history,
-no interval to select or zoom in on, one flame graph filter at a time, and no live statistics,
-auto mode or snapshots. Run `./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true` for all of
-it.
+**[Try the demo](https://pcdv.github.io/jfr-web/)**: a static copy of the TCP demo described
+below, rebuilt on every push. Being static, it can't do everything (no interval selection, no
+live view); run `./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true` locally for the real
+thing.
+
+## Ways to run it
+
+| Mode | Use it when | How |
+|---|---|---|
+| [Embedded](#embedded) | You own the application and can add a dependency | `Profiler.builder().start()` in the app |
+| [Standalone](#standalone) | You want to profile a JVM you can't (or don't want to) change | `jfr-web standalone` |
+| [Open recordings](#opening-recordings) | You already have `.jfr` files: snapshots, `jcmd` dumps, files from a colleague | `jfr-web open <files or dirs>` |
+| [Static export](#static-export) | You want to share a report, or publish a demo, with no server | `jfr-web export ... -o site/` |
+| [Command line](#command-line) | You want text or a single HTML flame graph, e.g. in a script | `jfr-web report`, `flame`, `history` |
+
+Embedded is the most complete: it sees operations as they start, which is what makes auto mode
+and the browser-armed sessions work. The others build on the same interface and lose a little
+along the way, as explained in each section.
+
+In the examples, `jfr-web <command>` stands for `./gradlew run --args="<command>"` from a clone
+of this repository.
+
+## What your application needs to provide
+
+Profiling works on any JVM. How much jfr-web can tell you depends on whether it knows what the
+operations are:
+
+- **A [flak](https://github.com/pcdv/flak) application** has nothing to do. Its requests are
+  operations, named after their route (`GET /api/user/:id`), and recordings get them from flak's
+  own JFR event (flak 3.4.0 or later).
+- **Any other application** can declare its operations with a few lines of code, using the
+  [`jfrweb.ops` API](#declaring-operations). An order server, a batch, a message consumer: anything
+  with units of work.
+- **A JVM that does neither** still gets sessions, flame graphs by thread and by time interval,
+  and the report on how sampling went. Everything that is per operation stays empty.
+
+|  | flak app | Declared operations | Any JVM |
+|---|---|---|---|
+| Sessions, flame graphs by thread and interval | yes | yes | yes |
+| Operations table, timeline, slowest calls, flame graph per operation | yes | yes | |
+| Live operations, Arm, auto mode | yes | yes | |
+| Only the requests of your own browser trigger a session | embedded only | | |
+| History of operations, snapshots taken on slow calls | embedded only | embedded only | |
 
 ## Getting it
 
-Java 17 or later. Released on [JitPack](https://jitpack.io/#pcdv/jfr-web), with flak:
+Java 17 or later. Releases are on [JitPack](https://jitpack.io/#pcdv/jfr-web), like flak:
 
 ```groovy
 repositories {
@@ -30,146 +69,109 @@ dependencies {
 }
 ```
 
-To try a build of your own, publish it locally, then use version `0.3.0-SNAPSHOT`, the next
-one:
+To try your own build, publish it locally as the next version, `0.3.0-SNAPSHOT`:
 
 ```sh
-./gradlew publish -Pversion=0.3.0-SNAPSHOT               # to the local Ivy repository
-./gradlew publishToMavenLocal -Pversion=0.3.0-SNAPSHOT   # to the local Maven repository
+./gradlew publish -Pversion=0.3.0-SNAPSHOT               # local Ivy repository
+./gradlew publishToMavenLocal -Pversion=0.3.0-SNAPSHOT   # local Maven repository
 ```
 
-## Features
+## Embedded
+
+Add the dependency, then start the profiler from the application:
 
 ```java
-Profiler.builder().observe(app).start();   // serves the interface on loopback, logs its URL
+Profiler.builder().observe(app).start();   // serves the interface on loopback and logs its URL
 ```
 
-- **Live operations**: the operations of the last 1 to 60 minutes (count, total time and its
-  share, p50/p99/max, errors, bytes), kept by counters whether a session records or not. **Arm**
-  records a session on the next call of an operation, from any client, named after it.
+`observe(app)` is for flak apps; operations declared with the `jfrweb.ops` API are picked up
+without it. Here is what you get.
 
-  ![Live operations](docs/screenshots/live.png)
+**Live operations.** Count, total time and its share, p50/p99/max, errors and bytes for each
+operation over the last 1 to 60 minutes. These are plain counters, so they cost next to nothing
+and run whether or not anything is being recorded. **Arm** on a row records a session on the next
+call of that operation, from any client.
 
-- **Sessions**: start one, use the application, stop it, name it if you like. Its report states
-  how it was recorded, shows a timeline of the operations in flight by name (hover to bring one
-  forward, drag to select an interval, click one to see it alone in that bucket), lists the
-  operations by total time and the slowest of them, and shows flame graphs by operation, thread,
-  interval or single operation. An operation also shows the exceptions it created and its slow
-  file and socket accesses. The `.jfr` file can be downloaded, e.g. for JDK Mission Control. Given a
-  `directory(...)`, the profiler lists its sessions again after a restart.
+![Live operations](docs/screenshots/live.png)
 
-  ![Report of a session: how it was recorded, timeline](docs/screenshots/report.png)
+**Sessions.** Start one, use the application, stop it. The report tells you how the recording
+went (sampling rates, truncated stacks, the usual JFR biases), then shows a timeline of the
+operations in flight. Hover to bring one forward, drag to select an interval, click a bar to see
+that operation alone. Below it: the operations by total time, the slowest calls, and flame graphs
+by operation, thread, interval or single call. A single call also lists the exceptions it created
+and its slow file and socket accesses. You can name sessions, download the `.jfr` for JDK Mission
+Control, and if you give the profiler a `directory(...)`, it lists them again after a restart.
 
-  An interval selected on the timeline, or zoomed in on, narrows the sections below it:
+![Report of a session: how it was recorded, timeline](docs/screenshots/report.png)
 
-  ![Interval selected on the timeline](docs/screenshots/interval.png)
+Selecting an interval on the timeline, or zooming in, narrows everything below it:
 
-  Flame graph of the requests of a route, picked in the table:
+![Interval selected on the timeline](docs/screenshots/interval.png)
 
-  ![Flame graph of a route](docs/screenshots/flame.png)
+The flame graph of one route, picked in the table:
 
-  A single request, with its exceptions, slow file and socket accesses, and flame graph:
+![Flame graph of a route](docs/screenshots/flame.png)
 
-  ![A request and its flame graph](docs/screenshots/request.png)
+And a single request, with its exceptions, slow I/O and flame graph:
 
-- **Auto mode**: sessions start by themselves when a matching operation begins (name patterns,
-  and/or only the requests of the browser armed), before it runs, and stop once no matching
-  operation has run for a few seconds; once or every time, named or not.
+![A request and its flame graph](docs/screenshots/request.png)
 
-  ![Sessions, with the auto mode panel](docs/screenshots/sessions.png)
+**Auto mode.** Arm it with name patterns, and optionally "only requests from this browser", and a
+session starts by itself when a matching operation begins, before the handler runs, so the
+operation is recorded from its first line. It stops once nothing matching has run for a few
+seconds. Once, or every time.
 
-- **Operation history**, for production: no profiling, only the counters of the operations
-  written to disk at a regular interval, in hourly files purged by age and size. It runs alone;
-  the profiler's History of operations page and the `history` command read it.
+![Sessions, with the auto mode panel](docs/screenshots/sessions.png)
 
-  ![History of operations page](docs/screenshots/history.png)
+**History of operations**, for production. No profiling here: the same counters as the live view,
+written to disk every minute into hourly files, purged by age and size. It runs on its own; give
+its directory to the profiler to browse it, or use the `history` command.
 
 ```java
 OperationHistory.builder()
-                .directory(Path.of("logs/operations"))  // dedicated: what it holds may be deleted
-                .interval(Duration.ofMinutes(1))        // the defaults: 1 minute,
-                .maxAge(Duration.ofDays(7))             // 7 days,
-                .maxSize(100L << 20)                    // 100 MiB
+                .directory(Path.of("logs/operations"))  // a dedicated directory: old files get deleted
+                .interval(Duration.ofMinutes(1))        // the defaults: every minute,
+                .maxAge(Duration.ofDays(7))             // kept 7 days,
+                .maxSize(100L << 20)                    // 100 MiB at most
                 .observe(app)
                 .start();
-Profiler.builder().observe(app).history(Path.of("logs/operations")).start();   // to browse it
+Profiler.builder().observe(app).history(Path.of("logs/operations")).start();
 ```
 
-```sh
-./gradlew run --args="history logs/operations --from 2026-10-13T10:00 --to 2026-10-13T11:00"
-```
+![History of operations page](docs/screenshots/history.png)
 
-- **Snapshots**, for production too: a rolling recording keeps the last 5 minutes, with the JDK's
-  light settings, and saves them when something goes wrong, with nothing to configure: an
-  operation 4 times slower than the usual p99 of its name (and over 1 s), or a burst of errors.
-  Also saved by
-  hand, e.g. right after a problem. They are listed with the sessions, with why they were taken.
-  The sessions page above shows one, with the button to take one by hand.
+**Snapshots**, for production too. A rolling recording keeps the last 5 minutes with the JDK's
+lightweight settings, and saves them when something looks wrong: a call 4 times slower than the
+usual p99 of its operation (and over a second), or a burst of errors. There is nothing to tune.
+You can also save one by hand, right after you saw a problem. Snapshots show up with the
+sessions, along with the reason they were taken.
 
 ```java
 Snapshots snapshots = Snapshots.builder()
-                               .directory(Path.of("logs/snapshots"))   // dedicated, kept across restarts
+                               .directory(Path.of("logs/snapshots"))   // kept across restarts
                                .observe(app)
                                .start();
-Profiler.builder().observe(app).snapshots(snapshots).start();          // to list and take them
+Profiler.builder().observe(app).snapshots(snapshots).start();
 ```
 
-A builder sets the rest: address, port, guard, directory of the recordings, JFR settings, or
-mounting on an existing flak server:
+The builder covers the rest: address, port, who may connect, where recordings go, JFR settings,
+or mounting the interface on a flak server you already run:
 
 ```java
 Profiler.builder()
         .mount(factory, "/profiler")     // one more app on the server of an AppFactory
-        .guard(loginCheck)               // a BeforeHook; by default, non-local clients are refused
+        .guard(loginCheck)               // a BeforeHook; by default only local clients get in
         .start();
 ```
 
-jfr-web depends on flak's JDK backend, so that `Profiler.start()` works in any application. A flak
-application on Netty should then pick its backend explicitly: `Flak.getFactory()` takes the first
-one it finds on the classpath.
+jfr-web depends on flak's JDK backend, so that `Profiler.start()` works in any application. If
+your flak app runs on Netty, pick its backend explicitly: `Flak.getFactory()` takes the first one
+it finds on the classpath.
 
-To try it: `./gradlew demo -Pdemo.session=true` runs a small flak app with the profiler, records
-a first session, and prints the URLs. The screenshots above come from it, with
-`-Pdemo.load=true` for background traffic: `node docs/screenshots/capture.mjs <profiler URL>`
-takes them again, in headless Edge or Chrome.
+## Declaring operations
 
-### Standalone: profiling another JVM
-
-jfr-web also runs on its own, to profile the other JVMs of the machine with nothing to install
-in them and no change to their command line (JDK 17 or later, the same user):
-
-```sh
-./gradlew standalone                     # or: jfr-web standalone [--port 8095] [--dir ~/.jfr-web]
-```
-
-It opens a page listing the JVMs. **Connect** attaches to one, through the attach API and JMX, as
-JDK Mission Control does, and opens the interface of the profiler for it: sessions, reports, live
-operations, auto mode. It stays connected until **Disconnect**, another JVM connected to, or the
-JVM ending. Its operations come from the events of flak's requests (flak 3.4.0 or
-later) and of the `jfrweb.ops` API, streamed as they end; a JVM with neither still gets sessions
-and flame graphs by thread. One JVM is attached at a time.
-
-The sessions are kept by application, in `~/.jfr-web/<application>`, its main class or its jar
-without the version: they are listed again when the application or jfr-web restarts, from the
-same page, even with no JVM running.
-
-Compared to embedding it:
-
-- auto mode and **Arm** hear of an operation only once it ends: the session records from the moment
-  it is armed, and stops once a matching operation has ended, as usual after it; the browser of a
-  request is not known
-- on Windows, JFR samples less often than asked: the timer that makes it sample as asked
-  runs in the JVM profiled when embedded
-- the stream of operations is a recording in the JVM, bounded to a minute: a jfr-web that is
-  killed leaves it there until the JVM ends; it raises the stack depth to 256 frames first if
-  nothing recorded in that JVM yet
-- no snapshots or operation history yet
-
-### Any application: operations
-
-An application that is not a flak app declares its operations, and gets the same features: live
-statistics, history, snapshots, auto mode, and in sessions, timeline and flame graphs by
-operation. The profiler, the history and the snapshots hear of them with no `observe()`.
+If your application isn't a flak app, tell jfr-web what its operations are. The live view,
+history, snapshots, auto mode and per-operation reports then work just as they do for requests.
 
 ```java
 try (Operation op = Operations.begin("quote").detail(symbol)) {   // grouped by name
@@ -177,63 +179,85 @@ try (Operation op = Operations.begin("quote").detail(symbol)) {   // grouped by 
 }
 ```
 
-A synchronous operation runs on the thread that begins it, which works only for it until it
-ends. An asynchronous one may end on any thread, e.g. when a reply is sent from a callback: its
-duration is that of the whole, including the time it waited, and its samples are those of the
-threads that declare working for it, in segments.
+A synchronous operation like this one runs on the thread that began it. When the work hops
+between threads, say a request checked on one thread and answered from a callback on another,
+use an asynchronous operation. Its duration covers the whole thing, waiting included, and its
+samples come from the threads that declare they're working for it:
 
 ```java
 Operation op = Operations.beginAsync("order").detail(line);
-engine.execute(op.wrap(() -> {    // a segment: this thread works for the operation
+engine.execute(op.wrap(() -> {    // this thread works for the operation while it runs this
   ...
   op.close();
 }));
 ```
 
-`op.failed(e)` counts it among the errors. Recordings get operations from the `jfrweb.Operation`
-event, which the sessions and snapshots of jfr-web enable.
+`op.failed(e)` counts it as an error. Recordings see operations through the `jfrweb.Operation`
+event, which jfr-web's sessions and snapshots turn on.
 
-`./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true` runs an order server over TCP, which
-does not speak HTTP, with clients of its own. Its quotes are synchronous; its orders are checked
-on the connection's thread, then wait for the matching engine, a single thread, which replies:
+`./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true` runs an order server over plain TCP, with
+its own clients. Quotes are synchronous. Orders are checked on the connection's thread, then wait
+for a single-threaded matching engine, which replies:
 
 ![A session of the TCP demo: operations in flight](docs/screenshots/tcp-report.png)
 
-An order: 5 ms on the connection's thread, 50 ms on the engine's after 80 ms in its queue. Its
-flame graph only has the samples of its segments:
+Here an order spent 5 ms on the connection's thread, waited 80 ms in the engine's queue, then
+took 50 ms there. Its flame graph only has the samples of those two stretches:
 
 ![An asynchronous operation, its threads and its flame graph](docs/screenshots/tcp-request.png)
 
-### Offline analysis
+## Standalone
 
-A recording made outside jfr-web, e.g. with `jcmd` (below), JDK Mission Control or a snapshot, can
-be browsed in the web interface:
-
-```sh
-./gradlew run --args="open app.jfr"                        # or: jfr-web open <file.jfr | dir>...
-./gradlew run --args="open logs/snapshots --history logs/operations"
-```
-
-Each file is listed as a session, with its whole report: timeline with intervals and zoom,
-operations, slowest operations, flame graphs with any filters. With `--history`, the History of
-operations page too. There is no JVM behind them: no live operations, auto mode or session to
-start. Or from the command line:
+Standalone mode profiles the other JVMs on your machine without touching them: no dependency, no
+change to their command line. It needs JDK 17 or later on both sides, and the same user.
 
 ```sh
-./gradlew run --args="report app.jfr"                    # how it was recorded, operations table
-./gradlew run --args="flame app.jfr -o flame.html"       # wall-clock flame graph, rooted by operation
-./gradlew run --args="flame app.jfr -o busy.html --operation 'GET /api/.*'"
+./gradlew standalone          # or: jfr-web standalone [--port 8095] [--dir ~/.jfr-web]
 ```
 
-`flame` takes `--thread <regex>` to keep some threads, `--all` to add the samples taken outside
-operations, and `--collapsed` for collapsed stacks instead of HTML.
+A page lists the running JVMs. **Connect** attaches to one the way JDK Mission Control does
+(attach API, then JMX) and opens the usual interface for it: sessions, reports, live operations,
+Arm and auto mode. It stays connected until you click **Disconnect**, connect to another JVM, or
+the JVM exits. One JVM at a time.
 
-The recording must enable flak's request event (flak 3.4.0+) or jfr-web's operation events
-(`jfrweb.Operation` and `jfrweb.OperationSegment`), which are off by default:
-`recording.enable("flak.Request")`, or in a `.jfc` file. The `profile` settings of the JDK
-sample Java code every 10 ms and native calls every 20 ms.
+Operations come from the target's own JFR events (flak's requests, the `jfrweb.ops` API),
+streamed as they end. A JVM with neither still gets sessions and flame graphs by thread.
 
-To record an application that is already running, with no change to it (JDK 21):
+Sessions are stored per application in `~/.jfr-web/<application>`, where the application is the
+main class, or the jar name without its version. They survive restarts of both sides, and you
+can browse them from the same page even when the application isn't running.
+
+What's different from embedding:
+
+- The target only reports an operation once it's over, too late to start recording it. So **Arm**
+  and auto mode start recording right away and stop once a matching operation has completed.
+  You'll see "waiting for..." until then.
+- "Only requests from this browser" isn't available: the events don't carry the cookie.
+- On Windows, JFR samples less often than you ask unless a timer trick runs inside the profiled
+  JVM, which standalone mode can't do.
+- The operation stream is a small recording inside the target, capped at one minute of data. If
+  jfr-web gets killed rather than stopped, that recording lingers until the target exits.
+- No history of operations or snapshots yet.
+
+## Opening recordings
+
+Got `.jfr` files already? Snapshots, a `jcmd` dump, something a colleague sent? Open them in the
+same interface:
+
+```sh
+jfr-web open app.jfr
+jfr-web open logs/snapshots --history logs/operations      # every .jfr in the directory
+```
+
+Each file becomes a session with the full report: timeline with interval selection and zoom,
+operations, slowest calls, and flame graphs with any combination of filters. `--history` adds the
+History of operations page. There's no JVM behind the files, so the live view, auto mode and
+starting sessions are left out.
+
+Operations only show up if the recording has their events. jfr-web's own sessions and snapshots
+always do. For a recording you make yourself, turn on flak's request event or jfr-web's operation
+events (`jfrweb.Operation` and `jfrweb.OperationSegment`), all off by default. For instance, to
+record an application that is already running (JDK 21):
 
 ```sh
 jcmd <pid> JFR.start name=jfrweb settings=profile +flak.Request#enabled=true
@@ -242,29 +266,50 @@ jcmd <pid> JFR.dump name=jfrweb filename=workload.jfr
 jcmd <pid> JFR.stop name=jfrweb
 ```
 
-### Static export
+## Static export
 
-The interface and some recordings can be written as a static site, which any web server serves
-with no Java behind it, e.g. to share a report or publish a demo:
+`export` writes the interface and some recordings as a static site that any web server can host,
+with no Java behind it. Handy to share a report, and it's how the demo site is built.
 
 ```sh
-./gradlew run --args="export app.jfr other.jfr -o site/ --history logs/operations"
-./gradlew tcpDemo -Pdemo.export=site/       # the TCP demo: a session, 3 minutes of history
+jfr-web export app.jfr other.jfr -o site/ --history logs/operations
+./gradlew tcpDemo -Pdemo.export=site/       # the TCP demo: one session, 3 minutes of history
 ```
 
-The responses of the REST API are computed beforehand, for everything that can be reached by
-clicking. What takes a free input is left out: an interval selected on a timeline, the From and
-To of a flame graph, filters combined.
+Every API response reachable by clicking is computed up front. What needs free input isn't:
+selecting an interval on a timeline, the From and To of a flame graph, combined filters.
 
-Before publishing one, mind what a recording holds: the environment variables and system
-properties of the JVM, and the processes of the machine with their command lines, unless its
-settings turned them off (`jdk.InitialEnvironmentVariable`, `jdk.InitialSystemProperty`,
-`jdk.SystemProcess`), and its own command line. Recordings running at the same time share
-their events. `--no-recordings` leaves the `.jfr` files out of the site; the JDK's
-`jfr scrub --exclude-events ...` (JDK 19 and later) removes events from a copy of one.
+Before you publish one, remember what a recording can contain: the JVM's environment variables,
+system properties and command line, and the processes of the machine with theirs, unless the
+recording turned those events off (`jdk.InitialEnvironmentVariable`, `jdk.InitialSystemProperty`,
+`jdk.SystemProcess`). Recordings running at the same time share their events, too.
+`--no-recordings` leaves the `.jfr` files out of the site, and `jfr scrub --exclude-events ...`
+(JDK 19 and later) removes events from a copy of one.
 
-- [docs/requirements.md](docs/requirements.md): what the project must do
-- [ROADMAP.md](ROADMAP.md): milestones, what is done and what comes next
+## Command line
+
+For scripts, or when a browser is overkill:
+
+```sh
+jfr-web report app.jfr                                   # how it was recorded, operations table
+jfr-web flame app.jfr -o flame.html                      # wall-clock flame graph, rooted by operation
+jfr-web flame app.jfr -o busy.html --operation 'GET /api/.*'
+jfr-web history logs/operations --from 2026-10-13T10:00 --to 2026-10-13T11:00
+```
+
+`flame` also takes `--thread <regex>` to keep some threads, `--all` to include samples taken
+outside operations, and `--collapsed` for collapsed stacks instead of HTML.
+
+## Trying it out
+
+- `./gradlew demo -Pdemo.session=true -Pdemo.load=true` runs a small flak app with the profiler,
+  records a first session and keeps some traffic going. Most screenshots above come from it;
+  `node docs/screenshots/capture.mjs <profiler URL>` takes them again in headless Edge or Chrome.
+- `./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true` does the same for the TCP order server.
+- With either one running, `./gradlew standalone` lets you connect to it from outside.
+
+More: [docs/requirements.md](docs/requirements.md) for what the project sets out to do, and
+[ROADMAP.md](ROADMAP.md) for what's done and what's next.
 
 ## License
 
