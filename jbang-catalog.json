@@ -1,0 +1,11 @@
+{
+  "aliases": {
+    "jfr-web": {
+      "script-ref": "com.github.pcdv:jfr-web:0.2.0",
+      "main": "jfrweb.cli.Main",
+      "repositories": ["jitpack"],
+      "java": "17+",
+      "description": "Profiler for the JVM with a web interface, on Java Flight Recorder: run it standalone, open recordings, or analyze them from the command line"
+    }
+  }
+}

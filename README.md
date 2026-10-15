@@ -30,8 +30,7 @@ Embedded is the most complete: it sees operations as they start, which is what m
 and the browser-armed sessions work. The others build on the same interface and lose a little
 along the way, as explained in each section.
 
-In the examples, `jfr-web <command>` stands for `./gradlew run --args="<command>"` from a clone
-of this repository.
+Everything except embedded runs from the `jfr-web` command; see [Getting it](#getting-it).
 
 ## What your application needs to provide
 
@@ -60,7 +59,25 @@ operations are:
 
 ## Getting it
 
-Java 17 or later. Releases are on [JitPack](https://jitpack.io/#pcdv/jfr-web), like flak:
+Java 17 or later; standalone mode needs a JDK, not just a JRE.
+
+### The command
+
+Pick whichever suits you:
+
+- **[JBang](https://www.jbang.dev/)**, nothing to download by hand:
+  `jbang jfr-web@pcdv/jfr-web open app.jfr`. It fetches the latest release and caches it.
+- **From a [GitHub release](https://github.com/pcdv/jfr-web/releases)**: either
+  `jfr-web-<version>.zip`, which you unpack and put its `bin/` on your PATH (`jfr-web`, or
+  `jfr-web.bat` on Windows), or `jfr-web-<version>-all.jar`, a single file you run with
+  `java -jar jfr-web-<version>-all.jar open app.jfr`.
+- **From a clone**: `./gradlew installDist` builds the same thing as the zip in
+  `build/install/jfr-web`, and `./gradlew cliJar` the single jar. `./gradlew run --args="..."`
+  runs a command straight away.
+
+### The library
+
+To embed it, releases are on [JitPack](https://jitpack.io/#pcdv/jfr-web), like flak:
 
 ```groovy
 repositories {
@@ -354,6 +371,12 @@ outside operations, and `--collapsed` for collapsed stacks instead of HTML.
 
 More: [docs/requirements.md](docs/requirements.md) for what the project sets out to do, and
 [ROADMAP.md](ROADMAP.md) for what's done and what's next.
+
+## Releasing
+
+Push a tag like `0.3.0`. JitPack builds the library from it, and the release workflow attaches
+the zip, the tarball and the single jar to a GitHub release (made for the tag if there isn't one
+yet). Then bump the version in `jbang-catalog.json` and in the README's coordinates.
 
 ## License
 

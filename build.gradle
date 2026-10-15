@@ -76,6 +76,34 @@ application {
   mainClass = 'jfrweb.cli.Main'
 }
 
+// the command line, in the library's jar too: jbang runs it from its
+// coordinates, see jbang-catalog.json
+jar {
+  manifest {
+    attributes 'Main-Class': application.mainClass.get()
+  }
+}
+
+// the command line as one jar, its dependencies in it, for the releases:
+// java -jar jfr-web-<version>-all.jar <command>
+tasks.register('cliJar', Jar) {
+  group = 'distribution'
+  description = 'Builds the command line as a self-contained jar.'
+  archiveClassifier = 'all'
+  manifest {
+    attributes 'Main-Class': application.mainClass.get()
+  }
+  from sourceSets.main.output
+  dependsOn configurations.runtimeClasspath
+  from {
+    configurations.runtimeClasspath.collect { zipTree(it) }
+  }
+  // their manifests and signatures; no two dependencies declare the same
+  // service
+  exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 // a flak app to profile, and the profiler: see Demo. Ports, the recording of a
 // first session, background traffic, and the directory of the endpoint history
 // (build/demo-history by default): -Pdemo.port=, -Pprofiler.port=,

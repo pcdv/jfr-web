@@ -1,0 +1,43 @@
+name: release
+
+# a tag like 0.3.0 makes a GitHub release of the command line: its
+# distribution (bin/jfr-web, lib/), as a zip and a tarball, and a
+# self-contained jar. JitPack builds the library from the same tag
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release the command line
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build the distributions
+        run: ./gradlew distZip distTar cliJar -Pversion=${{ github.ref_name }}
+
+      # a release made by hand for the tag keeps its notes
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" --clobber \
+            "build/distributions/jfr-web-$TAG.zip" \
+            "build/distributions/jfr-web-$TAG.tar" \
+            "build/libs/jfr-web-$TAG-all.jar"
