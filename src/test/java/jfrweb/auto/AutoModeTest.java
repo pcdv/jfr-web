@@ -168,6 +168,35 @@ public class AutoModeTest {
   }
 
   @Test
+  public void testFedRecordsAsArmedUntilAnOperationEnded() throws Exception {
+    try (AutoMode fed = AutoMode.fed(sessions)) {
+      fed.arm(new Trigger(List.of("work"), null, false, Duration.ofMillis(200), Duration.ofSeconds(10), "fed"));
+      // operations are only known once they end: it records from now
+      Session s = fed.getSession();
+      Assert.assertNotNull(s);
+      Assert.assertEquals("auto: waiting for work", s.getTrigger());
+      Assert.assertTrue(fed.isWaiting());
+      fed.ended("other");
+      Thread.sleep(500);
+      Assert.assertEquals("waits, whatever the idle time", Session.State.RECORDING, s.getState());
+
+      fed.ended("work");
+      Assert.assertFalse(fed.isWaiting());
+      for (int i = 0; i < 50 && s.getState() == Session.State.RECORDING; i++)
+        Thread.sleep(50);
+      Assert.assertEquals("stopped once idle", Session.State.STOPPED, s.getState());
+      Assert.assertNull("once", fed.getTrigger());
+
+      // disarmed while waiting: nothing to keep recording for
+      fed.arm(new Trigger(List.of("work"), null, false, Duration.ofMillis(200), Duration.ofSeconds(10)));
+      Session waiting = fed.getSession();
+      fed.disarm();
+      Assert.assertEquals(Session.State.STOPPED, waiting.getState());
+      Assert.assertNull(fed.getSession());
+    }
+  }
+
+  @Test
   public void testPatterns() {
     Trigger t = new Trigger(List.of("GET /api/*", "* /static/*.js"), null, false,
                             Trigger.DEFAULT_IDLE, Trigger.DEFAULT_MAX);

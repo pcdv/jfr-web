@@ -25,7 +25,7 @@ import {showTarget} from './components/target.js';
 const routes = [
   [/^#\/sessions\/(\d+)$/, renderSession, p => `Session ${p[0]}`],
   [/^#\/live$/, renderLive, () => 'Live operations'],
-  [/^#\/history$/, renderHistory, () => 'History'],
+  [/^#\/history$/, renderHistory, () => 'History of operations'],
   [/^(#\/?)?$/, renderSessions, () => 'Sessions'],
 ];
 

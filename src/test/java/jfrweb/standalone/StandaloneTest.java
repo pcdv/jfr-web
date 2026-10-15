@@ -96,7 +96,8 @@ public class StandaloneTest {
     // armed: a session once a matching operation ends, as long as they come
     Assert.assertEquals("no browser in events", 400, post(BASE + "api/auto?patterns=work&browser=true").statusCode());
     Assert.assertEquals(200, post(BASE + "api/auto?patterns=work&max=1&name=auto+one").statusCode());
-    waitFor(BASE + "api/sessions", b -> b.contains("\"id\":2,\"state\":\"STOPPED\",\"name\":\"auto one\""));
+    waitFor(BASE + "api/sessions", b -> b.contains("\"id\":2,\"state\":\"STOPPED\",\"name\":\"auto one\","
+                                                   + "\"trigger\":\"auto: waiting for work\""));
 
     // disconnected, then connected again
     Assert.assertEquals(200, post("api/detach").statusCode());

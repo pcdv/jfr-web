@@ -23,14 +23,17 @@ export function renderSessions(root) {
   /** @type {number | undefined} */
   let timer;
   let stopped = false;
+  /** The latest refresh: an earlier one answering after it is ignored. */
+  let latest = 0;
   /** The auto mode shown, redrawn only when it changes: its form may be in use. */
   let autoShown = '';
 
   async function refresh() {
     clearTimeout(timer);
+    const mine = ++latest;
     try {
       const [sessions, autoState, snapshots] = await Promise.all([api.listSessions(), api.getAuto(), api.getSnapshots()]);
-      if (stopped)
+      if (stopped || mine !== latest)
         return;
       const autoJson = JSON.stringify(autoState);
       // a static export only shows what was recorded
@@ -44,7 +47,8 @@ export function renderSessions(root) {
         timer = window.setTimeout(refresh, autoState.armed || !snapshots.available ? POLL : 5 * POLL);
     }
     catch (e) {
-      replace(content, errorBox(e));
+      if (mine === latest)
+        replace(content, errorBox(e));
     }
   }
 

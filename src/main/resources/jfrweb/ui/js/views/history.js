@@ -29,7 +29,12 @@ const MEASURE_KEY = 'jfrweb.history.measure';
 export function renderHistory(root) {
   const toolbar = h('div', {class: 'toolbar history-toolbar'});
   const content = h('div');
-  root.append(h('h1', null, 'History'), toolbar, content);
+  root.append(h('h1', null, 'History of operations'),
+    h('p', {class: 'hint'}, 'The counts and durations of the operations, written to a directory at a regular ',
+      'interval with no profiling: what the application did over hours or days, sessions or not.'),
+    toolbar, content);
+  // a JVM connected to from outside: its history is not read yet
+  const remote = api.getTarget().then(t => t !== null).catch(() => false);
 
   // a static export has the period it was exported for, whole
   const exported = api.getStaticHistory();
@@ -46,7 +51,7 @@ export function renderHistory(root) {
     replace(toolbar, exported ? null : periodPicker());
     try {
       const history = await api.getHistory(period.from, period.to, name);
-      replace(content, render(history));
+      replace(content, render(history, await remote));
     }
     catch (e) {
       replace(content, errorBox(e));
@@ -93,12 +98,18 @@ export function renderHistory(root) {
       pick(p, null, false);
   }
 
-  /** @param {api.History} history */
-  function render(history) {
+  /**
+   * @param {api.History} history
+   * @param {boolean} remote whether the JVM is one connected to from outside
+   */
+  function render(history, remote) {
+    if (!history.available && remote)
+      return h('p', {class: 'empty'}, 'Not available yet for a JVM connected to from outside: only its sessions ',
+        'and live operations are.');
     if (!history.available)
-      return h('p', {class: 'empty'}, 'No history: pass its directory to the profiler, ',
-        h('code', null, 'Profiler.builder().history(dir)'), ', where an ', h('code', null, 'OperationHistory'),
-        ' writes it.');
+      return h('p', {class: 'empty'}, 'This application keeps no history of operations. To keep one, it starts an ',
+        h('code', null, 'OperationHistory'), ', which writes them to a directory, then gives that directory ',
+        'to the profiler to browse it here: ', h('code', null, 'Profiler.builder().history(dir)'), '.');
     if (!history.intervals)
       return h('p', {class: 'empty'}, `Nothing in the history from ${period.from.toLocaleString()} to ${period.to.toLocaleString()}: it was not written then.`);
 

@@ -29,6 +29,8 @@ export function renderLive(root) {
   /** @type {number | undefined} */
   let timer;
   let stopped = false;
+  /** The latest refresh: an earlier one answering after it is ignored. */
+  let latest = 0;
   /** @type {number | null} the session the auto mode records, last seen */
   let recording = null;
   /** @type {number | null} the session it recorded since, to open */
@@ -80,9 +82,11 @@ export function renderLive(root) {
 
   async function refresh() {
     clearTimeout(timer);
+    const mine = ++latest;
     try {
       const [live, auto] = await Promise.all([api.getLive(window_), api.getAuto()]);
-      if (stopped)
+      // e.g. a poll for the window shown before another one was picked
+      if (stopped || mine !== latest)
         return;
       showAuto(auto);
       replace(toolbar, windowPicker(live, w => {
@@ -102,7 +106,8 @@ export function renderLive(root) {
       timer = window.setTimeout(refresh, POLL);
     }
     catch (e) {
-      replace(content, errorBox(e));
+      if (mine === latest)
+        replace(content, errorBox(e));
     }
   }
 
@@ -122,6 +127,11 @@ export function renderLive(root) {
  */
 function autoLine(auto, recorded, onDisarm) {
   const named = auto.name ? [' named ', h('b', null, auto.name)] : [];
+  if (auto.recording !== null && auto.waiting)
+    return h('p', {class: 'armed-line'}, h('span', {class: 'state recording'}, 'Recording '),
+      h('a', {href: `#/sessions/${auto.recording}`}, `session ${auto.recording}`), named, ', waiting for ', what(auto),
+      `: it stops once one has ended, after ${auto.idle} s without another. `,
+      h('button', {class: 'small', onclick: onDisarm}, 'Disarm'));
   if (auto.recording !== null)
     return h('p', {class: 'armed-line'}, h('span', {class: 'state recording'}, 'Recording '),
       h('a', {href: `#/sessions/${auto.recording}`}, `session ${auto.recording}`), named, ', started by ', what(auto), '.');

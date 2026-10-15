@@ -149,6 +149,7 @@ public class ProfilerRoutes {
     }
     Session s = auto.getSession();
     m.put("recording", s == null ? null : s.getId());
+    m.put("waiting", auto.isWaiting());
     return m;
   }
 

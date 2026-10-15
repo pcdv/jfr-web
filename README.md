@@ -80,9 +80,9 @@ Profiler.builder().observe(app).start();   // serves the interface on loopback, 
 
 - **Operation history**, for production: no profiling, only the counters of the operations
   written to disk at a regular interval, in hourly files purged by age and size. It runs alone;
-  the profiler's History page and the `history` command read it.
+  the profiler's History of operations page and the `history` command read it.
 
-  ![History page](docs/screenshots/history.png)
+  ![History of operations page](docs/screenshots/history.png)
 
 ```java
 OperationHistory.builder()
@@ -155,8 +155,9 @@ same page, even with no JVM running.
 
 Compared to embedding it:
 
-- auto mode and **Arm** hear of an operation once it ends: the session starts after the first
-  matching one, not before it, and the browser of a request is not known
+- auto mode and **Arm** hear of an operation only once it ends: the session records from the moment
+  it is armed, and stops once a matching operation has ended, as usual after it; the browser of a
+  request is not known
 - on Windows, JFR samples less often than asked: the timer that makes it sample as asked
   runs in the JVM profiled when embedded
 - the stream of operations is a recording in the JVM, bounded to a minute: a jfr-web that is

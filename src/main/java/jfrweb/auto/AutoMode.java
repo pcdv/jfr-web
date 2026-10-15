@@ -46,6 +46,11 @@ public final class AutoMode implements AutoCloseable {
   /** The session started by this, while it records. */
   private Session session;
   private long sessionStart;
+  /**
+   * When fed: the session started as armed, no matching operation ended yet.
+   * It records until one has, then stops as usual.
+   */
+  private boolean waiting;
   /** Matching operations in flight, and when the last one ended (nanoTime). */
   private int inFlight;
   private long lastEnd;
@@ -58,10 +63,11 @@ public final class AutoMode implements AutoCloseable {
   }
 
   /**
-   * Sessions started by the operations reported to {@link #ended(String)}
+   * Sessions triggered by the operations reported to {@link #ended(String)}
    * only, e.g. those of another JVM, read from its events. They are reported
-   * once they end: the session starts after the first matching operation, not
-   * before it, and the browser of a request is not known.
+   * once they end, too late to start a session that records them: the
+   * session starts as armed, waits for a matching operation to end, then
+   * stops as usual. The browser of a request is not known.
    */
   public static AutoMode fed(Sessions sessions) {
     return new AutoMode(sessions, false);
@@ -108,8 +114,48 @@ public final class AutoMode implements AutoCloseable {
   public void ended(String operation) {
     Trigger t = trigger;
     if (t != null && t.browser() == null && t.matches(operation, null)) {
+      synchronized (this) {
+        if (session != null && waiting) {
+          waiting = false;
+          // its maximum duration counts from now: waiting may be long
+          sessionStart = System.nanoTime();
+          lastEnd = sessionStart;
+          return;
+        }
+      }
+      // no session waiting, e.g. another one recorded when armed: one now,
+      // after it
       begin(t, operation);
       end();
+    }
+  }
+
+  /**
+   * Whether the session started records while waiting for a matching
+   * operation, when fed.
+   */
+  public synchronized boolean isWaiting() {
+    return session != null && waiting;
+  }
+
+  /**
+   * When fed: starts the session that waits for a matching operation, if
+   * nothing records.
+   */
+  private synchronized void startWaiting(Trigger t) {
+    if (session != null || sessions.getRecording() != null)
+      return;
+    try {
+      session = sessions.start("auto: waiting for "
+                               + (t.patterns().isEmpty() ? "any operation" : String.join(", ", t.patterns())));
+      session.setName(t.name());
+      waiting = true;
+      inFlight = 0;
+      sessionStart = System.nanoTime();
+      lastEnd = sessionStart;
+    }
+    catch (IOException | RuntimeException e) {
+      log.log(System.Logger.Level.WARNING, "Could not start a session", e);
     }
   }
 
@@ -137,13 +183,22 @@ public final class AutoMode implements AutoCloseable {
       }
     }
     this.trigger = trigger;
+    if (isFed())
+      startWaiting(trigger);
   }
 
   /**
-   * Stops waiting. A session it started keeps recording until idle.
+   * Stops waiting. A session it started keeps recording until idle, unless
+   * it was still waiting for an operation, when fed.
    */
   public void disarm() {
     this.trigger = null;
+    synchronized (this) {
+      if (session != null && waiting) {
+        sessions.stop(session.getId());
+        sessionEnded();
+      }
+    }
   }
 
   /**
@@ -194,8 +249,13 @@ public final class AutoMode implements AutoCloseable {
    * Stops the session once idle or too long.
    */
   synchronized void check() {
-    if (session == null)
+    if (session == null) {
+      // fed: armed again, or what recorded instead has stopped
+      Trigger t = trigger;
+      if (isFed() && t != null)
+        startWaiting(t);
       return;
+    }
     if (session.getState() == Session.State.STOPPED) {
       // stopped by hand
       sessionEnded();
@@ -206,6 +266,8 @@ public final class AutoMode implements AutoCloseable {
     long idleLimit = (t != null ? t.idle() : Trigger.DEFAULT_IDLE).toNanos();
     long maxLimit = (t != null ? t.max() : Trigger.DEFAULT_MAX).toNanos();
     long now = System.nanoTime();
+    if (waiting)
+      return;
     boolean idle = inFlight == 0 && now - lastEnd >= idleLimit;
     boolean tooLong = now - sessionStart >= maxLimit;
     if (idle || tooLong) {
@@ -216,6 +278,7 @@ public final class AutoMode implements AutoCloseable {
 
   private void sessionEnded() {
     session = null;
+    waiting = false;
     Trigger t = trigger;
     if (t != null && !t.repeat())
       trigger = null;

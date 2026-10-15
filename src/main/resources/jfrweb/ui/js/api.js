@@ -197,6 +197,8 @@ export function getLive(window) {
  * @property {number} [max] maximum duration of a session, in seconds
  * @property {string | null} [name] that of the sessions it starts
  * @property {number | null} recording the id of the session it started, while it records
+ * @property {boolean} [waiting] whether that session records while waiting for a matching operation to
+ *           end: from a JVM connected to from outside, operations are only known once they end
  */
 
 /**

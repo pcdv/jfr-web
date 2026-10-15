@@ -38,7 +38,8 @@ export function autoPanel(state, refresh) {
 function status(s) {
   if (!s.observing || !s.armed)
     return h('span', {class: 'hint'}, '· off');
-  return h('span', {class: 'state recording'}, s.recording !== null ? `· recording session ${s.recording}` : '· armed');
+  return h('span', {class: 'state recording'}, s.recording === null ? '· armed'
+    : `· recording session ${s.recording}${s.waiting ? ', waiting for an operation' : ''}`);
 }
 
 /**
@@ -92,7 +93,8 @@ function form(state, refresh) {
     h('label', {class: 'label', for: 'auto-patterns'}, 'Operations'),
     h('div', null, patterns,
       h('div', {class: 'hint'}, 'Separated by commas; * matches anything; empty for any operation.',
-        state.fed ? ' The JVM tells of an operation once it ends: the session starts after the first one.' : null)),
+        state.fed ? ' The JVM tells of an operation only once it ends: the session records from the moment it is ' +
+                    'armed, until one has ended.' : null)),
     h('span', {class: 'label'}, 'Sessions'),
     h('div', {class: 'inline'},
       state.flakApps
