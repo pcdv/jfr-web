@@ -20,8 +20,9 @@ const FEW_SAMPLES = 10;
  * @property {HTMLElement} element
  * @property {(name: string | undefined) => void} showName lists the slowest
  *           operations of a name, or of all
- * @property {(interval: api.Interval) => void} showInterval keeps those in flight
- *           during an interval, or all of them
+ * @property {(interval: api.Interval, name?: string | null) => void} showInterval keeps
+ *           those in flight during an interval, or all of them; and those of a name too
+ *           when given, null for all
  */
 
 /**
@@ -75,8 +76,10 @@ export function slowestPanel(sessionId, onPick) {
       name = n;
       refresh();
     },
-    showInterval(i) {
+    showInterval(i, n) {
       interval = i;
+      if (n !== undefined)
+        name = n ?? undefined;
       refresh();
     },
   };

@@ -25,12 +25,18 @@ export function renderSession(root, params) {
 
   Promise.all([api.getReport(id), api.getTimeline(id)]).then(
     ([report, timeline]) => {
+      /** @type {string | undefined} the operation clicked on the timeline, whose filters it set */
+      let clicked;
       // the interval selected on the timeline, or zoomed in on, narrows
-      // everything below it
-      const showInterval = (/** @type {api.Interval} */ i) => {
+      // everything below it; an operation clicked there narrows the slowest
+      // and the flame graph to it, until the next selection
+      const showInterval = (/** @type {api.Interval} */ i, /** @type {string | undefined} */ name) => {
         operations.showInterval(i);
-        slowest.showInterval(i);
-        flame.showInterval(i.from, i.to);
+        // back to all of them after a click, else as they were
+        const names = name ?? (clicked !== undefined ? null : undefined);
+        slowest.showInterval(i, names);
+        flame.showInterval(i.from, i.to, names);
+        clicked = name;
       };
       const timelinePanel = sessionTimeline(id, timeline, showInterval);
       // the operation picked among the slowest is outlined on the timeline

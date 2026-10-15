@@ -38,9 +38,10 @@ const PLOT_H = H - TOP - BOTTOM;
 
 /**
  * @param {import('../api.js').TimelineData} data
- * @param {((from: number | undefined, to: number | undefined) => void) | null} onSelect called
- *        with the interval dragged, in seconds since the start, or undefined when cleared; null
- *        when nothing can be selected
+ * @param {((from: number | undefined, to: number | undefined, name?: string) => void) | null} onSelect
+ *        called with the interval dragged, in seconds since the start, or undefined when cleared,
+ *        and the operation clicked when a click picks one bucket of it; null when nothing can be
+ *        selected
  * @param {TimelineOptions} [options]
  * @returns {HTMLDivElement & {mark: (from?: number, to?: number) => void}} the chart, whose
  *          mark() outlines a span, in seconds since the start, or removes it when undefined
@@ -202,6 +203,8 @@ export function timelineChart(data, onSelect, options = {}) {
 
   /** @type {number | null} */
   let dragFrom = null;
+  /** @type {string | undefined} the operation under the pointer when pressed */
+  let clicked;
 
   capture.addEventListener('pointermove', e => {
     const i = bucketAt(e);
@@ -226,6 +229,8 @@ export function timelineChart(data, onSelect, options = {}) {
     if (!onSelect)
       return;
     dragFrom = bucketAt(e);
+    // what a click picks: the focus follows the pointer, so it is the segment under it
+    clicked = focused >= 0 && focused < data.series.length ? data.series[focused].name : undefined;
     capture.setPointerCapture(e.pointerId);
   });
   capture.addEventListener('pointerup', e => {
@@ -234,8 +239,14 @@ export function timelineChart(data, onSelect, options = {}) {
     const to = bucketAt(e);
     const [a, b] = [Math.min(dragFrom, to), Math.max(dragFrom, to)];
     dragFrom = null;
+    if (a === b && clicked !== undefined) {
+      // a click on an operation selects it, in that bucket
+      showSelection(a, b);
+      onSelect(round(a * bucketSec), round((b + 1) * bucketSec), clicked);
+      return;
+    }
     if (a === b && selection.getAttribute('visibility') === 'visible') {
-      // a click clears the selection
+      // a click elsewhere clears the selection
       selection.setAttribute('visibility', 'hidden');
       onSelect(undefined, undefined);
       return;
@@ -282,7 +293,9 @@ export function timelineChart(data, onSelect, options = {}) {
     tooltip.style.right = left < r.width / 2 ? '' : `${r.width - left + 16}px`;
   }
 
-  const drag = onSelect ? ' Drag to select an interval: the sections below show only it; click to clear it.' : '';
+  const drag = onSelect
+    ? ' Drag to select an interval: the sections below show only it; click an operation to see it alone in that bucket, elsewhere to clear.'
+    : '';
   return Object.assign(h('div', null,
     h('p', {class: 'hint'}, options.hint ? options.hint : operations
       ? `Operations in flight, on average per ${fmt.duration(data.bucket)}, by name.${drag}`

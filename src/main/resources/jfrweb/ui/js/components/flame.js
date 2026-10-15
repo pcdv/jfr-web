@@ -11,8 +11,9 @@ import {label} from './slowest.js';
  * @typedef {object} FlamePanel
  * @property {HTMLElement} element
  * @property {(name: string) => void} showName selects the operations of a name
- * @property {(from: number | undefined, to: number | undefined) => void} showInterval
- *           selects an interval, in seconds since the start, or the whole session
+ * @property {(from: number | undefined, to: number | undefined, name?: string | null) => void}
+ *           showInterval selects an interval, in seconds since the start, or the whole
+ *           session; and the operations of a name too when given, null for all
  * @property {(op: api.InstanceRow) => void} showInstance shows one operation, until a
  *           filter changes, and brings the flame graph into view
  */
@@ -120,10 +121,12 @@ export function flamePanel(report, onInstance = () => {}) {
       update();
       reveal();
     },
-    showInterval(f, t) {
+    showInterval(f, t, n) {
       clearInstance();
       from.value = f === undefined ? '' : String(f);
       to.value = t === undefined ? '' : String(t);
+      if (n !== undefined)
+        name.value = n ?? '';
       update();
     },
     showInstance(r) {

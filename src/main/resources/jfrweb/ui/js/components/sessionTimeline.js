@@ -12,8 +12,9 @@ import {timelineChart} from './timeline.js';
 /**
  * @param {number} sessionId
  * @param {api.TimelineData} whole the timeline of the whole session
- * @param {(interval: api.Interval) => void} onInterval called with what the sections
- *        below should show: the selection, else the range zoomed in on, else all
+ * @param {(interval: api.Interval, name?: string) => void} onInterval called with what the
+ *        sections below should show: the selection, else the range zoomed in on, else all;
+ *        and the operation clicked, when a click picked one in a bucket
  * @returns {{element: HTMLElement, mark: (op: api.InstanceRow | null) => void}} the timeline,
  *          and what outlines the span of one operation on it, or removes the outline
  */
@@ -52,12 +53,12 @@ export function sessionTimeline(sessionId, whole, onInterval) {
       applyMark();
       return;
     }
-    drawn = timelineChart(data, (from, to) => {
+    drawn = timelineChart(data, (from, to, name) => {
       selection = from === undefined || to === undefined
         ? null
         : {from: round(offset + from), to: round(offset + to)};
       drawToolbar();
-      onInterval(selection ?? range);
+      onInterval(selection ?? range, name);
     }, {timeLabel: t => `${round(offset + t)} s`});
     replace(chart, drawn);
     applyMark();
