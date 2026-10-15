@@ -167,7 +167,24 @@ try {
 }
 finally {
   ws.close();
+  // killing the process leaves Edge's children running, on the debugging
+  // port: the next run would drive their stale page
+  await closeBrowser();
   proc.kill();
   await sleep(1000);
   rmSync(profile, {recursive: true, force: true, maxRetries: 5});
+}
+
+/** Closes the whole browser, through its own endpoint: Browser.close has no effect on a page's. */
+async function closeBrowser() {
+  try {
+    const {webSocketDebuggerUrl} = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+    const browser = new WebSocket(webSocketDebuggerUrl);
+    await new Promise((resolve, reject) => {
+      browser.addEventListener('open', resolve);
+      browser.addEventListener('error', reject);
+    });
+    browser.send(JSON.stringify({id: 1, method: 'Browser.close'}));
+    await new Promise(r => browser.addEventListener('close', r));
+  } catch (e) { /* already gone */ }
 }
