@@ -1,7 +1,7 @@
 {
   "aliases": {
     "jfr-web": {
-      "script-ref": "com.github.pcdv:jfr-web:0.2.0",
+      "script-ref": "com.github.pcdv:jfr-web:0.3.0",
       "main": "jfrweb.cli.Main",
       "repositories": ["jitpack"],
       "java": "17+",

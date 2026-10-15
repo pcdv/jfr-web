@@ -85,15 +85,15 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.github.pcdv:jfr-web:0.2.0'
+  implementation 'com.github.pcdv:jfr-web:0.3.0'
 }
 ```
 
-To try your own build, publish it locally as the next version, `0.3.0-SNAPSHOT`:
+To try your own build, publish it locally as the next version, `0.4.0-SNAPSHOT`:
 
 ```sh
-./gradlew publish -Pversion=0.3.0-SNAPSHOT               # local Ivy repository
-./gradlew publishToMavenLocal -Pversion=0.3.0-SNAPSHOT   # local Maven repository
+./gradlew publish -Pversion=0.4.0-SNAPSHOT               # local Ivy repository
+./gradlew publishToMavenLocal -Pversion=0.4.0-SNAPSHOT   # local Maven repository
 ```
 
 ## Embedded
@@ -374,7 +374,7 @@ More: [docs/requirements.md](docs/requirements.md) for what the project sets out
 
 ## Releasing
 
-Push a tag like `0.3.0`. JitPack builds the library from it, and the release workflow attaches
+Push a tag like `0.4.0`. JitPack builds the library from it, and the release workflow attaches
 the zip, the tarball and the single jar to a GitHub release (made for the tag if there isn't one
 yet). Then bump the version in `jbang-catalog.json` and in the README's coordinates.
 
