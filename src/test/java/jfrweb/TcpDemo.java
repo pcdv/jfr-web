@@ -237,11 +237,13 @@ public class TcpDemo {
                  .directory(Path.of(System.getProperty("demo.snapshots", "build/tcp-demo-snapshots")))
                  .start();
     // a static site is published: its recording leaves out the environment
-    // variables and system properties of the JVM
+    // variables and system properties of the JVM, and the processes of the
+    // machine with their command lines
     Map<String, String> settings = new HashMap<>(Sessions.defaultSettings());
     if (export != null) {
       settings.put("jdk.InitialEnvironmentVariable#enabled", "false");
       settings.put("jdk.InitialSystemProperty#enabled", "false");
+      settings.put("jdk.SystemProcess#enabled", "false");
     }
     Profiler profiler = Profiler.builder()
                                 .port(Integer.getInteger("profiler.port", 0))

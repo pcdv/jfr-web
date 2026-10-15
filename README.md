@@ -213,9 +213,11 @@ clicking. What takes a free input is left out: an interval selected on a timelin
 To of a flame graph, filters combined.
 
 Before publishing one, mind what a recording holds: the environment variables and system
-properties of the JVM, unless its settings turned them off (`jdk.InitialEnvironmentVariable`,
-`jdk.InitialSystemProperty`), and its command line. Recordings running at the same time share
-their events. `--no-recordings` leaves the `.jfr` files out of the site.
+properties of the JVM, and the processes of the machine with their command lines, unless its
+settings turned them off (`jdk.InitialEnvironmentVariable`, `jdk.InitialSystemProperty`,
+`jdk.SystemProcess`), and its own command line. Recordings running at the same time share
+their events. `--no-recordings` leaves the `.jfr` files out of the site; the JDK's
+`jfr scrub --exclude-events ...` (JDK 19 and later) removes events from a copy of one.
 
 - [docs/requirements.md](docs/requirements.md): what the project must do
 - [ROADMAP.md](ROADMAP.md): milestones, what is done and what comes next
