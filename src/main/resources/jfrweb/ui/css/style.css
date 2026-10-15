@@ -219,6 +219,34 @@ table.grid {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
+.grid td.share {
+  width: 30%;
+  min-width: 120px;
+}
+
+.share-track {
+  display: inline-block;
+  width: calc(100% - 44px);
+  height: 8px;
+  vertical-align: middle;
+}
+
+.share-bar {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+}
+
+.share-label {
+  display: inline-block;
+  width: 44px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .grid td.wrap {
   white-space: normal;
   overflow-wrap: anywhere;

@@ -53,9 +53,14 @@ export function operationsTable(rows, onSelect, empty = 'No operation recorded.'
   if (rows.length === 0)
     return h('p', {class: 'empty'}, empty);
 
+  const sum = rows.reduce((s, r) => s + r.total, 0);
+  const max = Math.max(...rows.map(r => r.total));
+
   return h('table', {class: 'grid'},
     h('thead', null, h('tr', null,
-      h('th', null, 'Operation'), h('th', {class: 'num'}, 'Count'), h('th', {class: 'num'}, 'Total'),
+      h('th', null, 'Operation'),
+      h('th', {title: 'Share of the time spent in all operations'}, 'Time'),
+      h('th', {class: 'num'}, 'Count'), h('th', {class: 'num'}, 'Total'),
       h('th', {class: 'num'}, 'p50'), h('th', {class: 'num'}, 'p99'), h('th', {class: 'num'}, 'Max'),
       h('th', {class: 'num', title: 'Operations that failed: 5xx responses for requests'}, 'Errors'),
       h('th', {class: 'num'}, 'In'), h('th', {class: 'num'}, 'Out'))),
@@ -65,6 +70,7 @@ export function operationsTable(rows, onSelect, empty = 'No operation recorded.'
         onclick: () => onSelect(r.name),
       } : null,
       h('td', {class: 'mono'}, r.name),
+      shareCell(r.total, sum, max),
       h('td', {class: 'num'}, r.count),
       h('td', {class: 'num'}, fmt.duration(r.total)),
       h('td', {class: 'num'}, fmt.duration(r.p50)),
@@ -73,6 +79,23 @@ export function operationsTable(rows, onSelect, empty = 'No operation recorded.'
       h('td', {class: r.errors ? 'num bad' : 'num'}, r.errors),
       h('td', {class: 'num'}, fmt.bytes(r.bytesIn)),
       h('td', {class: 'num'}, fmt.bytes(r.bytesOut))))));
+}
+
+/**
+ * The share of the time of all operations taken by those of one name: a bar
+ * scaled to the busiest name, so that the longest bar spans the cell, and the
+ * percentage of the sum.
+ *
+ * @param {number} total
+ * @param {number} sum the total of all names
+ * @param {number} max the total of the busiest name
+ */
+function shareCell(total, sum, max) {
+  const share = sum > 0 ? fmt.percent(total / sum) : '';
+  return h('td', {class: 'share', title: sum > 0 ? `${share} of the time spent in all operations` : null},
+    h('span', {class: 'share-track'},
+      h('span', {class: 'share-bar', style: `width: ${max > 0 ? total / max * 100 : 0}%`})),
+    h('span', {class: 'share-label'}, share));
 }
 
 /**
