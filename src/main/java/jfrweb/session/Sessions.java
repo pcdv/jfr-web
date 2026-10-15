@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import jdk.jfr.Configuration;
+import jfrweb.analysis.EventMappings;
 import jfrweb.ops.Operations;
 
 /**
@@ -120,7 +121,8 @@ public final class Sessions implements AutoCloseable {
     Instant now = Instant.now();
     Path file = directory.resolve("session-" + id + "-" + FILE_TIME.format(now) + ".jfr");
 
-    Recorder.Running r = recorder.start("jfr-web-" + id, settings, file);
+    // the events of the application mapped to operations, mapped now
+    Recorder.Running r = recorder.start("jfr-web-" + id, EventMappings.withMapped(settings), file);
     lastId = id;
     Session s = new Session(id, now, trigger, file);
     s.recording = r;

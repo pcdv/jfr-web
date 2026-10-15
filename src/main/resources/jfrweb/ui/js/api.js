@@ -261,6 +261,8 @@ export function disarmAuto() {
  * @property {string} directory where the sessions are kept
  * @property {Jvm[]} jvms
  * @property {StoredApp[]} apps the latest session first
+ * @property {{event: string, name: string}[]} mappedEvents events of the applications read as operations,
+ *           e.g. from ~/.jfr-web/operation-events.properties
  */
 
 /** @returns {Promise<Jvms>} the JVMs of the machine, from the page that lists them */

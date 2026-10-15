@@ -66,7 +66,7 @@ final class TextReport {
                                 "%n                 Read native time in operations as proportions, " +
                                 "not as absolute time.",
                                 100 * s.getOperationShareOfNative()));
-    out.println("  operations     " + (info.isEnabled(FLAK_REQUEST) || info.isEnabled(OPERATION)
+    out.println("  operations     " + (info.hasOperationEvents()
                                        ? analysis.getOperations().size() + " (" + FLAK_REQUEST + ", " + OPERATION + ")"
                                        : "neither " + FLAK_REQUEST + " nor " + OPERATION +
                                          " enabled: no operation context"));

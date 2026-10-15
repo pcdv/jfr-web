@@ -134,6 +134,10 @@ public final class Analysis {
           case "jdk.OSInformation":
             info.os = oneLine(e.getString("osVersion"));
             break;
+          default:
+            EventMapping m = EventMappings.get(e.getEventType().getName());
+            if (m != null)
+              add(m.operation(e));
         }
       }
     }
@@ -206,8 +210,9 @@ public final class Analysis {
   }
 
   /**
-   * The operation of an event, a request of flak or an operation of the
-   * jfrweb.ops API, e.g. streamed from a JVM; null for other events.
+   * The operation of an event, a request of flak, an operation of the
+   * jfrweb.ops API or an event mapped (see {@link EventMappings}), e.g.
+   * streamed from a JVM; null for other events.
    */
   public static RecordedOperation operation(RecordedEvent e) {
     switch (e.getEventType().getName()) {
@@ -216,7 +221,8 @@ public final class Analysis {
       case OPERATION:
         return operationOf(e);
       default:
-        return null;
+        EventMapping m = EventMappings.get(e.getEventType().getName());
+        return m == null ? null : m.operation(e);
     }
   }
 

@@ -30,7 +30,12 @@ function render(root) {
       const list = await api.listJvms();
       replace(content, jvmTable(list), appTable(list),
         h('p', {class: 'hint'}, 'Sessions are kept in ', h('code', null, list.directory),
-          ', a directory per application.'));
+          ', a directory per application.'),
+        list.mappedEvents.length
+          ? h('p', {class: 'hint'}, 'Operations also come from these events of the applications: ',
+              ...list.mappedEvents.flatMap((m, i) => [i ? ', ' : '', h('code', null, m.event), ' named ',
+                                                      h('code', null, m.name)]), '.')
+          : null);
     }
     catch (e) {
       replace(content, errorBox(e));

@@ -14,6 +14,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import jfrweb.analysis.EventMapping;
+import jfrweb.analysis.EventMappings;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -46,6 +48,7 @@ public class StandaloneTest {
 
   @After
   public void tearDown() throws Exception {
+    EventMappings.unregister("test.Batch");
     if (standalone != null)
       standalone.close();
     child.destroyForcibly();
@@ -66,6 +69,8 @@ public class StandaloneTest {
 
   @Test
   public void testProfileAnotherJvm() throws Exception {
+    // its own event, mapped before attaching
+    EventMappings.register(new EventMapping("test.Batch", "batch {kind}", null, null));
     standalone = Standalone.start(dir, 0);
     long pid = child.pid();
 
@@ -83,7 +88,8 @@ public class StandaloneTest {
     Assert.assertEquals("the interface of the profiler", 200, get(BASE).statusCode());
 
     // its operations, from their events, once they end
-    String live = waitFor(BASE + "api/live?window=1", b -> b.contains("\"name\":\"work\""));
+    String live = waitFor(BASE + "api/live?window=1", b -> b.contains("\"name\":\"work\"")
+                                                           && b.contains("\"name\":\"batch nightly\""));
     Assert.assertTrue(live, live.contains("\"observing\":true,\"fed\":true"));
 
     Assert.assertTrue(post(BASE + "api/sessions?name=remote").body().contains("\"state\":\"RECORDING\""));

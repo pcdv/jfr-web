@@ -288,7 +288,7 @@ public class ProfilerRoutes {
     sampling.put("java", sampling(info, EXECUTION_SAMPLE, summary.getJavaSamples(), summary.getJavaInOperations()));
     sampling.put("native", sampling(info, NATIVE_SAMPLE, summary.getNativeSamples(), summary.getNativeInOperations()));
     sampling.put("operationShareOfNative", summary.getOperationShareOfNative());
-    sampling.put("operationEvents", info.isEnabled(FLAK_REQUEST) || info.isEnabled(OPERATION));
+    sampling.put("operationEvents", info.hasOperationEvents());
     sampling.put("operations", a.getOperations().size());
     sampling.put("truncated", summary.getTruncated());
     sampling.put("stackDepth", summary.getStackDepth());

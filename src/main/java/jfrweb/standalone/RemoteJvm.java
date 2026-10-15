@@ -23,6 +23,8 @@ import jdk.management.jfr.FlightRecorderMXBean;
 import jdk.management.jfr.RecordingInfo;
 import jdk.management.jfr.RemoteRecordingStream;
 import jfrweb.analysis.Analysis;
+import jfrweb.analysis.EventMapping;
+import jfrweb.analysis.EventMappings;
 import jfrweb.analysis.RecordedOperation;
 import jfrweb.ops.Operations;
 import jfrweb.session.Recorder;
@@ -104,6 +106,10 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
         settings.put(event + "#stackTrace", "false");
         stream.onEvent(event, e -> report(e, operations));
       }
+      // the events of the application mapped to operations
+      for (EventMapping m : EventMappings.list())
+        stream.onEvent(m.event(), e -> report(e, operations));
+      settings.putAll(EventMappings.settings());
       stream.setSettings(settings);
       // named, and bounded: a jfr-web that dies without closing it leaves it
       // running until the JVM ends

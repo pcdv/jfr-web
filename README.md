@@ -44,16 +44,19 @@ operations are:
 - **Any other application** can declare its operations with a few lines of code, using the
   [`jfrweb.ops` API](#declaring-operations). An order server, a batch, a message consumer: anything
   with units of work.
+- **An application that already records its own JFR events**, say one per RPC call, doesn't need
+  any code. A small mapping file tells jfr-web [which events are operations](#mapping-your-own-jfr-events)
+  and how to name them.
 - **A JVM that does neither** still gets sessions, flame graphs by thread and by time interval,
   and the report on how sampling went. Everything that is per operation stays empty.
 
-|  | flak app | Declared operations | Any JVM |
-|---|---|---|---|
-| Sessions, flame graphs by thread and interval | yes | yes | yes |
-| Operations table, timeline, slowest calls, flame graph per operation | yes | yes | |
-| Live operations, Arm, auto mode | yes | yes | |
-| Only the requests of your own browser trigger a session | embedded only | | |
-| History of operations, snapshots taken on slow calls | embedded only | embedded only | |
+|  | flak app | Declared operations | Mapped JFR events | Any JVM |
+|---|---|---|---|---|
+| Sessions, flame graphs by thread and interval | yes | yes | yes | yes |
+| Operations table, timeline, slowest calls, flame graph per operation | yes | yes | yes | |
+| Live operations, Arm, auto mode | yes | yes | standalone only | |
+| Only the requests of your own browser trigger a session | embedded only | | | |
+| History of operations, snapshots taken on slow calls | embedded only | embedded only | | |
 
 ## Getting it
 
@@ -206,6 +209,41 @@ took 50 ms there. Its flame graph only has the samples of those two stretches:
 
 ![An asynchronous operation, its threads and its flame graph](docs/screenshots/tcp-request.png)
 
+## Mapping your own JFR events
+
+Plenty of frameworks already record a JFR event per unit of work. If yours does, you don't need
+to touch the code: tell jfr-web which event it is, and how to build an operation from its fields.
+Say the event is `com.acme.RpcCall`, with fields `service`, `method`, `requestId` and `error`:
+
+```properties
+# ~/.jfr-web/operation-events.properties
+com.acme.RpcCall.name   = {service}.{method}
+com.acme.RpcCall.detail = {requestId}
+com.acme.RpcCall.failed = error
+```
+
+`name` is what calls are grouped by, so keep it to a handful of distinct values: the method, not
+the request ID. `{field}` is replaced with the value of a field, and `{a.b}` reaches into a nested
+one. `detail` is optional and describes one call. `failed` is optional too: it names a boolean
+field, or a field whose value, when present, is the error message. Each event becomes a
+synchronous operation, on the thread that committed it, lasting as long as the event.
+
+The command line picks that file up by itself; `--events <file>` adds another one
+(`jfr-web --events rpc.properties open app.jfr`). Embedded, register the mappings in code before
+starting the profiler:
+
+```java
+EventMappings.register(new EventMapping("com.acme.RpcCall", "{service}.{method}", "{requestId}", "error"));
+// or: EventMappings.load(Path.of("operation-events.properties"));
+```
+
+Sessions and snapshots then turn the event on, and every report reads its operations like any
+other: in sessions, opened recordings, static exports and the command line. In standalone mode
+the event is streamed too, so the live view and Arm work. Embedded, the live view and auto mode
+still rely on code telling them when an operation starts, so they don't see mapped events. If you
+need them there, call the [`jfrweb.ops` API](#declaring-operations) from your framework's hooks
+instead.
+
 ## Standalone
 
 Standalone mode profiles the other JVMs on your machine without touching them: no dependency, no
@@ -220,8 +258,9 @@ A page lists the running JVMs. **Connect** attaches to one the way JDK Mission C
 Arm and auto mode. It stays connected until you click **Disconnect**, connect to another JVM, or
 the JVM exits. One JVM at a time.
 
-Operations come from the target's own JFR events (flak's requests, the `jfrweb.ops` API),
-streamed as they end. A JVM with neither still gets sessions and flame graphs by thread.
+Operations come from the target's JFR events (flak's requests, the `jfrweb.ops` API, and the
+[events you mapped](#mapping-your-own-jfr-events)), streamed as they end. A JVM with none of these
+still gets sessions and flame graphs by thread.
 
 Sessions are stored per application in `~/.jfr-web/<application>`, where the application is the
 main class, or the jar name without its version. They survive restarts of both sides, and you
@@ -255,8 +294,9 @@ History of operations page. There's no JVM behind the files, so the live view, a
 starting sessions are left out.
 
 Operations only show up if the recording has their events. jfr-web's own sessions and snapshots
-always do. For a recording you make yourself, turn on flak's request event or jfr-web's operation
-events (`jfrweb.Operation` and `jfrweb.OperationSegment`), all off by default. For instance, to
+always do. For a recording you make yourself, turn on flak's request event, jfr-web's operation
+events (`jfrweb.Operation` and `jfrweb.OperationSegment`), all off by default, or your own
+[mapped events](#mapping-your-own-jfr-events). For instance, to
 record an application that is already running (JDK 21):
 
 ```sh

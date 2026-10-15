@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 import flak.App;
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
+import jfrweb.analysis.EventMappings;
 import jfrweb.json.Json;
 import jfrweb.ops.Operations;
 import jfrweb.session.StackDepth;
@@ -160,7 +161,7 @@ public final class Snapshots implements AutoCloseable {
   private void start() throws IOException {
     Files.createDirectories(directory);
     loadExisting();
-    rolling = new Recording(settings);
+    rolling = new Recording(EventMappings.withMapped(settings));
     rolling.setName("jfr-web rolling recording");
     rolling.setToDisk(true);
     rolling.setMaxAge(window);

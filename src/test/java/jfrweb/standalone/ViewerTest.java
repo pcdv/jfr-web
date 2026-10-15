@@ -12,8 +12,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import jdk.jfr.Recording;
-import jfrweb.analysis.Analysis;
-import jfrweb.analysis.RecordingInfo;
 import jfrweb.ops.Operation;
 import jfrweb.ops.Operations;
 import jfrweb.session.Sessions;
@@ -32,17 +30,22 @@ public class ViewerTest {
   private final HttpClient http = HttpClient.newHttpClient();
   private Path dir;
   private Viewer viewer;
+  /** When the recording was started and stopped. */
+  private Instant started;
+  private Instant stopped;
 
   @Before
   public void setUp() throws Exception {
     dir = Files.createTempDirectory("jfr-web-viewer-test");
     try (Recording r = new Recording(Sessions.defaultSettings())) {
+      started = Instant.now();
       r.start();
       for (int i = 0; i < 5; i++)
         try (Operation op = Operations.begin("work").detail("item " + i)) {
           burn(30);
         }
       r.stop();
+      stopped = Instant.now();
       r.dump(dir.resolve("app.jfr"));
     }
     Files.writeString(dir.resolve("notes.txt"), "not a recording");
@@ -77,14 +80,11 @@ public class ViewerTest {
   public void testSpanFromChunkHeaders() throws Exception {
     Path f = dir.resolve("app.jfr");
     Instant[] span = Viewer.span(f);
-    RecordingInfo info = Analysis.load(f).getInfo();
-    // that of its chunks: close to that of its events, some of which are
-    // stamped before the chunk that holds them
-    Assert.assertTrue(span[0] + " vs " + info.getStart(),
-                      Math.abs(span[0].toEpochMilli() - info.getStart().toEpochMilli()) < 30_000);
-    Assert.assertTrue(span[1] + " vs " + info.getEnd(),
-                      Math.abs(span[1].toEpochMilli() - info.getEnd().toEpochMilli()) < 30_000);
-    Assert.assertTrue(span[0].isBefore(span[1]));
+    // that of its chunks, which cover the recording; one may have begun
+    // before it, for another recording of this JVM
+    Assert.assertFalse(span[0] + " after the start, " + started, span[0].isAfter(started.plusSeconds(1)));
+    Assert.assertFalse(span[1] + " before the stop, " + stopped, span[1].isBefore(stopped.minusSeconds(1)));
+    Assert.assertTrue("not to the end of the file's day", span[1].isBefore(stopped.plusSeconds(60)));
   }
 
   @Test(expected = IllegalArgumentException.class)

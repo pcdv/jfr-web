@@ -134,6 +134,9 @@ thread of periodic events uses 0.09 s of CPU per minute, about 0.15% of a core. 
 - [x] Recordings: an asynchronous operation gets the samples of its segments; its report lists
   the threads that worked for it
 - [x] Demo without HTTP: an order server over TCP (`./gradlew tcpDemo`)
+- [x] Events of the application mapped to operations, with no code: a name and a detail built
+  from their fields, and a field telling a failure (`EventMappings`, `operation-events.properties`)
+- [ ] Mapped events in the live view and auto mode of an embedded profiler
 - [ ] Nested operations on a thread (an operation inside a request), shown by the innermost
 - [ ] Other frameworks (e.g. RPC), through a bridge module that starts jfr-web and feeds the
   API from the framework's hooks: services never depend on jfr-web

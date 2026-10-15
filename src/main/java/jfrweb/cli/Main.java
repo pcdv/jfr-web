@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import jfrweb.analysis.Analysis;
+import jfrweb.analysis.EventMapping;
+import jfrweb.analysis.EventMappings;
 import jfrweb.analysis.FlameGraphs;
 import jfrweb.export.StaticExport;
 import jfrweb.standalone.Standalone;
@@ -28,7 +30,10 @@ import jfrweb.standalone.Viewer;
 public final class Main {
 
   private static final String USAGE = String.join("\n",
-    "Usage:",
+    "Usage: jfr-web [--events <file>] <command> ...",
+    "  --events: the events of the application to read as operations, see EventMappings;",
+    "  ~/.jfr-web/operation-events.properties is read too if it exists",
+    "",
     "  jfr-web report <file.jfr> [--events]",
     "      how the file was recorded, and its operations sorted by total time",
     "  jfr-web flame <file.jfr> [-o <file.html>] [--operation <regex>] [--thread <regex>]",
@@ -55,6 +60,13 @@ public final class Main {
   private Main() {}
 
   public static void main(String[] args) {
+    try {
+      args = eventMappings(args);
+    }
+    catch (IOException | IllegalArgumentException e) {
+      System.err.println("Error: " + e.getMessage());
+      System.exit(2);
+    }
     if (args.length > 0 && (args[0].equals("standalone") || args[0].equals("open"))) {
       // runs until stopped
       try {
@@ -112,6 +124,30 @@ public final class Main {
         System.err.println("Unknown command: " + command + "\n" + USAGE);
         return 2;
     }
+  }
+
+  /** The events of the application read as operations, by default. */
+  static final Path EVENT_MAPPINGS = Standalone.defaultDirectory().resolve("operation-events.properties");
+
+  /**
+   * Registers the events mapped to operations: those of the default file if
+   * it exists, and of --events.
+   *
+   * @return the other arguments
+   */
+  static String[] eventMappings(String[] args) throws IOException {
+    List<String> rest = new ArrayList<>(List.of(args));
+    if (Files.isRegularFile(EVENT_MAPPINGS))
+      report(EventMappings.load(EVENT_MAPPINGS), EVENT_MAPPINGS);
+    String file = takeValue(rest, "--events");
+    if (file != null)
+      report(EventMappings.load(Path.of(file)), Path.of(file));
+    return rest.toArray(new String[0]);
+  }
+
+  private static void report(List<EventMapping> mappings, Path file) {
+    for (EventMapping m : mappings)
+      System.err.println("Operations from " + m.event() + ", named " + m.name() + " (" + file + ")");
   }
 
   private static int open(List<String> options) throws IOException {

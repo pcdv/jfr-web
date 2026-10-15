@@ -19,6 +19,19 @@ public final class RecordingInfo {
   public static final String NATIVE_SAMPLE = "jdk.NativeMethodSample";
   public static final String FLAK_REQUEST = "flak.Request";
   public static final String OPERATION = Operations.EVENT;
+
+  /**
+   * Whether the recording has events operations come from: flak's requests,
+   * jfr-web's operations, or events mapped, see {@link EventMappings}.
+   */
+  public boolean hasOperationEvents() {
+    if (isEnabled(FLAK_REQUEST) || isEnabled(OPERATION))
+      return true;
+    for (EventMapping m : EventMappings.list())
+      if (isEnabled(m.event()))
+        return true;
+    return false;
+  }
   public static final String OPERATION_SEGMENT = Operations.SEGMENT_EVENT;
 
   /**

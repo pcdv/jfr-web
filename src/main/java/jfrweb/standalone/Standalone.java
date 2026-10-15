@@ -25,6 +25,8 @@ import flak.ResourceOptions;
 import flak.annotations.OutputFormat;
 import flak.annotations.Post;
 import flak.annotations.Route;
+import jfrweb.analysis.EventMapping;
+import jfrweb.analysis.EventMappings;
 import jfrweb.session.Session;
 import jfrweb.session.StackDepth;
 import jfrweb.web.ProfilerApp;
@@ -138,6 +140,10 @@ public final class Standalone implements AutoCloseable {
                                    Comparator.nullsLast(Comparator.reverseOrder())));
     Map<String, Object> res = new LinkedHashMap<>();
     res.put("directory", directory.toString());
+    List<Object> events = new ArrayList<>();
+    for (EventMapping m : EventMappings.list())
+      events.add(Map.of("event", m.event(), "name", m.name()));
+    res.put("mappedEvents", events);
     res.put("jvms", jvms);
     res.put("apps", apps);
     return res;
