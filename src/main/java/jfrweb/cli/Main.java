@@ -20,6 +20,7 @@ import jfrweb.analysis.Analysis;
 import jfrweb.analysis.FlameGraphs;
 import jfrweb.export.StaticExport;
 import jfrweb.standalone.Standalone;
+import jfrweb.standalone.Viewer;
 
 /**
  * Analyzes a recording offline.
@@ -43,6 +44,9 @@ public final class Main {
     "      computed beforehand: served by any web server, with no Java behind it.",
     "      A recording holds the environment variables and system properties of the",
     "      JVM unless turned off: --no-recordings leaves the .jfr files out",
+    "  jfr-web open <file.jfr | dir>... [--history <dir>] [--port <port>] [--no-browser]",
+    "      the web interface on recordings made elsewhere, each one as a session: report,",
+    "      timeline, operations, flame graphs; the .jfr files of a directory are taken",
     "  jfr-web standalone [--port <port>] [--dir <dir>] [--no-browser]",
     "      the profiler on its own: lists the JVMs of this machine, and profiles the",
     "      one picked as if it was embedded, with nothing to install in it. Sessions",
@@ -51,10 +55,11 @@ public final class Main {
   private Main() {}
 
   public static void main(String[] args) {
-    if (args.length > 0 && args[0].equals("standalone")) {
+    if (args.length > 0 && (args[0].equals("standalone") || args[0].equals("open"))) {
       // runs until stopped
       try {
-        int status = standalone(new ArrayList<>(List.of(args).subList(1, args.length)));
+        List<String> options = new ArrayList<>(List.of(args).subList(1, args.length));
+        int status = args[0].equals("open") ? open(options) : standalone(options);
         if (status != 0)
           System.exit(status);
       }
@@ -107,6 +112,47 @@ public final class Main {
         System.err.println("Unknown command: " + command + "\n" + USAGE);
         return 2;
     }
+  }
+
+  private static int open(List<String> options) throws IOException {
+    int port;
+    Path history;
+    try {
+      String v = takeValue(options, "--port");
+      port = v == null ? 0 : Integer.parseInt(v);
+      v = takeValue(options, "--history");
+      history = v == null ? null : Path.of(v);
+    }
+    catch (IllegalArgumentException e) {
+      System.err.println(e.getMessage());
+      return 2;
+    }
+    boolean browser = !options.remove("--no-browser");
+    List<Path> recordings = new ArrayList<>();
+    for (String o : List.copyOf(options))
+      if (!o.startsWith("-")) {
+        recordings.add(Path.of(o));
+        options.remove(o);
+      }
+    if (!checkNoneLeft(options))
+      return 2;
+    if (recordings.isEmpty()) {
+      System.err.println("No recording to open\n" + USAGE);
+      return 2;
+    }
+    Viewer v;
+    try {
+      v = Viewer.start(recordings, history, port);
+    }
+    catch (IllegalArgumentException e) {
+      System.err.println(e.getMessage());
+      return 2;
+    }
+    Runtime.getRuntime().addShutdownHook(new Thread(v::close, "jfr-web shutdown"));
+    System.err.println("jfr-web at " + v.getUrl() + ", " + v.getSessions().list().size() + " recording(s)");
+    if (browser)
+      browse(v.getUrl());
+    return 0;
   }
 
   private static int standalone(List<String> options) throws IOException {

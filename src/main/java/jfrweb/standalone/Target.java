@@ -11,6 +11,7 @@ import jfrweb.live.LiveStats;
 import jfrweb.session.Recorder;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
+import jfrweb.web.About;
 import jfrweb.web.ProfilerApp;
 
 /**
@@ -44,7 +45,7 @@ final class Target implements AutoCloseable {
     });
     this.auto = AutoMode.fed(sessions);
     this.web = factory.createApp(path());
-    ProfilerApp.install(web, null, app, sessions, live, auto, null, null);
+    ProfilerApp.install(web, null, new About(app, false), sessions, live, auto, null, null);
     web.scan(new TargetRoutes(this));
     web.start();
   }

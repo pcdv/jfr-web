@@ -118,7 +118,7 @@ public class ProfilerTest {
     String list = get("api/sessions").body();
     Assert.assertTrue(list, list.startsWith("[{\"id\":1,"));
     // the application of this JVM, e.g. the test runner's main class
-    Assert.assertTrue(get("api/about").body().matches("\\{\"app\":\"[\\w.-]+\"}"));
+    Assert.assertTrue(get("api/about").body().matches("\\{\"app\":\"[\\w.-]+\",\"recordingsOnly\":false,\"history\":false}"));
     Assert.assertTrue(post("api/sessions/1/name?name=+renamed+").body().contains("\"name\":\"renamed\""));
     Assert.assertTrue("blank: no name", post("api/sessions/1/name?name=").body().contains("\"name\":null"));
     Assert.assertEquals(404, post("api/sessions/9/name?name=x").statusCode());

@@ -111,22 +111,17 @@ public final class AutoMode implements AutoCloseable {
    * An operation that ended, reported when fed: starts a session if it
    * matches, or keeps the session started from stopping.
    */
-  public void ended(String operation) {
+  public synchronized void ended(String operation) {
+    // the session started as armed, by check() if something else recorded
+    // then: none to start here, after the operation
     Trigger t = trigger;
-    if (t != null && t.browser() == null && t.matches(operation, null)) {
-      synchronized (this) {
-        if (session != null && waiting) {
-          waiting = false;
-          // its maximum duration counts from now: waiting may be long
-          sessionStart = System.nanoTime();
-          lastEnd = sessionStart;
-          return;
-        }
-      }
-      // no session waiting, e.g. another one recorded when armed: one now,
-      // after it
-      begin(t, operation);
-      end();
+    if (session == null || t == null || t.browser() != null || !t.matches(operation, null))
+      return;
+    lastEnd = System.nanoTime();
+    if (waiting) {
+      waiting = false;
+      // its maximum duration counts from now: waiting may be long
+      sessionStart = lastEnd;
     }
   }
 

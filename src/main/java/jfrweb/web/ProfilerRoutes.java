@@ -57,26 +57,32 @@ public class ProfilerRoutes {
   private final Sessions sessions;
   private final LiveStats live;
   private final AutoMode auto;
-  private final String app;
+  private final About about;
+  private final boolean history;
 
   /**
-   * @param app the name of the application profiled, see {@link AppName}
+   * @param about   what is profiled
+   * @param history whether an operation history can be browsed
    */
-  public ProfilerRoutes(Sessions sessions, LiveStats live, AutoMode auto, String app) {
-    this.app = app;
+  public ProfilerRoutes(Sessions sessions, LiveStats live, AutoMode auto, About about, boolean history) {
     this.sessions = sessions;
     this.live = live;
     this.auto = auto;
+    this.about = about;
+    this.history = history;
   }
 
   /**
-   * What is profiled: the name of the application.
+   * What is profiled: the name of the application, whether there are only
+   * recordings to browse, with no JVM behind them, and an operation history.
    */
   @Route("/api/about")
   @OutputFormat(JSON)
   public Map<String, Object> about() {
     Map<String, Object> m = new LinkedHashMap<>();
-    m.put("app", app);
+    m.put("app", about.app());
+    m.put("recordingsOnly", about.recordingsOnly());
+    m.put("history", history);
     return m;
   }
 

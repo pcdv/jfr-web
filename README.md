@@ -206,7 +206,18 @@ flame graph only has the samples of its segments:
 
 ### Offline analysis
 
-A recording made outside jfr-web can be analyzed from the command line:
+A recording made outside jfr-web, e.g. with `jcmd` (below), JDK Mission Control or a snapshot, can
+be browsed in the web interface:
+
+```sh
+./gradlew run --args="open app.jfr"                        # or: jfr-web open <file.jfr | dir>...
+./gradlew run --args="open logs/snapshots --history logs/operations"
+```
+
+Each file is listed as a session, with its whole report: timeline with intervals and zoom,
+operations, slowest operations, flame graphs with any filters. With `--history`, the History of
+operations page too. There is no JVM behind them: no live operations, auto mode or session to
+start. Or from the command line:
 
 ```sh
 ./gradlew run --args="report app.jfr"                    # how it was recorded, operations table

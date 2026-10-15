@@ -299,14 +299,30 @@ export function detachJvm(root = '') {
   return call(`${root}api/detach`, {method: 'POST'});
 }
 
-/** @returns {Promise<{app: string} | null>} what is profiled, null if not told, e.g. in a static export */
-export async function getAbout() {
-  try {
-    return await call('api/about');
-  }
-  catch (e) {
-    return null;
-  }
+/**
+ * What is profiled.
+ *
+ * @typedef {object} About
+ * @property {string} app the name of the application, or of the recordings opened
+ * @property {boolean} recordingsOnly whether there are only recordings, opened from files, with no JVM
+ *           behind them: no live operations, auto mode or session to start
+ * @property {boolean} history whether an operation history can be browsed
+ */
+
+/** @type {About | null} */
+let about = null;
+
+/** @returns {About | null} what is profiled, null if not told, e.g. in a static export */
+export function getAbout() {
+  return about;
+}
+
+/**
+ * Whether there are only recordings to browse, with no JVM behind them: a
+ * static export, or recordings opened from files.
+ */
+export function recordingsOnly() {
+  return staticFiles !== null || about?.recordingsOnly === true;
 }
 
 /** @returns {Promise<Target | null>} null when the profiler is embedded in the JVM it profiles */
@@ -476,7 +492,11 @@ export const ready = fetch('static.json')
       staticHistory = m.history;
     }
   })
-  .catch(() => undefined);
+  .catch(() => undefined)
+  .then(async () => {
+    if (!staticFiles)
+      about = await call('api/about').catch(() => null);
+  });
 
 /**
  * Whether the page is a static export: only what can be reached by clicking

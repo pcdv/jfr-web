@@ -64,16 +64,20 @@ function markActive() {
 }
 
 /**
- * A static export says so, and leaves out the pages it has nothing for.
+ * Recordings with no JVM behind them, a static export or files opened, leave
+ * out the pages they have nothing for; a static export says so.
  */
 function staticMode() {
-  if (!api.isStatic())
+  if (!api.recordingsOnly())
     return;
+  const history = api.isStatic() ? api.getStaticHistory() : api.getAbout()?.history;
   for (const a of document.querySelectorAll('header nav a')) {
     const href = a.getAttribute('href');
-    if (href === '#/live' || (href === '#/history' && !api.getStaticHistory()))
+    if (href === '#/live' || (href === '#/history' && !history))
       a.remove();
   }
+  if (!api.isStatic())
+    return;
   const note = document.createElement('p');
   note.className = 'static-note';
   note.textContent = 'Static export, limited compared to a live run: no interval to select or zoom in on, ' +
@@ -82,9 +86,9 @@ function staticMode() {
   document.querySelector('header')?.after(note);
 }
 
-api.ready.then(async () => {
+api.ready.then(() => {
   staticMode();
-  appName = (await api.getAbout())?.app ?? appName;
+  appName = api.getAbout()?.app ?? appName;
   const header = document.querySelector('header');
   if (header)
     showTarget(header);

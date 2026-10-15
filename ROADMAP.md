@@ -177,6 +177,9 @@ already wired must follow.
   and Arm
 - [x] Sessions kept by application in `~/.jfr-web`, listed again after a restart; embedded
   profilers given a directory keep theirs too
+- [x] `jfr-web open`: recordings made elsewhere, files or directories, browsed in the interface as
+  sessions, with an operation history if given one
+- [ ] A recording dropped on the page of the JVMs, to open it there
 - [ ] Snapshots and operation history of the JVM attached
 - [ ] Several JVMs attached at once
 

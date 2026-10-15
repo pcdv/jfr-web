@@ -78,7 +78,8 @@ public class StandaloneTest {
     Assert.assertEquals(attached.body(), 200, attached.statusCode());
     Assert.assertEquals("{\"app\":\"" + APP + "\",\"path\":\"" + BASE + "\"}", attached.body());
     Assert.assertTrue(get(BASE + "api/target").body().contains("\"pid\":" + pid + ","));
-    Assert.assertEquals("{\"app\":\"" + APP + "\"}", get(BASE + "api/about").body());
+    Assert.assertEquals("{\"app\":\"" + APP + "\",\"recordingsOnly\":false,\"history\":false}",
+                        get(BASE + "api/about").body());
     Assert.assertEquals("the interface of the profiler", 200, get(BASE).statusCode());
 
     // its operations, from their events, once they end
