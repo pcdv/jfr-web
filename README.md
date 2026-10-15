@@ -66,7 +66,7 @@ Java 17 or later; standalone mode needs a JDK, not just a JRE.
 Pick whichever suits you:
 
 - **[JBang](https://www.jbang.dev/)**, nothing to download by hand:
-  `jbang jfr-web@pcdv/jfr-web open app.jfr`. It fetches the latest release and caches it.
+  `jbang jfr-web@pcdv/jfr-web open app.jfr`. See [below](#with-jbang) if you're new to it.
 - **From a [GitHub release](https://github.com/pcdv/jfr-web/releases)**: either
   `jfr-web-<version>.zip`, which you unpack and put its `bin/` on your PATH (`jfr-web`, or
   `jfr-web.bat` on Windows), or `jfr-web-<version>-all.jar`, a single file you run with
@@ -74,6 +74,33 @@ Pick whichever suits you:
 - **From a clone**: `./gradlew installDist` builds the same thing as the zip in
   `build/install/jfr-web`, and `./gradlew cliJar` the single jar. `./gradlew run --args="..."`
   runs a command straight away.
+
+### With JBang
+
+[JBang](https://www.jbang.dev/) runs Java programs straight from their Maven coordinates: it
+downloads the program and its dependencies, caches them, and runs them, and it can fetch a JDK
+too if you don't have a suitable one. Install it once (`scoop install jbang`,
+`brew install jbangdev/tap/jbang`, `sdk install jbang`, or see its site), then:
+
+```sh
+jbang jfr-web@pcdv/jfr-web open app.jfr
+jbang jfr-web@pcdv/jfr-web standalone
+```
+
+`jfr-web@pcdv/jfr-web` means "the `jfr-web` alias of the GitHub repository `pcdv/jfr-web`": JBang
+reads [`jbang-catalog.json`](jbang-catalog.json) there, which says which release to fetch from
+JitPack and which class to run. The first run downloads it; the next ones start right away from
+the cache.
+
+To type just `jfr-web`, install it as a command:
+
+```sh
+jbang app install jfr-web@pcdv/jfr-web      # then: jfr-web open app.jfr
+```
+
+If the command isn't found afterwards, `jbang app setup` adds JBang's directory of commands to
+your PATH. When a new version comes out, `jbang app install --force jfr-web@pcdv/jfr-web` updates
+the command, and `jbang --fresh jfr-web@pcdv/jfr-web ...` the plain alias.
 
 ### The library
 
