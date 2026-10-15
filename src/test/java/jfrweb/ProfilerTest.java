@@ -205,7 +205,7 @@ public class ProfilerTest {
       Thread.sleep(20);
       live = get("api/live?window=1").body();
     }
-    Assert.assertTrue(live, live.startsWith("{\"observing\":true,\"apps\":[\"\"],\"window\":1,"));
+    Assert.assertTrue(live, live.startsWith("{\"observing\":true,\"fed\":false,\"apps\":[\"\"],\"window\":1,"));
     Assert.assertTrue(live, live.contains("\"name\":\"GET /busy\",\"count\":1"));
     Assert.assertEquals(400, get("api/live?window=7").statusCode());
   }
@@ -231,7 +231,7 @@ public class ProfilerTest {
     Assert.assertTrue("stopped once idle", get("api/sessions").body().contains("STOPPED"));
 
     HttpResponse<String> disarmed = http.send(request("api/auto").DELETE().build(), HttpResponse.BodyHandlers.ofString());
-    Assert.assertTrue(disarmed.body(), disarmed.body().startsWith("{\"observing\":true,\"flakApps\":true,\"armed\":false"));
+    Assert.assertTrue(disarmed.body(), disarmed.body().startsWith("{\"observing\":true,\"fed\":false,\"flakApps\":true,\"armed\":false"));
     Assert.assertTrue(disarmed.headers().firstValue("Set-Cookie").orElse("").contains("Max-Age=0"));
   }
 
@@ -347,6 +347,33 @@ public class ProfilerTest {
       profiler = null;
       host.stop();
     }
+  }
+
+  @Test
+  public void testSessionsKeptAcrossRestarts() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+    post("api/sessions?name=before");
+    post("api/sessions/1/stop");
+    post("api/sessions/1/name?name=renamed");
+    // recording when the profiler goes: stopped as it closes
+    post("api/sessions");
+    profiler.close();
+
+    profiler = Profiler.builder().directory(dir).start();
+    String list = get("api/sessions").body();
+    Assert.assertTrue(list, list.matches("\\[\\{\"id\":2,\"state\":\"STOPPED\",\"name\":null,.*"
+                                         + "\\{\"id\":1,\"state\":\"STOPPED\",\"name\":\"renamed\",\"trigger\":\"manual\",.*"));
+    Assert.assertEquals(200, get("api/sessions/1/report").statusCode());
+    // the next one after them
+    Assert.assertTrue(post("api/sessions").body().startsWith("{\"id\":3,"));
+    post("api/sessions/3/stop");
+
+    // a file deleted: its session goes
+    try (Stream<Path> files = Files.list(dir)) {
+      for (Path f : files.filter(f -> f.getFileName().toString().startsWith("session-1-")).toList())
+        Files.delete(f);
+    }
+    Assert.assertFalse(get("api/sessions").body().contains("\"id\":1,"));
   }
 
   private HttpRequest.Builder request(String path) {

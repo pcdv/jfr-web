@@ -50,12 +50,26 @@ public final class Analysis {
   private long javaWeight;
   private long nativeWeight;
 
-  private Analysis(Path file) {
+  /** Events that end before do not count in the span of the recording, or null. */
+  private final Instant notBefore;
+
+  private Analysis(Path file, Instant notBefore) {
     this.file = file;
+    this.notBefore = notBefore;
   }
 
   public static Analysis load(Path file) throws IOException {
-    Analysis a = new Analysis(file);
+    return load(file, null);
+  }
+
+  /**
+   * @param notBefore when the recording started, or null: a recording made
+   *                  while another one runs, e.g. one streaming events, gets
+   *                  the events of the other from the start of its chunk,
+   *                  which would stretch its span
+   */
+  public static Analysis load(Path file, Instant notBefore) throws IOException {
+    Analysis a = new Analysis(file, notBefore);
     a.readOperationsAndInfo();
     return a;
   }
@@ -139,6 +153,8 @@ public final class Analysis {
    */
   private void updateBounds(RecordedEvent e) {
     Instant end = e.getEndTime();
+    if (notBefore != null && end.isBefore(notBefore))
+      return;
     if (info.start == null || end.isBefore(info.start))
       info.start = end;
     if (info.end == null || end.isAfter(info.end))
@@ -189,38 +205,61 @@ public final class Analysis {
     return Math.max(1, ms);
   }
 
-  private void addFlakRequest(RecordedEvent e) {
+  /**
+   * The operation of an event, a request of flak or an operation of the
+   * jfrweb.ops API, e.g. streamed from a JVM; null for other events.
+   */
+  public static RecordedOperation operation(RecordedEvent e) {
+    switch (e.getEventType().getName()) {
+      case FLAK_REQUEST:
+        return flakRequest(e);
+      case OPERATION:
+        return operationOf(e);
+      default:
+        return null;
+    }
+  }
+
+  private static RecordedOperation flakRequest(RecordedEvent e) {
     RecordedThread t = e.getThread();
     String method = e.getString("method");
     int status = e.getInt("status");
-    add(new RecordedOperation(t == null ? -1 : t.getJavaThreadId(),
-                              t == null ? null : t.getJavaName(),
-                              nanos(e.getStartTime()),
-                              nanos(e.getEndTime()),
-                              FlakOperations.name(e.getString("app"), method, e.getString("route")),
-                              method + " " + e.getString("path"),
-                              status,
-                              status >= 500,
-                              status >= 500 ? "HTTP " + status : null,
-                              e.getLong("bytesIn"),
-                              e.getLong("bytesOut"),
-                              false));
+    return new RecordedOperation(t == null ? -1 : t.getJavaThreadId(),
+                                 t == null ? null : t.getJavaName(),
+                                 nanos(e.getStartTime()),
+                                 nanos(e.getEndTime()),
+                                 FlakOperations.name(e.getString("app"), method, e.getString("route")),
+                                 method + " " + e.getString("path"),
+                                 status,
+                                 status >= 500,
+                                 status >= 500 ? "HTTP " + status : null,
+                                 e.getLong("bytesIn"),
+                                 e.getLong("bytesOut"),
+                                 false);
+  }
+
+  private static RecordedOperation operationOf(RecordedEvent e) {
+    RecordedThread t = e.getThread();
+    return new RecordedOperation(t == null ? -1 : t.getJavaThreadId(),
+                                 t == null ? null : t.getJavaName(),
+                                 nanos(e.getStartTime()),
+                                 nanos(e.getEndTime()),
+                                 e.getString("name"),
+                                 e.getString("detail"),
+                                 0,
+                                 e.getBoolean("failed"),
+                                 e.getString("error"),
+                                 e.getLong("bytesIn"),
+                                 e.getLong("bytesOut"),
+                                 e.getBoolean("async"));
+  }
+
+  private void addFlakRequest(RecordedEvent e) {
+    add(flakRequest(e));
   }
 
   private void addOperation(RecordedEvent e) {
-    RecordedThread t = e.getThread();
-    RecordedOperation op = new RecordedOperation(t == null ? -1 : t.getJavaThreadId(),
-                                                 t == null ? null : t.getJavaName(),
-                                                 nanos(e.getStartTime()),
-                                                 nanos(e.getEndTime()),
-                                                 e.getString("name"),
-                                                 e.getString("detail"),
-                                                 0,
-                                                 e.getBoolean("failed"),
-                                                 e.getString("error"),
-                                                 e.getLong("bytesIn"),
-                                                 e.getLong("bytesOut"),
-                                                 e.getBoolean("async"));
+    RecordedOperation op = operationOf(e);
     if (op.async()) {
       operations.add(op);
       asyncById.put(e.getLong("id"), op);

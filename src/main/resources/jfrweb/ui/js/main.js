@@ -12,6 +12,7 @@ import {renderSessions} from './views/sessions.js';
 import {renderSession} from './views/session.js';
 import {renderLive} from './views/live.js';
 import {renderHistory} from './views/history.js';
+import {showTarget} from './components/target.js';
 
 /**
  * A view renders itself into the root, and may return a function that stops
@@ -68,6 +69,9 @@ function staticMode() {
 
 api.ready.then(() => {
   staticMode();
+  const header = document.querySelector('header');
+  if (header)
+    showTarget(header);
   window.addEventListener('hashchange', route);
   route();
 });

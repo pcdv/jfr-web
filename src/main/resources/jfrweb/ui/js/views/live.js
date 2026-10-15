@@ -93,10 +93,12 @@ export function renderLive(root) {
       replace(content, live.observing
         ? operationsTable(live.operations, undefined, `No operation in the last ${plural(live.window, 'minute')}.`,
                           r => armButton(r, auto))
-        : h('p', {class: 'empty'},
-            'No operation yet. Begin them with ', h('code', null, 'Operations.begin(name)'),
-            ', or pass the flak apps to observe to the profiler: ',
-            h('code', null, 'Profiler.builder().observe(app)'), '.'));
+        : h('p', {class: 'empty'}, live.fed
+            ? ['No operation from this JVM yet. They come from the events of its flak requests ',
+               '(flak 3.4.0 or later) and of the ', h('code', null, 'jfrweb.ops'), ' API.']
+            : ['No operation yet. Begin them with ', h('code', null, 'Operations.begin(name)'),
+               ', or pass the flak apps to observe to the profiler: ',
+               h('code', null, 'Profiler.builder().observe(app)'), '.']));
       timer = window.setTimeout(refresh, POLL);
     }
     catch (e) {

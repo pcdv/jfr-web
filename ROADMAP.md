@@ -122,7 +122,7 @@ thread of periodic events uses 0.09 s of CPU per minute, about 0.15% of a core. 
 - [ ] Other triggers: saturation (requests in flight far above usual), JVM signals (long GC
   pauses, CPU saturated) watched from the rolling recording itself
 - [ ] Snapshots marked on the History page's timeline
-- [ ] Manual and automatic sessions kept across restarts too
+- [x] Manual and automatic sessions kept across restarts too (M9)
 - [ ] Diff of two flame graphs
 
 ## M7: any application, operations
@@ -167,6 +167,22 @@ already wired must follow.
 - [ ] Session named after the actual path of the call that started it, or a flame graph of one
   call showing its path: parked, a session and a flame graph aggregate calls with different
   values
+
+## M9: standalone
+
+- [x] `jfr-web standalone`: a page lists the JVMs of the machine; one is attached to (attach API,
+  JMX), with nothing installed in it, and profiled through the same interface
+- [x] Sessions recorded by the JVM over JMX, written where jfr-web keeps them; operations from
+  their events, streamed (flak's requests, the `jfrweb.ops` API), for live statistics, auto mode
+  and Arm
+- [x] Sessions kept by application in `~/.jfr-web`, listed again after a restart; embedded
+  profilers given a directory keep theirs too
+- [ ] Snapshots and operation history of the JVM attached
+- [ ] Several JVMs attached at once
+
+A session's span starts with it: a recording made while another one runs (the stream, the
+rolling recording of the snapshots) gets the events of the other from the start of the current
+chunk.
 
 ## Later
 

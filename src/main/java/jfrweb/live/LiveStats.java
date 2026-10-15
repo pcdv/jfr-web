@@ -9,6 +9,7 @@ import java.util.function.LongSupplier;
 
 import flak.App;
 import jfrweb.analysis.OperationStats;
+import jfrweb.analysis.RecordedOperation;
 import jfrweb.ops.Operation;
 import jfrweb.ops.OperationListener;
 import jfrweb.ops.OperationSources;
@@ -26,40 +27,77 @@ public final class LiveStats implements AutoCloseable {
 
   private final Map<String, OperationCounter> operations = new ConcurrentHashMap<>();
   private final LongSupplier minuteClock;
+  /** Null when fed, see {@link #fed()}. */
   private final OperationSources sources;
+  private volatile boolean counted;
+  private volatile boolean closed;
 
   public LiveStats() {
-    this(() -> System.currentTimeMillis() / 60_000);
+    this(() -> System.currentTimeMillis() / 60_000, true);
   }
 
   /**
    * @param minuteClock the current minute, for tests
+   * @param observe     whether to count the operations of this JVM
    */
-  LiveStats(LongSupplier minuteClock) {
+  LiveStats(LongSupplier minuteClock, boolean observe) {
     this.minuteClock = minuteClock;
-    this.sources = new OperationSources(new OperationListener() {
+    this.sources = !observe ? null : new OperationSources(new OperationListener() {
       @Override
       public void onEnd(Operation op) {
-        operations.computeIfAbsent(op.getName(), OperationCounter::new)
-                  .record(minuteClock.getAsLong(), op.getDurationNanos(), op.isFailed(),
-                          op.getBytesIn(), op.getBytesOut());
+        count(op.getName(), op.getDurationNanos(), op.isFailed(), op.getBytesIn(), op.getBytesOut());
       }
     });
+  }
+
+  LiveStats(LongSupplier minuteClock) {
+    this(minuteClock, true);
+  }
+
+  /**
+   * Statistics of operations reported by {@link #count(RecordedOperation)}
+   * only, e.g. those of another JVM, read from its events: none of this JVM.
+   */
+  public static LiveStats fed() {
+    return new LiveStats(() -> System.currentTimeMillis() / 60_000, false);
+  }
+
+  /**
+   * Whether it counts the operations reported to it rather than those of
+   * this JVM.
+   */
+  public boolean isFed() {
+    return sources == null;
+  }
+
+  /**
+   * Counts an operation that ended.
+   */
+  public void count(RecordedOperation op) {
+    count(op.name(), op.durationNanos(), op.failed(), op.bytesIn(), op.bytesOut());
+  }
+
+  private void count(String name, long durationNanos, boolean failed, long bytesIn, long bytesOut) {
+    counted = true;
+    operations.computeIfAbsent(name, OperationCounter::new)
+              .record(minuteClock.getAsLong(), durationNanos, failed, bytesIn, bytesOut);
   }
 
   /**
    * Counts the requests of a flak app from now on.
    */
   public void observe(App app) {
+    if (sources == null)
+      throw new IllegalStateException("Fed by the operations reported to it");
     sources.observe(app);
   }
 
   /**
    * Whether operations may come: a flak app is observed, or the application
-   * has used the jfrweb.ops API.
+   * has used the jfrweb.ops API; when fed, once one was reported.
    */
   public boolean isObserving() {
-    return sources.isObserving();
+    return sources != null ? sources.isObserving() : counted && !closed;
   }
 
   /**
@@ -68,6 +106,8 @@ public final class LiveStats implements AutoCloseable {
    */
   public List<String> getAppPaths() {
     List<String> res = new ArrayList<>();
+    if (sources == null)
+      return res;
     for (App a : sources.getApps())
       res.add(a.getPath());
     return res;
@@ -98,6 +138,8 @@ public final class LiveStats implements AutoCloseable {
    */
   @Override
   public void close() {
-    sources.close();
+    closed = true;
+    if (sources != null)
+      sources.close();
   }
 }

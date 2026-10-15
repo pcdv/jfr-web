@@ -3,7 +3,6 @@ package jfrweb;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,18 +13,12 @@ import flak.App;
 import flak.AppFactory;
 import flak.BeforeHook;
 import flak.Flak;
-import flak.ResourceOptions;
-import flak.util.CrossOriginProtection;
 import jfrweb.auto.AutoMode;
 import jfrweb.live.LiveStats;
 import jfrweb.session.Sessions;
 import jfrweb.session.StackDepth;
 import jfrweb.snapshot.Snapshots;
-import jfrweb.json.Json;
-import jfrweb.web.HistoryRoutes;
-import jfrweb.web.LoopbackOnly;
-import jfrweb.web.SnapshotRoutes;
-import jfrweb.web.ProfilerRoutes;
+import jfrweb.web.ProfilerApp;
 
 /**
  * A profiler embedded in the JVM, with a web interface. Installing it records
@@ -170,17 +163,14 @@ public final class Profiler implements AutoCloseable {
     }
 
     /**
-     * Where the .jfr files go, a new temporary directory by default.
+     * Where the .jfr files go, a new temporary directory by default. The
+     * sessions found there are listed again, e.g. after a restart.
      */
     public Builder directory(Path directory) {
       this.directory = directory;
       return this;
     }
 
-    /**
-     * The JFR settings of the recordings, e.g. "jdk.ExecutionSample#period"
-     * to "20 ms". See {@link Sessions#defaultSettings()}.
-     */
     /**
      * The number of frames JFR keeps of each stack, {@link StackDepth#DEFAULT}
      * by default, instead of the 64 of the JVM: set as this starts, if nothing
@@ -194,6 +184,10 @@ public final class Profiler implements AutoCloseable {
       return this;
     }
 
+    /**
+     * The JFR settings of the recordings, e.g. "jdk.ExecutionSample#period"
+     * to "20 ms". See {@link Sessions#defaultSettings()}.
+     */
     public Builder settings(Map<String, String> settings) {
       this.settings = settings;
       return this;
@@ -245,38 +239,19 @@ public final class Profiler implements AutoCloseable {
         app = f.createApp();
       }
 
-      app.addBeforeAllHook(guard != null ? guard : new LoopbackOnly());
-      app.addBeforeAllHook(new CrossOriginProtection());
-      app.addOutputFormatter(ProfilerRoutes.JSON, (data, resp) -> {
-        resp.addHeader("Content-Type", "application/json");
-        resp.getOutputStream().write(Json.write(data).getBytes(StandardCharsets.UTF_8));
-      });
       LiveStats live = new LiveStats();
       AutoMode auto = new AutoMode(sessions);
       for (App a : observed) {
         live.observe(a);
         auto.observe(a);
       }
-      app.scan(new ProfilerRoutes(sessions, live, auto));
-      app.scan(new HistoryRoutes(history));
-      if (snapshots != null) {
-        for (Snapshots.Snapshot s : snapshots.list())
-          register(sessions, s);
-        snapshots.addListener(s -> register(sessions, s));
-      }
-      app.scan(new SnapshotRoutes(snapshots, sessions));
-      app.serveClasspath("/", "/jfrweb/ui",
-                         new ResourceOptions().classLoader(Profiler.class.getClassLoader()));
+      ProfilerApp.install(app, guard, sessions, live, auto, history, snapshots);
       app.start();
 
       Profiler p = new Profiler(app, sessions, live, auto);
       log.log(System.Logger.Level.INFO, "jfr-web profiler at " + p.getUrl() +
                                         ", recordings in " + sessions.getDirectory());
       return p;
-    }
-
-    private static void register(Sessions sessions, Snapshots.Snapshot s) {
-      sessions.register(s.start(), s.end(), "snapshot: " + s.reason(), s.file());
     }
 
     /**

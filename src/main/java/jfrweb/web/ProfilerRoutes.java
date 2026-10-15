@@ -88,6 +88,8 @@ public class ProfilerRoutes {
   public Map<String, Object> arm(Query q, Response resp) {
     if (!live.isObserving())
       throw new HttpException(409, "No operation is observed: nothing can trigger a session");
+    if (auto.isFed() && q.getBool("browser", false))
+      throw new HttpException(400, "The browser of a request is not known from the events of a JVM");
 
     List<String> patterns = new ArrayList<>();
     for (String p : q.get("patterns", "").split("[,\\n]"))
@@ -117,6 +119,7 @@ public class ProfilerRoutes {
   private Map<String, Object> autoState(Trigger t, String cookie) {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("observing", live.isObserving());
+    m.put("fed", auto.isFed());
     m.put("flakApps", !live.getAppPaths().isEmpty());
     m.put("armed", t != null);
     if (t != null) {
@@ -172,6 +175,7 @@ public class ProfilerRoutes {
 
     Map<String, Object> res = new LinkedHashMap<>();
     res.put("observing", live.isObserving());
+    res.put("fed", live.isFed());
     res.put("apps", live.getAppPaths());
     res.put("window", window);
     res.put("windows", LiveStats.WINDOWS);

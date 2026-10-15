@@ -109,6 +109,25 @@ tasks.register('tcpDemo', JavaExec) {
   }
 }
 
+// jfr-web on its own: lists the JVMs of this machine, and profiles the one
+// picked, with nothing to install in it (see Standalone). -Pport= (8095 by
+// default), -Pdir= (~/.jfr-web by default), -Pbrowser=false
+tasks.register('standalone', JavaExec) {
+  group = 'application'
+  description = 'Runs jfr-web on its own, to profile the other JVMs of this machine.'
+  classpath = sourceSets.main.runtimeClasspath
+  mainClass = 'jfrweb.cli.Main'
+  args 'standalone'
+  def port = providers.gradleProperty('port')
+  if (port.present)
+    args '--port', port.get()
+  def dir = providers.gradleProperty('dir')
+  if (dir.present)
+    args '--dir', dir.get()
+  if (providers.gradleProperty('browser').getOrElse('true') == 'false')
+    args '--no-browser'
+}
+
 test {
   // see AnalysisTest
   def keep = providers.systemProperty('jfrweb.keepRecording')

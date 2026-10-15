@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
 import jfrweb.analysis.Analysis;
 import jfrweb.analysis.FlameGraphs;
 import jfrweb.export.StaticExport;
+import jfrweb.standalone.Standalone;
 
 /**
  * Analyzes a recording offline.
@@ -41,11 +42,28 @@ public final class Main {
     "      the web interface and the recordings as a static site, with the responses",
     "      computed beforehand: served by any web server, with no Java behind it.",
     "      A recording holds the environment variables and system properties of the",
-    "      JVM unless turned off: --no-recordings leaves the .jfr files out");
+    "      JVM unless turned off: --no-recordings leaves the .jfr files out",
+    "  jfr-web standalone [--port <port>] [--dir <dir>] [--no-browser]",
+    "      the profiler on its own: lists the JVMs of this machine, and profiles the",
+    "      one picked as if it was embedded, with nothing to install in it. Sessions",
+    "      are kept in <dir>/<application>, ~/.jfr-web by default; port 8095 by default");
 
   private Main() {}
 
   public static void main(String[] args) {
+    if (args.length > 0 && args[0].equals("standalone")) {
+      // runs until stopped
+      try {
+        int status = standalone(new ArrayList<>(List.of(args).subList(1, args.length)));
+        if (status != 0)
+          System.exit(status);
+      }
+      catch (IOException e) {
+        System.err.println("Error: " + e.getMessage());
+        System.exit(1);
+      }
+      return;
+    }
     try {
       System.exit(run(args, System.out));
     }
@@ -89,6 +107,45 @@ public final class Main {
         System.err.println("Unknown command: " + command + "\n" + USAGE);
         return 2;
     }
+  }
+
+  private static int standalone(List<String> options) throws IOException {
+    int port;
+    Path dir;
+    try {
+      String v = takeValue(options, "--port");
+      port = v == null ? Standalone.PORT : Integer.parseInt(v);
+      v = takeValue(options, "--dir");
+      dir = v == null ? Standalone.defaultDirectory() : Path.of(v);
+    }
+    catch (IllegalArgumentException e) {
+      System.err.println(e.getMessage());
+      return 2;
+    }
+    boolean browser = !options.remove("--no-browser");
+    if (!checkNoneLeft(options))
+      return 2;
+    Standalone s = Standalone.start(dir, port);
+    // a session recording ends with its file written
+    Runtime.getRuntime().addShutdownHook(new Thread(s::close, "jfr-web shutdown"));
+    System.err.println("jfr-web at " + s.getUrl() + ", sessions in " + s.getDirectory());
+    if (browser)
+      browse(s.getUrl());
+    return 0;
+  }
+
+  private static void browse(String url) {
+    try {
+      if (java.awt.Desktop.isDesktopSupported()
+          && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
+        java.awt.Desktop.getDesktop().browse(java.net.URI.create(url));
+        return;
+      }
+    }
+    catch (IOException | RuntimeException e) {
+      // said below
+    }
+    System.err.println("Open " + url + " in a browser");
   }
 
   private static int export(Path first, List<String> options) throws IOException {

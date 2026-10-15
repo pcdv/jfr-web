@@ -23,9 +23,12 @@ export function autoPanel(state, refresh) {
   const panel = h('details', {class: 'card auto', open: readSetting(OPEN_KEY) !== 'false'},
     h('summary', null, 'Auto mode ', status(state)),
     !state.observing
-      ? h('p', {class: 'empty'}, 'No operation yet, so none can start a session. Begin them with ',
-          h('code', null, 'Operations.begin(name)'), ', or pass the flak apps to the profiler: ',
-          h('code', null, 'Profiler.builder().observe(app)'), '.')
+      ? h('p', {class: 'empty'}, state.fed
+          ? ['No operation from this JVM yet, so none can start a session. They come from the events of its ',
+             'flak requests (flak 3.4.0 or later) and of the ', h('code', null, 'jfrweb.ops'), ' API.']
+          : ['No operation yet, so none can start a session. Begin them with ',
+             h('code', null, 'Operations.begin(name)'), ', or pass the flak apps to the profiler: ',
+             h('code', null, 'Profiler.builder().observe(app)'), '.'])
       : state.armed ? armed(state, refresh) : form(state, refresh));
   panel.addEventListener('toggle', () => writeSetting(OPEN_KEY, String(panel.open)));
   return panel;
@@ -88,7 +91,8 @@ function form(state, refresh) {
   return h('form', {class: 'form-grid', onsubmit: (/** @type {Event} */ e) => { e.preventDefault(); arm(); }},
     h('label', {class: 'label', for: 'auto-patterns'}, 'Operations'),
     h('div', null, patterns,
-      h('div', {class: 'hint'}, 'Separated by commas; * matches anything; empty for any operation.')),
+      h('div', {class: 'hint'}, 'Separated by commas; * matches anything; empty for any operation.',
+        state.fed ? ' The JVM tells of an operation once it ends: the session starts after the first one.' : null)),
     h('span', {class: 'label'}, 'Sessions'),
     h('div', {class: 'inline'},
       state.flakApps

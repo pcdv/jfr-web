@@ -55,7 +55,8 @@ Profiler.builder().observe(app).start();   // serves the interface on loopback, 
   forward, drag to select an interval, click one to see it alone in that bucket), lists the
   operations by total time and the slowest of them, and shows flame graphs by operation, thread,
   interval or single operation. An operation also shows the exceptions it created and its slow
-  file and socket accesses. The `.jfr` file can be downloaded, e.g. for JDK Mission Control.
+  file and socket accesses. The `.jfr` file can be downloaded, e.g. for JDK Mission Control. Given a
+  `directory(...)`, the profiler lists its sessions again after a restart.
 
   ![Report of a session: how it was recorded, timeline](docs/screenshots/report.png)
 
@@ -131,6 +132,36 @@ To try it: `./gradlew demo -Pdemo.session=true` runs a small flak app with the p
 a first session, and prints the URLs. The screenshots above come from it, with
 `-Pdemo.load=true` for background traffic: `node docs/screenshots/capture.mjs <profiler URL>`
 takes them again, in headless Edge or Chrome.
+
+### Standalone: profiling another JVM
+
+jfr-web also runs on its own, to profile the other JVMs of the machine with nothing to install
+in them and no change to their command line (JDK 17 or later, the same user):
+
+```sh
+./gradlew standalone                     # or: jfr-web standalone [--port 8095] [--dir ~/.jfr-web]
+```
+
+It opens a page listing the JVMs. **Profile** attaches to one, through the attach API and JMX, as
+JDK Mission Control does, and opens the interface of the profiler for it: sessions, reports, live
+operations, auto mode. Its operations come from the events of flak's requests (flak 3.4.0 or
+later) and of the `jfrweb.ops` API, streamed as they end; a JVM with neither still gets sessions
+and flame graphs by thread. One JVM is attached at a time.
+
+The sessions are kept by application, in `~/.jfr-web/<application>`, its main class or its jar
+without the version: they are listed again when the application or jfr-web restarts, from the
+same page, even with no JVM running.
+
+Compared to embedding it:
+
+- auto mode and **Arm** hear of an operation once it ends: the session starts after the first
+  matching one, not before it, and the browser of a request is not known
+- on Windows, JFR samples less often than asked: the timer that makes it sample as asked
+  runs in the JVM profiled when embedded
+- the stream of operations is a recording in the JVM, bounded to a minute: a jfr-web that is
+  killed leaves it there until the JVM ends; it raises the stack depth to 256 frames first if
+  nothing recorded in that JVM yet
+- no snapshots or operation history yet
 
 ### Any application: operations
 

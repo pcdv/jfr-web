@@ -574,3 +574,21 @@ iframe.flame {
   border-radius: 6px;
   background: #ffffff;
 }
+
+/* standalone: the application profiled, and its JVM */
+.target-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 24px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.grid td.command {
+  max-width: 60ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

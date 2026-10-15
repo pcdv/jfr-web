@@ -37,6 +37,7 @@ public final class AutoMode implements AutoCloseable {
 
   private final Sessions sessions;
   private final ScheduledExecutorService scheduler;
+  /** Null when fed, see {@link #fed(Sessions)}. */
   private final OperationSources sources;
 
   private volatile Trigger trigger;
@@ -53,6 +54,20 @@ public final class AutoMode implements AutoCloseable {
   private final Set<Operation> counted = ConcurrentHashMap.newKeySet();
 
   public AutoMode(Sessions sessions) {
+    this(sessions, true);
+  }
+
+  /**
+   * Sessions started by the operations reported to {@link #ended(String)}
+   * only, e.g. those of another JVM, read from its events. They are reported
+   * once they end: the session starts after the first matching operation, not
+   * before it, and the browser of a request is not known.
+   */
+  public static AutoMode fed(Sessions sessions) {
+    return new AutoMode(sessions, false);
+  }
+
+  private AutoMode(Sessions sessions, boolean observe) {
     this.sessions = sessions;
     this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
       Thread t = new Thread(r, "jfr-web auto mode");
@@ -60,7 +75,7 @@ public final class AutoMode implements AutoCloseable {
       return t;
     });
     scheduler.scheduleWithFixedDelay(this::check, CHECK_PERIOD, CHECK_PERIOD, TimeUnit.MILLISECONDS);
-    sources = new OperationSources(new OperationListener() {
+    sources = !observe ? null : new OperationSources(new OperationListener() {
       @Override
       public void onBegin(Operation op) {
         Trigger t = trigger;
@@ -76,6 +91,26 @@ public final class AutoMode implements AutoCloseable {
           end();
       }
     });
+  }
+
+  /**
+   * Whether it hears of the operations reported to it rather than those of
+   * this JVM.
+   */
+  public boolean isFed() {
+    return sources == null;
+  }
+
+  /**
+   * An operation that ended, reported when fed: starts a session if it
+   * matches, or keeps the session started from stopping.
+   */
+  public void ended(String operation) {
+    Trigger t = trigger;
+    if (t != null && t.browser() == null && t.matches(operation, null)) {
+      begin(t, operation);
+      end();
+    }
   }
 
   /**
@@ -130,6 +165,8 @@ public final class AutoMode implements AutoCloseable {
    * operations of the jfrweb.ops API do from the start.
    */
   public void observe(App app) {
+    if (sources == null)
+      throw new IllegalStateException("Fed by the operations reported to it");
     sources.observe(app);
   }
 
@@ -187,7 +224,8 @@ public final class AutoMode implements AutoCloseable {
   @Override
   public synchronized void close() {
     trigger = null;
-    sources.close();
+    if (sources != null)
+      sources.close();
     counted.clear();
     scheduler.shutdownNow();
     if (session != null) {

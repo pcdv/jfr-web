@@ -168,6 +168,7 @@ async function call(path, init) {
 /**
  * @typedef {object} Live
  * @property {boolean} observing whether operations may come: a flak app is observed, or the API was used
+ * @property {boolean} [fed] whether they are those of another JVM, read from its events
  * @property {string[]} apps the paths of the flak apps observed, "" for an app at the root
  * @property {number} window in minutes
  * @property {number[]} windows those that can be asked for
@@ -185,6 +186,7 @@ export function getLive(window) {
 /**
  * @typedef {object} AutoState
  * @property {boolean} observing whether operations may come: nothing triggers sessions otherwise
+ * @property {boolean} [fed] whether they are those of another JVM, read from its events once they end
  * @property {boolean} flakApps whether flak apps are observed, whose requests may come from a browser
  * @property {boolean} armed
  * @property {string[]} [patterns] operations that trigger a session, * matching anything; empty for any
@@ -229,6 +231,69 @@ export function armAuto(a) {
 /** @returns {Promise<AutoState>} */
 export function disarmAuto() {
   return call('api/auto', {method: 'DELETE'});
+}
+
+/**
+ * A JVM of the machine, in standalone mode.
+ *
+ * @typedef {object} Jvm
+ * @property {number} pid
+ * @property {string} name as it lists itself: its main class or jar, and its arguments
+ * @property {string} app what its sessions are kept by: its main class, or its jar without version
+ * @property {boolean} [attached]
+ */
+
+/**
+ * An application whose sessions are kept, in standalone mode.
+ *
+ * @typedef {object} StoredApp
+ * @property {string} app
+ * @property {string} path of its interface, relative to the page of the JVMs
+ * @property {number | null} pid of its JVM attached
+ * @property {number} sessions
+ * @property {string | null} last start of its latest session
+ */
+
+/**
+ * @typedef {object} Jvms
+ * @property {string} directory where the sessions are kept
+ * @property {Jvm[]} jvms
+ * @property {StoredApp[]} apps the latest session first
+ */
+
+/** @returns {Promise<Jvms>} the JVMs of the machine, from the page that lists them */
+export function listJvms() {
+  return call('api/jvms');
+}
+
+/**
+ * Attaches to a JVM, instead of the one attached.
+ *
+ * @param {number} pid
+ * @param {string} [root] the path of the page of the JVMs, relative to this one
+ * @returns {Promise<{app: string, path: string}>} path: of the interface of its
+ *          application, relative to the page of the JVMs
+ */
+export function attachJvm(pid, root = '') {
+  return call(`${root}api/jvms/${pid}/attach`, {method: 'POST'});
+}
+
+/**
+ * The application profiled, in standalone mode.
+ *
+ * @typedef {object} Target
+ * @property {string} app
+ * @property {number | null} pid of its JVM attached
+ * @property {string | null} name of its JVM attached
+ * @property {Jvm[]} running its JVMs running
+ */
+
+/** @returns {Promise<Target | null>} null when the profiler is embedded in the JVM it profiles */
+export async function getTarget() {
+  if (staticFiles)
+    return null;
+  const resp = await fetch('api/target');
+  return resp.ok ? resp.json() : null;
 }
 
 /**

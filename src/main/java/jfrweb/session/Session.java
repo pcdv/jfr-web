@@ -7,7 +7,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 
-import jdk.jfr.Recording;
 import jfrweb.analysis.Analysis;
 
 /**
@@ -30,10 +29,10 @@ public final class Session {
   private volatile String name;
 
   /** While recording. */
-  Recording recording;
+  Recorder.Running recording;
 
-  /** Recorded elsewhere, e.g. a snapshot: its file may be purged. */
-  boolean external;
+  /** The sessions that keep it on disk, null for one kept by others, e.g. a snapshot. */
+  Sessions owner;
 
   /** Loaded on demand, and dropped under memory pressure. */
   private SoftReference<Analysis> analysis = new SoftReference<>(null);
@@ -79,6 +78,9 @@ public final class Session {
    */
   public void setName(String name) {
     this.name = name == null || name.isBlank() ? null : name.strip();
+    Sessions o = owner;
+    if (o != null)
+      o.save(this);
   }
 
   public State getState() {
@@ -123,7 +125,8 @@ public final class Session {
       throw new IllegalStateException("Session " + id + " is still recording");
     Analysis a = analysis.get();
     if (a == null) {
-      a = Analysis.load(file);
+      // a snapshot may hold what came before its start
+      a = Analysis.load(file, owner != null ? start : null);
       analysis = new SoftReference<>(a);
     }
     return a;
