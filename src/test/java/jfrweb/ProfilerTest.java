@@ -100,9 +100,9 @@ public class ProfilerTest {
   public void testManualSession() throws Exception {
     profiler = Profiler.builder().directory(dir).start();
 
-    HttpResponse<String> started = post("api/sessions");
+    HttpResponse<String> started = post("api/sessions?name=first+try");
     Assert.assertEquals(started.body(), 200, started.statusCode());
-    Assert.assertTrue(started.body(), started.body().contains("\"state\":\"RECORDING\""));
+    Assert.assertTrue(started.body(), started.body().contains("\"state\":\"RECORDING\",\"name\":\"first try\""));
     Assert.assertEquals("one session at a time", 409, post("api/sessions").statusCode());
     Assert.assertEquals("still recording", 409, get("api/sessions/1/report").statusCode());
 
@@ -117,6 +117,9 @@ public class ProfilerTest {
 
     String list = get("api/sessions").body();
     Assert.assertTrue(list, list.startsWith("[{\"id\":1,"));
+    Assert.assertTrue(post("api/sessions/1/name?name=+renamed+").body().contains("\"name\":\"renamed\""));
+    Assert.assertTrue("blank: no name", post("api/sessions/1/name?name=").body().contains("\"name\":null"));
+    Assert.assertEquals(404, post("api/sessions/9/name?name=x").statusCode());
 
     HttpResponse<String> report = get("api/sessions/1/report");
     Assert.assertEquals("application/json", report.headers().firstValue("Content-Type").orElse(null));
@@ -211,7 +214,8 @@ public class ProfilerTest {
   public void testAutoModeArmedBrowser() throws Exception {
     profiler = Profiler.builder().directory(dir).observe(app).start();
 
-    HttpResponse<String> armed = post("api/auto?patterns=GET+/busy&browser=true&idle=0.5");
+    HttpResponse<String> armed = post("api/auto?patterns=GET+/busy&browser=true&idle=0.5&name=slow+busy");
+    Assert.assertTrue(armed.body(), armed.body().contains("\"name\":\"slow busy\""));
     Assert.assertTrue(armed.body(), armed.body().contains("\"armed\":true,\"patterns\":[\"GET /busy\"],\"browser\":true,\"thisBrowser\":true"));
     String cookie = armed.headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
     Assert.assertTrue(cookie, cookie.startsWith("jfrweb-armed="));
@@ -221,7 +225,7 @@ public class ProfilerTest {
 
     busy(cookie);
     String list = get("api/sessions").body();
-    Assert.assertTrue(list, list.contains("\"trigger\":\"auto: GET /busy, armed browser\""));
+    Assert.assertTrue(list, list.contains("\"name\":\"slow busy\",\"trigger\":\"auto: GET /busy, armed browser\""));
     for (int i = 0; i < 100 && !get("api/sessions").body().contains("STOPPED"); i++)
       Thread.sleep(50);
     Assert.assertTrue("stopped once idle", get("api/sessions").body().contains("STOPPED"));
@@ -265,7 +269,7 @@ public class ProfilerTest {
 
       busy(null);
       HttpResponse<String> saved = post("api/snapshots");
-      Assert.assertTrue(saved.body(), saved.body().contains("\"state\":\"STOPPED\",\"trigger\":\"snapshot: saved by hand\""));
+      Assert.assertTrue(saved.body(), saved.body().contains("\"state\":\"STOPPED\",\"name\":null,\"trigger\":\"snapshot: saved by hand\""));
       String id = saved.body().replaceAll("^\\{\"id\":(\\d+),.*", "$1");
 
       String report = get("api/sessions/" + id + "/report").body();

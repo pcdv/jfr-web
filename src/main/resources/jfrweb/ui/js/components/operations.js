@@ -48,8 +48,9 @@ export function operationsPanel(sessionId, rows, onSelect) {
  * @param {import('../api.js').OperationRow[]} rows
  * @param {(name: string) => void} [onSelect] called when a row is clicked
  * @param {string} [empty] the message shown when there is no row
+ * @param {(row: api.OperationRow) => Node} [action] what a last cell offers for a row
  */
-export function operationsTable(rows, onSelect, empty = 'No operation recorded.') {
+export function operationsTable(rows, onSelect, empty = 'No operation recorded.', action) {
   if (rows.length === 0)
     return h('p', {class: 'empty'}, empty);
 
@@ -63,7 +64,8 @@ export function operationsTable(rows, onSelect, empty = 'No operation recorded.'
       h('th', {class: 'num'}, 'Count'), h('th', {class: 'num'}, 'Total'),
       h('th', {class: 'num'}, 'p50'), h('th', {class: 'num'}, 'p99'), h('th', {class: 'num'}, 'Max'),
       h('th', {class: 'num', title: 'Operations that failed: 5xx responses for requests'}, 'Errors'),
-      h('th', {class: 'num'}, 'In'), h('th', {class: 'num'}, 'Out'))),
+      h('th', {class: 'num'}, 'In'), h('th', {class: 'num'}, 'Out'),
+      action ? h('th') : null)),
     h('tbody', null, rows.map(r => h('tr', onSelect ? {
         class: 'clickable',
         title: 'Show the flame graph of these operations',
@@ -78,7 +80,8 @@ export function operationsTable(rows, onSelect, empty = 'No operation recorded.'
       h('td', {class: 'num'}, fmt.duration(r.max)),
       h('td', {class: r.errors ? 'num bad' : 'num'}, r.errors),
       h('td', {class: 'num'}, fmt.bytes(r.bytesIn)),
-      h('td', {class: 'num'}, fmt.bytes(r.bytesOut))))));
+      h('td', {class: 'num'}, fmt.bytes(r.bytesOut)),
+      action ? h('td', {class: 'action'}, action(r)) : null))));
 }
 
 /**

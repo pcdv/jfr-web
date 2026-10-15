@@ -77,7 +77,7 @@ public class AutoModeTest {
 
   @Test
   public void testStartsBeforeTheHandlerAndStopsWhenIdle() throws Exception {
-    auto.arm(new Trigger(List.of("GET /busy"), null, false, Duration.ofMillis(300), Duration.ofSeconds(10)));
+    auto.arm(new Trigger(List.of("GET /busy"), null, false, Duration.ofMillis(300), Duration.ofSeconds(10), " slow busy "));
 
     get("/hello", null);
     Assert.assertTrue("not a matching endpoint", sessions.list().isEmpty());
@@ -87,6 +87,7 @@ public class AutoModeTest {
     Assert.assertTrue("recording when the handler ran", recordingInHandler);
     Session s = sessions.list().get(0);
     Assert.assertEquals("auto: GET /busy", s.getTrigger());
+    Assert.assertEquals("named by the trigger", "slow busy", s.getName());
 
     await(() -> s.getState() == Session.State.STOPPED);
     Assert.assertNull("once: disarmed after the session", auto.getTrigger());

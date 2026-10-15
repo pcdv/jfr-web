@@ -9,6 +9,7 @@ import * as fmt from '../format.js';
 import {flamePanel} from '../components/flame.js';
 import {operationsPanel} from '../components/operations.js';
 import {section} from '../components/section.js';
+import {renameButton} from '../components/sessionName.js';
 import {sessionTimeline} from '../components/sessionTimeline.js';
 import {slowestPanel} from '../components/slowest.js';
 
@@ -19,12 +20,18 @@ import {slowestPanel} from '../components/slowest.js';
 export function renderSession(root, params) {
   const id = Number(params[0]);
   const content = h('div', null, h('p', {class: 'empty'}, 'Reading the recording…'));
+  const title = h('h1', null, `Session ${id}`);
   root.append(h('p', null, h('a', {href: '#/'}, '← Sessions')),
-              h('h1', null, `Session ${id}`),
+              title,
               content);
+
+  /** @param {api.Session} s */
+  const showTitle = s => replace(title, `Session ${id}`, s.name ? ` · ${s.name}` : null, ' ',
+    api.isStatic() ? null : h('span', {class: 'title-action'}, renameButton(s, showTitle)));
 
   Promise.all([api.getReport(id), api.getTimeline(id)]).then(
     ([report, timeline]) => {
+      showTitle(report.session);
       /** @type {string | undefined} the operation clicked on the timeline, whose filters it set */
       let clicked;
       // the interval selected on the timeline, or zoomed in on, narrows

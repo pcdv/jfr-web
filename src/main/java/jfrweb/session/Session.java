@@ -27,6 +27,7 @@ public final class Session {
 
   private volatile Instant end;
   private volatile State state = State.RECORDING;
+  private volatile String name;
 
   /** While recording. */
   Recording recording;
@@ -64,6 +65,20 @@ public final class Session {
    */
   public String getTrigger() {
     return trigger;
+  }
+
+  /**
+   * What the user called it, or null.
+   */
+  public String getName() {
+    return name;
+  }
+
+  /**
+   * Names it; blank or null removes the name.
+   */
+  public void setName(String name) {
+    this.name = name == null || name.isBlank() ? null : name.strip();
   }
 
   public State getState() {

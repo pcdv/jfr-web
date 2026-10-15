@@ -80,7 +80,7 @@ public class ProfilerRoutes {
    * matching anything, none for any operation; {@code browser=true} to only
    * count the requests of the browser arming, which gets a cookie;
    * {@code repeat=true} to start a session each time, not once; {@code idle}
-   * and {@code max}, in seconds.
+   * and {@code max}, in seconds; {@code name}, that of the sessions started.
    */
   @Route("/api/auto")
   @Post
@@ -96,7 +96,7 @@ public class ProfilerRoutes {
     String browser = q.getBool("browser", false) ? AutoMode.newBrowserToken() : null;
     Trigger t = new Trigger(patterns, browser, q.getBool("repeat", false),
                             seconds(q, "idle", Trigger.DEFAULT_IDLE),
-                            seconds(q, "max", Trigger.DEFAULT_MAX));
+                            seconds(q, "max", Trigger.DEFAULT_MAX), q.get("name"));
     auto.arm(t);
     if (browser != null) {
       // to every path of the host: the apps observed may be anywhere on it
@@ -126,6 +126,7 @@ public class ProfilerRoutes {
       m.put("repeat", t.repeat());
       m.put("idle", t.idle().toMillis() / 1000.0);
       m.put("max", t.max().toMillis() / 1000.0);
+      m.put("name", t.name());
     }
     Session s = auto.getSession();
     m.put("recording", s == null ? null : s.getId());
@@ -187,12 +188,17 @@ public class ProfilerRoutes {
     return res;
   }
 
+  /**
+   * Starts a session. Query: {@code name}, optional.
+   */
   @Route("/api/sessions")
   @Post
   @OutputFormat(JSON)
-  public Map<String, Object> start() throws IOException {
+  public Map<String, Object> start(Query q) throws IOException {
     try {
-      return session(sessions.start("manual"));
+      Session s = sessions.start("manual");
+      s.setName(q.get("name"));
+      return session(s);
     }
     catch (IllegalStateException e) {
       throw new HttpException(409, e.getMessage());
@@ -203,6 +209,18 @@ public class ProfilerRoutes {
   @OutputFormat(JSON)
   public Map<String, Object> get(int id) {
     return session(find(id));
+  }
+
+  /**
+   * Names a session. Query: {@code name}, none or blank to remove it.
+   */
+  @Route("/api/sessions/:id/name")
+  @Post
+  @OutputFormat(JSON)
+  public Map<String, Object> rename(int id, Query q) {
+    Session s = find(id);
+    s.setName(q.get("name"));
+    return session(s);
   }
 
   @Route("/api/sessions/:id/stop")
@@ -522,6 +540,7 @@ public class ProfilerRoutes {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("id", s.getId());
     m.put("state", s.getState());
+    m.put("name", s.getName());
     m.put("trigger", s.getTrigger());
     m.put("start", s.getStart());
     m.put("end", s.getEnd());

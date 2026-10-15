@@ -171,6 +171,34 @@ button.primary {
   color: var(--accent-fg);
 }
 
+/* an action among links, looking like them */
+button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+td.action {
+  text-align: right;
+}
+
+.title-action {
+  font-size: 14px;
+  font-weight: normal;
+}
+
+button.small {
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.armed-line {
+  margin: 0 0 12px;
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: default;

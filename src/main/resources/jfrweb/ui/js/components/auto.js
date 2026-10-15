@@ -52,6 +52,7 @@ function armed(s, refresh) {
     h('span', null, ...what, who, s.repeat ? ', every time' : ', once'),
     h('span', {class: 'label'}, 'Stops after'),
     h('span', null, `${s.idle} s without one, or ${s.max} s at most`),
+    s.name ? [h('span', {class: 'label'}, 'Named'), h('span', null, s.name)] : null,
     h('span'),
     h('span', null, h('button', {onclick: () => act(api.disarmAuto, refresh)}, 'Disarm')));
 }
@@ -71,6 +72,8 @@ function form(state, refresh) {
   const repeat = h('input', {type: 'checkbox', checked: last.repeat});
   const idle = h('input', {type: 'number', class: 'seconds', min: 0.5, step: 'any', value: last.idle});
   const max = h('input', {type: 'number', class: 'seconds', min: 1, step: 'any', value: last.max});
+  // not kept: a name is for one arming
+  const name = h('input', {type: 'text', id: 'auto-name', class: 'wide', placeholder: 'optional, e.g. slow login of user X'});
 
   function arm() {
     /** @type {api.AutoArming} */
@@ -79,7 +82,7 @@ function form(state, refresh) {
       idle: Number(idle.value), max: Number(max.value),
     };
     writeArming(a);
-    act(() => api.armAuto(a), refresh);
+    act(() => api.armAuto({...a, name: name.value}), refresh);
   }
 
   return h('form', {class: 'form-grid', onsubmit: (/** @type {Event} */ e) => { e.preventDefault(); arm(); }},
@@ -98,6 +101,8 @@ function form(state, refresh) {
       h('label', {title: 'Once no matching operation has run for that long, which leaves time for asynchronous work'},
         idle, ' s without one'),
       h('label', null, max, ' s at most')),
+    h('label', {class: 'label', for: 'auto-name'}, 'Name'),
+    h('div', null, name),
     h('span'),
     h('div', null, h('button', {class: 'primary', type: 'submit'}, 'Arm')));
 }
@@ -116,8 +121,8 @@ async function act(action, refresh) {
   refresh();
 }
 
-/** @returns {Partial<api.AutoArming>} */
-function readArming() {
+/** @returns {Partial<api.AutoArming>} the last arming of this browser, to arm alike */
+export function readArming() {
   try {
     return JSON.parse(readSetting(ARMING_KEY) || '{}');
   }

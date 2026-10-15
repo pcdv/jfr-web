@@ -6,6 +6,7 @@ import * as api from '../api.js';
 import {h, replace, errorBox} from '../dom.js';
 import * as fmt from '../format.js';
 import {autoPanel} from '../components/auto.js';
+import {renameButton} from '../components/sessionName.js';
 
 /** How often the list refreshes while a session records or auto mode is armed, in ms. */
 const POLL = 1000;
@@ -88,11 +89,12 @@ function table(sessions, refresh) {
 
   return h('table', {class: 'grid'},
     h('thead', null, h('tr', null,
-      h('th', {class: 'num'}, '#'), h('th', null, 'State'), h('th', null, 'Started'),
+      h('th', {class: 'num'}, '#'), h('th', null, 'Name'), h('th', null, 'State'), h('th', null, 'Started'),
       h('th', {class: 'num'}, 'Duration'), h('th', {class: 'num'}, 'Size'),
       h('th', null, 'Trigger'), h('th', null, ''))),
     h('tbody', null, sessions.map(s => h('tr', null,
       h('td', {class: 'num'}, s.id),
+      h('td', null, s.name ?? h('span', {class: 'hint'}, '—')),
       h('td', null, h('span', {class: `state ${s.state.toLowerCase()}`}, s.state.toLowerCase())),
       h('td', null, fmt.time(s.start)),
       h('td', {class: 'num'}, fmt.duration(s.duration)),
@@ -101,7 +103,8 @@ function table(sessions, refresh) {
       h('td', {class: 'actions'}, s.state === 'RECORDING'
         ? h('button', {onclick: () => act(() => api.stopSession(s.id), refresh)}, 'Stop')
         : [h('a', {href: `#/sessions/${s.id}`}, 'Report'), ' ',
-           h('a', {href: api.downloadUrl(s.id), download: true}, 'Download .jfr')])))));
+           h('a', {href: api.downloadUrl(s.id), download: true}, 'Download .jfr'),
+           api.isStatic() ? null : renameButton(s, refresh)])))));
 }
 
 /**

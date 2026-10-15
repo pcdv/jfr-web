@@ -8,6 +8,7 @@
  * @typedef {object} Session
  * @property {number} id
  * @property {'RECORDING' | 'STOPPED'} state
+ * @property {string | null} name what the user called it
  * @property {string} trigger how it was started, e.g. "manual"
  * @property {string} start ISO-8601
  * @property {string | null} end ISO-8601, null while recording
@@ -192,6 +193,7 @@ export function getLive(window) {
  * @property {boolean} [repeat] a session each time, or once
  * @property {number} [idle] seconds without a matching operation before a session stops
  * @property {number} [max] maximum duration of a session, in seconds
+ * @property {string | null} [name] that of the sessions it starts
  * @property {number | null} recording the id of the session it started, while it records
  */
 
@@ -202,6 +204,7 @@ export function getLive(window) {
  * @property {boolean} repeat a session each time, or once
  * @property {number} idle in seconds
  * @property {number} max in seconds
+ * @property {string} [name] that of the sessions it starts
  */
 
 /** @returns {Promise<AutoState>} */
@@ -218,6 +221,8 @@ export function armAuto(a) {
     patterns: a.patterns, browser: String(a.browser), repeat: String(a.repeat),
     idle: String(a.idle), max: String(a.max),
   });
+  if (a.name)
+    q.set('name', a.name);
   return call(`api/auto?${q}`, {method: 'POST'});
 }
 
@@ -251,6 +256,15 @@ export function listSessions() {
 /** @returns {Promise<Session>} */
 export function startSession() {
   return call('api/sessions', {method: 'POST'});
+}
+
+/**
+ * @param {number} id
+ * @param {string} name empty to remove it
+ * @returns {Promise<Session>}
+ */
+export function renameSession(id, name) {
+  return call(`api/sessions/${id}/name?${new URLSearchParams({name})}`, {method: 'POST'});
 }
 
 /**

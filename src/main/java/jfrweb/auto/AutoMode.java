@@ -139,6 +139,7 @@ public final class AutoMode implements AutoCloseable {
       return;
     try {
       session = sessions.start(t.describe(operation));
+      session.setName(t.name());
       sessionStart = System.nanoTime();
       lastEnd = sessionStart;
     }

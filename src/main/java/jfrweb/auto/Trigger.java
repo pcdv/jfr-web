@@ -18,18 +18,28 @@ import java.util.stream.Collectors;
  * @param idle     the session stops once no matching operation has run for that
  *                 long: long enough for asynchronous work to finish
  * @param max      the session stops after that long whatever happens
+ * @param name     the name of the sessions it starts, or null
  */
 public record Trigger(List<String> patterns,
                       String browser,
                       boolean repeat,
                       Duration idle,
-                      Duration max) {
+                      Duration max,
+                      String name) {
 
   public static final Duration DEFAULT_IDLE = Duration.ofSeconds(3);
   public static final Duration DEFAULT_MAX = Duration.ofSeconds(120);
 
   public Trigger {
     patterns = List.copyOf(patterns);
+    name = name == null || name.isBlank() ? null : name.strip();
+  }
+
+  /**
+   * A trigger of unnamed sessions.
+   */
+  public Trigger(List<String> patterns, String browser, boolean repeat, Duration idle, Duration max) {
+    this(patterns, browser, repeat, idle, max, null);
   }
 
   /**
