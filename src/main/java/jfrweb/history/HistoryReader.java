@@ -231,18 +231,24 @@ public final class HistoryReader {
    */
   public CountTimeline getTimeline() {
     long span = Duration.between(from, to).getSeconds();
-    // the longest interval: the first and the last ones of a run are partial
-    long interval = Math.max(1, intervals.stream()
-                                         .mapToLong(i -> Duration.between(i.start(), i.end()).getSeconds())
-                                         .max().orElse(1));
+    long interval = usualInterval();
     // a whole number of intervals: otherwise buckets would hold one or two
     // intervals in turn, a sawtooth that is not in the traffic
-    long bucket = STEPS[STEPS.length - 1];
+    long bucket = 0;
     for (long s : STEPS)
       if (s >= interval && s % interval == 0 && span <= s * MAX_BUCKETS) {
         bucket = s;
         break;
       }
+    // an interval none of them is a multiple of
+    if (bucket == 0) {
+      bucket = STEPS[STEPS.length - 1];
+      for (long s : STEPS)
+        if (s >= interval && span <= s * MAX_BUCKETS) {
+          bucket = s;
+          break;
+        }
+    }
     int buckets = (int) Math.max(1, (span + bucket - 1) / bucket);
 
     List<String> top = getOperations().stream().limit(MAX_SERIES).map(OperationStats::name)
@@ -259,7 +265,12 @@ public final class HistoryReader {
     boolean[] covered = new boolean[buckets];
 
     for (Interval i : intervals) {
-      long b = Duration.between(from, i.start()).getSeconds() / bucket;
+      // by its end: an interval stretched over a pause has its operations
+      // after it. The same bucket as its start otherwise
+      long b = (Duration.between(from, i.end()).toMillis() - 1) / 1000 / bucket;
+      // one that ends after the period, but began in it
+      if (b >= buckets && i.start().isBefore(to))
+        b = buckets - 1;
       if (b < 0 || b >= buckets)
         continue;
       covered[(int) b] = true;
@@ -269,6 +280,25 @@ public final class HistoryReader {
       }
     }
     return new CountTimeline(from, Duration.ofSeconds(bucket), buckets, series, other, seconds, otherSeconds, covered);
+  }
+
+  /**
+   * The interval the history was written at, in seconds: the most frequent
+   * duration of its intervals. The first and last ones of a run are shorter,
+   * and one that spans a pause of the JVM or of the machine longer.
+   */
+  private long usualInterval() {
+    Map<Long, Integer> counts = new HashMap<>();
+    for (Interval i : intervals)
+      counts.merge(Math.max(1, Math.round(Duration.between(i.start(), i.end()).toMillis() / 1000.0)), 1, Integer::sum);
+    long usual = 1;
+    int most = 0;
+    for (Map.Entry<Long, Integer> e : counts.entrySet())
+      if (e.getValue() > most || (e.getValue() == most && e.getKey() > usual)) {
+        usual = e.getKey();
+        most = e.getValue();
+      }
+    return usual;
   }
 
   /**

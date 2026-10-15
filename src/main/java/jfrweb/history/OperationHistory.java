@@ -136,7 +136,10 @@ public final class OperationHistory implements AutoCloseable {
     long boundary = (now / step + 1) * step;
     scheduler.schedule(() -> {
       try {
-        flush(Instant.ofEpochMilli(boundary));
+        // late, e.g. after the machine slept: the next interval starts now,
+        // on its boundary, and the pause is left out rather than spread
+        long current = clock.millis() / step * step;
+        flush(Instant.ofEpochMilli(boundary), Instant.ofEpochMilli(Math.max(boundary, current)));
       }
       catch (RuntimeException e) {
         log.log(System.Logger.Level.WARNING, "Could not write the operation history", e);
@@ -163,11 +166,18 @@ public final class OperationHistory implements AutoCloseable {
    * when closing.
    */
   synchronized void flush(Instant end) {
+    flush(end, end);
+  }
+
+  /**
+   * @param next the start of the next interval, after a pause
+   */
+  synchronized void flush(Instant end, Instant next) {
     IntervalStats ended;
     swap.writeLock().lock();
     try {
       ended = current;
-      current = new IntervalStats(end, slowest);
+      current = new IntervalStats(next, slowest);
     }
     finally {
       swap.writeLock().unlock();

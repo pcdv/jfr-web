@@ -229,6 +229,31 @@ public class OperationHistoryTest {
   }
 
   @Test
+  public void testTimelineAfterPause() throws Exception {
+    clock.now = Instant.parse("2026-10-13T10:00:00Z");
+    history = builder().start();
+    for (int m = 1; m <= 10; m++)
+      history.flush(Instant.parse("2026-10-13T10:00:00Z").plusSeconds(60L * m));
+    // written before the fix: an interval stretched over 8 hours of sleep,
+    // its operations at its end
+    clock.now = Instant.parse("2026-10-13T18:10:10Z");
+    get("/item/a");
+    awaitPending(1);
+    history.flush(Instant.parse("2026-10-13T18:11:00Z"));
+    // the scheduler late after another pause: the pause left out
+    history.flush(Instant.parse("2026-10-13T18:12:00Z"), Instant.parse("2026-10-13T20:00:00Z"));
+    history.flush(Instant.parse("2026-10-13T20:01:00Z"));
+
+    HistoryReader.CountTimeline t = HistoryReader.read(dir, Instant.parse("2026-10-13T00:00:00Z"),
+                                                       Instant.parse("2026-10-14T00:00:00Z")).getTimeline();
+    // a day in at most 300 buckets, whole minutes: not one bucket for the day
+    Assert.assertEquals(Duration.ofMinutes(5), t.bucket());
+    int afterSleep = (int) (Duration.ofHours(18).plusMinutes(10).toSeconds() / t.bucket().toSeconds());
+    Assert.assertEquals(1, t.series().get("GET /api/item/:id")[afterSleep], 0);
+    Assert.assertFalse("left out", t.covered()[(int) (Duration.ofHours(19).toSeconds() / t.bucket().toSeconds())]);
+  }
+
+  @Test
   public void testTimeline() throws Exception {
     history = builder().start();
     get("/item/a");
