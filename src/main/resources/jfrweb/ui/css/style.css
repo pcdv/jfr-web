@@ -87,6 +87,14 @@ a {
   color: var(--fg);
 }
 
+/* the page shown */
+.topbar nav a.active {
+  color: var(--fg);
+  font-weight: 600;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--accent);
+}
+
 /* a static export tells what it leaves out */
 .static-note {
   margin: 0;

@@ -45,11 +45,22 @@ function route() {
     const m = location.hash.match(pattern);
     if (m) {
       document.title = `${title(m.slice(1))} · ${appName}`;
+      markActive();
       stopCurrent = view(root, m.slice(1));
       return;
     }
   }
   location.hash = '#/';
+}
+
+/**
+ * Outlines the link of the page shown in the top bar: a session's report is
+ * under Sessions.
+ */
+function markActive() {
+  const hash = location.hash.startsWith('#/sessions/') || location.hash === '' ? '#/' : location.hash;
+  for (const a of document.querySelectorAll('header nav a'))
+    a.classList.toggle('active', a.getAttribute('href') === hash);
 }
 
 /**
