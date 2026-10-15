@@ -39,6 +39,9 @@ public class StackDepthTest {
       r.start();
     }
     Assert.assertFalse(StackDepth.raise(512));
+    // the depth kept, which it logs: 64, or what a test raised it to first
+    int current = StackDepth.current();
+    Assert.assertTrue("depth: " + current, current >= 64 && current < 512);
   }
 
   @Test

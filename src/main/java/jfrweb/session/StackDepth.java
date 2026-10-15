@@ -45,7 +45,14 @@ public final class StackDepth {
     if (depth <= 0 || depth > MAX)
       throw new IllegalArgumentException("Stack depth out of 1.." + MAX + ": " + depth);
     if (FlightRecorder.isInitialized()) {
-      log.log(System.Logger.Level.DEBUG, "JFR already recorded in this JVM: its stack depth stays");
+      // e.g. a tool attached to the JVM recorded first: worth telling, as
+      // the stacks may come cut
+      int current = current();
+      if (current < depth)
+        log.log(System.Logger.Level.INFO, "JFR already recorded in this JVM, its stack depth stays at "
+                                          + (current > 0 ? current + " frames" : "what it was")
+                                          + ": start the JVM with -XX:FlightRecorderOptions:stackdepth="
+                                          + depth + " for deeper stacks");
       return false;
     }
     for (String arg : ManagementFactory.getRuntimeMXBean().getInputArguments())
@@ -54,9 +61,7 @@ public final class StackDepth {
         return false;
       }
     try {
-      ManagementFactory.getPlatformMBeanServer().invoke(
-        new ObjectName("com.sun.management:type=DiagnosticCommand"), "jfrConfigure",
-        new Object[]{new String[]{"stackdepth=" + depth}}, new String[]{String[].class.getName()});
+      configure("stackdepth=" + depth);
       log.log(System.Logger.Level.DEBUG, "Stack depth of JFR raised to " + depth + " frames");
       return true;
     }
@@ -64,5 +69,29 @@ public final class StackDepth {
       log.log(System.Logger.Level.WARNING, "Could not raise the stack depth of JFR", e);
       return false;
     }
+  }
+
+  /**
+   * The depth JFR uses, as JFR.configure tells it, or 0 if unknown.
+   */
+  static int current() {
+    try {
+      for (String line : configure().lines().toList()) {
+        // "Stack depth: 64"
+        if (line.trim().startsWith("Stack depth:"))
+          return Integer.parseInt(line.substring(line.indexOf(':') + 1).trim());
+      }
+    }
+    catch (Exception e) {
+      log.log(System.Logger.Level.DEBUG, "Could not read the stack depth of JFR", e);
+    }
+    return 0;
+  }
+
+  /** Runs JFR.configure, which only prints the configuration without options. */
+  private static String configure(String... options) throws Exception {
+    return (String) ManagementFactory.getPlatformMBeanServer().invoke(
+      new ObjectName("com.sun.management:type=DiagnosticCommand"), "jfrConfigure",
+      new Object[]{options}, new String[]{String[].class.getName()});
   }
 }
