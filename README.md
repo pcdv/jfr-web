@@ -99,7 +99,8 @@ jbang app install jfr-web@pcdv/jfr-web      # then: jfr-web open app.jfr
 ```
 
 If the command isn't found afterwards, `jbang app setup` adds JBang's directory of commands to
-your PATH. When a new version comes out, `jbang app install --force jfr-web@pcdv/jfr-web` updates
+your PATH. On Windows, run it from PowerShell or cmd, not Git Bash: Git Bash mangles the
+PowerShell command it runs to change the PATH, and the change fails. When a new version comes out, `jbang app install --force jfr-web@pcdv/jfr-web` updates
 the command, and `jbang --fresh jfr-web@pcdv/jfr-web ...` the plain alias.
 
 ### The library
