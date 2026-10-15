@@ -36,6 +36,8 @@ public final class Operation implements AutoCloseable {
   int status;
   /** The token of the armed client that sent it, see jfrweb.auto.AutoMode. */
   String armToken;
+  /** Read from an event of the application, see {@link MappedOperations}. */
+  boolean mapped;
 
   /**
    * @param recorded  whether to record its JFR event
@@ -148,6 +150,15 @@ public final class Operation implements AutoCloseable {
   }
 
   /**
+   * Whether it was read from an event of the application mapped to
+   * operations, once over: its listeners only hear of its end, about a
+   * second after it. See {@link MappedOperations}.
+   */
+  public boolean isMapped() {
+    return mapped;
+  }
+
+  /**
    * The token of the armed client that sent it, or null.
    */
   public String getArmToken() {
@@ -215,10 +226,17 @@ public final class Operation implements AutoCloseable {
    * @return whether it was not ended already
    */
   boolean end(long nanos) {
+    return end(nanos, Thread.currentThread().getName());
+  }
+
+  /**
+   * @param thread the name of the thread that ended it
+   */
+  boolean end(long nanos, String thread) {
     if (!ended.compareAndSet(false, true))
       return false;
     durationNanos = nanos;
-    endThread = Thread.currentThread().getName();
+    endThread = thread;
     if (event != null) {
       event.end();
       if (event.shouldCommit()) {

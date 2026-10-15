@@ -80,6 +80,11 @@ public final class Operations {
     return used;
   }
 
+  /** The listeners of the operations of this JVM. */
+  static Iterable<OperationListener> listeners() {
+    return listeners;
+  }
+
   /**
    * Notifies a listener of the operations begun from now on, until removed.
    */

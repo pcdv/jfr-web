@@ -21,6 +21,8 @@ public final class OperationSources implements AutoCloseable {
   public OperationSources(OperationListener listener) {
     this.listener = listener;
     Operations.addListener(listener);
+    // the events of the application mapped to operations, if any
+    MappedOperations.consumerAdded();
   }
 
   /**
@@ -41,15 +43,18 @@ public final class OperationSources implements AutoCloseable {
   }
 
   /**
-   * Whether operations may come: a flak app is observed, or the application
-   * has used the API, and this is not closed.
+   * Whether operations may come: a flak app is observed, the application
+   * has used the API, or events of the application are mapped, and this is
+   * not closed.
    */
   public boolean isObserving() {
-    return !closed && (!apps.isEmpty() || Operations.isUsed());
+    return !closed && (!apps.isEmpty() || Operations.isUsed() || MappedOperations.isActive());
   }
 
   @Override
   public void close() {
+    if (!closed)
+      MappedOperations.consumerRemoved();
     closed = true;
     Operations.removeListener(listener);
     for (Map.Entry<App, Observation> e : apps)

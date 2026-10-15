@@ -2,6 +2,7 @@ package jfrweb.analysis;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -10,6 +11,9 @@ import jdk.jfr.Enabled;
 import jdk.jfr.Event;
 import jdk.jfr.Name;
 import jdk.jfr.Recording;
+import jfrweb.auto.AutoMode;
+import jfrweb.auto.Trigger;
+import jfrweb.live.LiveStats;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
 import org.junit.After;
@@ -94,6 +98,41 @@ public class EventMappingsTest {
     Assert.assertFalse(ops.get(1).failed());
     Assert.assertEquals(Thread.currentThread().getName(), cancel.threadName());
     Assert.assertTrue("its duration", cancel.durationNanos() >= 15_000_000);
+  }
+
+  @Test
+  public void testEmbeddedLiveStatsAndAutoMode() throws Exception {
+    Sessions sessions = new Sessions(dir, Sessions.defaultSettings(), false);
+    try (LiveStats live = new LiveStats();
+         AutoMode auto = new AutoMode(sessions)) {
+      EventMappings.register(new EventMapping("test.RpcCall", "{service}.{method}", null, "error"));
+      Assert.assertTrue("an operation may come", live.isObserving());
+
+      // known once over: the session records as armed, until one has ended
+      auto.arm(new Trigger(List.of("orders.*"), null, false, Duration.ofMillis(300), Duration.ofSeconds(10)));
+      Session s = auto.getSession();
+      Assert.assertNotNull(s);
+      Assert.assertTrue(auto.isWaiting());
+
+      call("place", null);
+      call("cancel", "no such order");
+      // streamed, about a second later
+      long end = System.nanoTime() + 10_000_000_000L;
+      while (live.getOperations(1).size() < 2 && System.nanoTime() < end)
+        Thread.sleep(50);
+      List<OperationStats> ops = live.getOperations(1).stream()
+                                     .sorted(Comparator.comparing(OperationStats::name)).toList();
+      Assert.assertEquals(List.of("orders.cancel", "orders.place"), ops.stream().map(OperationStats::name).toList());
+      Assert.assertEquals(1, ops.get(0).errors());
+
+      while (s.getState() == Session.State.RECORDING && System.nanoTime() < end)
+        Thread.sleep(50);
+      Assert.assertEquals("stopped once idle", Session.State.STOPPED, s.getState());
+      Assert.assertTrue(s.getAnalysis().getOperations().stream().anyMatch(o -> o.name().equals("orders.place")));
+    }
+    finally {
+      sessions.close();
+    }
   }
 
   @Test

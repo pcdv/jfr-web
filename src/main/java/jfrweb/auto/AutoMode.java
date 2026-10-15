@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 
 import flak.App;
 import jfrweb.ops.FlakOperations;
+import jfrweb.ops.MappedOperations;
 import jfrweb.ops.Operation;
 import jfrweb.ops.OperationListener;
 import jfrweb.ops.OperationSources;
@@ -95,6 +96,8 @@ public final class AutoMode implements AutoCloseable {
       public void onEnd(Operation op) {
         if (counted.remove(op))
           end();
+        else if (op.isMapped())
+          ended(op.getName());
       }
     });
   }
@@ -108,8 +111,18 @@ public final class AutoMode implements AutoCloseable {
   }
 
   /**
-   * An operation that ended, reported when fed: starts a session if it
-   * matches, or keeps the session started from stopping.
+   * Whether operations may be known only once they end: when fed, or when
+   * events of the application are mapped to operations. A session then
+   * starts as armed, and waits for a matching operation to end.
+   */
+  private boolean late() {
+    return sources == null || MappedOperations.isActive();
+  }
+
+  /**
+   * An operation known only once it ended: reported when fed, or read from
+   * an event mapped. Ends the wait of the session started as armed, or keeps
+   * it from stopping.
    */
   public synchronized void ended(String operation) {
     // the session started as armed, by check() if something else recorded
@@ -178,7 +191,7 @@ public final class AutoMode implements AutoCloseable {
       }
     }
     this.trigger = trigger;
-    if (isFed())
+    if (late() && trigger.browser() == null)
       startWaiting(trigger);
   }
 
@@ -222,6 +235,11 @@ public final class AutoMode implements AutoCloseable {
 
   private synchronized void begin(Trigger t, String operation) {
     inFlight++;
+    if (session != null && waiting) {
+      // started as armed: this one is recorded whole
+      waiting = false;
+      sessionStart = System.nanoTime();
+    }
     if (session != null || sessions.getRecording() != null)
       return;
     try {
@@ -247,7 +265,7 @@ public final class AutoMode implements AutoCloseable {
     if (session == null) {
       // fed: armed again, or what recorded instead has stopped
       Trigger t = trigger;
-      if (isFed() && t != null)
+      if (late() && t != null && t.browser() == null)
         startWaiting(t);
       return;
     }
@@ -266,8 +284,10 @@ public final class AutoMode implements AutoCloseable {
     boolean idle = inFlight == 0 && now - lastEnd >= idleLimit;
     boolean tooLong = now - sessionStart >= maxLimit;
     if (idle || tooLong) {
-      sessions.stop(session.getId());
+      // disarmed first, if once: whoever sees the session stopped sees it too
+      int id = session.getId();
       sessionEnded();
+      sessions.stop(id);
     }
   }
 

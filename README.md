@@ -54,9 +54,9 @@ operations are:
 |---|---|---|---|---|
 | Sessions, flame graphs by thread and interval | yes | yes | yes | yes |
 | Operations table, timeline, slowest calls, flame graph per operation | yes | yes | yes | |
-| Live operations, Arm, auto mode | yes | yes | standalone only | |
+| Live operations, Arm, auto mode | yes | yes | yes, recording from the moment you arm | |
 | Only the requests of your own browser trigger a session | embedded only | | | |
-| History of operations, snapshots taken on slow calls | embedded only | embedded only | | |
+| History of operations, snapshots taken on slow calls | embedded only | embedded only | embedded only | |
 
 ## Getting it
 
@@ -229,20 +229,24 @@ field, or a field whose value, when present, is the error message. Each event be
 synchronous operation, on the thread that committed it, lasting as long as the event.
 
 The command line picks that file up by itself; `--events <file>` adds another one
-(`jfr-web --events rpc.properties open app.jfr`). Embedded, register the mappings in code before
-starting the profiler:
+(`jfr-web --events rpc.properties open app.jfr`). An embedded application, or the plugin that
+bridges your framework to jfr-web, describes its events in code instead, at any time:
 
 ```java
 EventMappings.register(new EventMapping("com.acme.RpcCall", "{service}.{method}", "{requestId}", "error"));
 // or: EventMappings.load(Path.of("operation-events.properties"));
 ```
 
-Sessions and snapshots then turn the event on, and every report reads its operations like any
-other: in sessions, opened recordings, static exports and the command line. In standalone mode
-the event is streamed too, so the live view and Arm work. Embedded, the live view and auto mode
-still rely on code telling them when an operation starts, so they don't see mapped events. If you
-need them there, call the [`jfrweb.ops` API](#declaring-operations) from your framework's hooks
-instead.
+From then on, mapped events count everywhere. Sessions and snapshots turn the event on, and
+every report reads its operations like any other: sessions, opened recordings, static exports,
+the command line. While the live view, the history of operations, snapshots or auto mode run in
+the JVM, jfr-web also streams the event in-process and feeds them each call, about a second after
+it ends; standalone mode does the same from outside.
+
+One thing differs from operations declared in code: jfr-web only learns about a call once it's
+over. So when events are mapped, arming a session (Arm, auto mode) starts recording right away,
+and the session stops once a matching call has completed. Operations jfr-web sees start, like
+flak requests, still end the wait the moment they begin.
 
 ## Standalone
 

@@ -11,10 +11,13 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
+import jfrweb.ops.MappedOperations;
+
 /**
  * The events of the application read as operations, see
  * {@link EventMapping}, for this JVM: recordings read here take operations
- * from them, and recordings made here enable them.
+ * from them, recordings made here enable them, and what listens to the
+ * operations of this JVM hears of them, see {@link MappedOperations}.
  * <p>
  * In a file, one mapping per event, its keys being the name of the event
  * then "name", "detail" or "failed":
@@ -36,10 +39,12 @@ public final class EventMappings {
    */
   public static void register(EventMapping m) {
     mappings.put(m.event(), m);
+    MappedOperations.update();
   }
 
   public static void unregister(String event) {
-    mappings.remove(event);
+    if (mappings.remove(event) != null)
+      MappedOperations.update();
   }
 
   /**
