@@ -71,12 +71,16 @@ const sectionOf = title =>
  */
 async function shot(name, first, last = first) {
   const r = await evaluate(`(() => {
+    // the top bar sticks to the window: drawn where the page is scrolled to
+    // otherwise, over the part of the page taken
+    document.querySelector('.topbar').style.position = 'static';
     const a = (${first}).getBoundingClientRect(), b = (${last}).getBoundingClientRect();
     return {y: a.top + scrollY, h: b.bottom - a.top};
   })()`);
   const top = Math.max(0, r.y - 8);
   const clip = {x: 0, y: top, width, height: r.y + r.h + 16 - top, scale: 1};
   const res = await send('Page.captureScreenshot', {format: 'png', clip, captureBeyondViewport: true});
+  await evaluate(`document.querySelector('.topbar').style.position = ''`);
   writeFileSync(join(outDir, prefix + name), Buffer.from(res.result.data, 'base64'));
   console.log(prefix + name, `${width}x${Math.round(clip.height)}`);
 }

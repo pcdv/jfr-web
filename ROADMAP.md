@@ -138,7 +138,8 @@ thread of periodic events uses 0.09 s of CPU per minute, about 0.15% of a core. 
   from their fields, and a field telling a failure (`EventMappings`, `operation-events.properties`)
 - [x] Mapped events in the live view, history, snapshots and auto mode of an embedded profiler,
   streamed in-process while something listens to operations
-- [ ] Nested operations on a thread (an operation inside a request), shown by the innermost
+- [x] Nested operations on a thread (an operation inside a request), shown by the innermost
+- [x] Events known out of the box, with no mapping: Quarkus REST requests, JUnit tests
 - [ ] Other frameworks (e.g. RPC), through a bridge module that starts jfr-web and feeds the
   API from the framework's hooks: services never depend on jfr-web
 
@@ -168,6 +169,9 @@ already wired must follow.
   click on one narrows the slowest and the flame graph to it, in that bucket
 - [x] Live operations: arm a session on the next call of one of them
 - [x] Sessions named: when started, armed or later
+- [x] Session ids kept across restarts: a snapshot keeps its id, and none is given twice
+- [x] Flame graphs merged across operations, reversed (hot methods), or Java only
+- [x] Top bar always visible; a session's row opens its report
 - [ ] Session named after the actual path of the call that started it, or a flame graph of one
   call showing its path: parked, a session and a flame graph aggregate calls with different
   values
