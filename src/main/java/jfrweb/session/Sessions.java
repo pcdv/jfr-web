@@ -44,6 +44,15 @@ public final class Sessions implements AutoCloseable {
   private final List<Session> sessions = new ArrayList<>();
   private Session recording;
   private int lastId;
+  /**
+   * The ids of the recordings registered, by file: a snapshot keeps its id
+   * across restarts, so that a link to it keeps working. Kept with the last
+   * id given, never given again, in {@link #IDS}.
+   */
+  private final Map<String, Integer> registered = new HashMap<>();
+
+  /** Not session-*.properties: those are the sessions of {@link #load()}. */
+  private static final String IDS = "ids.properties";
 
   /**
    * Sessions recording this JVM.
@@ -130,6 +139,7 @@ public final class Sessions implements AutoCloseable {
     sessions.add(s);
     recording = s;
     save(s);
+    saveIds();
     return s;
   }
 
@@ -198,7 +208,14 @@ public final class Sessions implements AutoCloseable {
    * @param trigger why it was recorded, e.g. "snapshot: GET /x took 9 s"
    */
   public synchronized Session register(Instant start, Instant end, String trigger, Path file) {
-    Session s = new Session(++lastId, start, trigger, file);
+    String key = file.toAbsolutePath().normalize().toString();
+    Integer id = registered.get(key);
+    if (id == null || get(id) != null) {
+      id = ++lastId;
+      registered.put(key, id);
+      saveIds();
+    }
+    Session s = new Session(id, start, trigger, file);
     s.stopped(end);
     sessions.add(s);
     return s;
@@ -257,6 +274,45 @@ public final class Sessions implements AutoCloseable {
     }
   }
 
+  /**
+   * Writes the ids of the recordings registered, those whose file is gone
+   * left out, and the last id given.
+   */
+  private void saveIds() {
+    registered.keySet().removeIf(f -> !Files.exists(Path.of(f)));
+    Properties p = new Properties();
+    p.setProperty("last", String.valueOf(lastId));
+    registered.forEach((f, id) -> p.setProperty(f, String.valueOf(id)));
+    try {
+      Files.createDirectories(directory);
+      try (Writer w = Files.newBufferedWriter(directory.resolve(IDS), StandardCharsets.UTF_8)) {
+        p.store(w, "The ids of jfr-web's sessions: the last one given, those of the recordings registered");
+      }
+    }
+    catch (IOException e) {
+      log.log(System.Logger.Level.WARNING, "Could not save the ids of the sessions", e);
+    }
+  }
+
+  private void loadIds() {
+    Path f = directory.resolve(IDS);
+    if (!Files.exists(f))
+      return;
+    try (Reader r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
+      Properties p = new Properties();
+      p.load(r);
+      for (String k : p.stringPropertyNames()) {
+        int id = Integer.parseInt(p.getProperty(k));
+        if (!k.equals("last"))
+          registered.put(k, id);
+        lastId = Math.max(lastId, id);
+      }
+    }
+    catch (IOException | RuntimeException e) {
+      log.log(System.Logger.Level.WARNING, "Could not read the ids of the sessions in " + f, e);
+    }
+  }
+
   private static void deleteProperties(Session s) {
     try {
       Files.deleteIfExists(properties(s.getFile()));
@@ -273,6 +329,7 @@ public final class Sessions implements AutoCloseable {
   private void load() {
     if (!Files.isDirectory(directory))
       return;
+    loadIds();
     try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "session-*.properties")) {
       for (Path f : files) {
         try (Reader r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
