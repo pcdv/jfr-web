@@ -10,8 +10,8 @@ import java.util.concurrent.TimeUnit;
 import jdk.jfr.Recording;
 import jfrweb.analysis.Analysis;
 import jfrweb.analysis.SamplingSummary;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class StackDepthTest {
 
@@ -21,16 +21,16 @@ public class StackDepthTest {
   @Test
   public void testRaisedBeforeTheFirstRecording() throws Exception {
     String out = probe(300, 200);
-    Assert.assertTrue(out, out.startsWith("raised=true truncated=0 samples="));
-    Assert.assertFalse("sampled: " + out, out.endsWith("samples=0"));
+    Assertions.assertTrue(out.startsWith("raised=true truncated=0 samples="), out);
+    Assertions.assertFalse(out.endsWith("samples=0"), "sampled: " + out);
   }
 
   @Test
   public void testDefaultCutsDeepStacks() throws Exception {
     // the JVM's own depth, 64, as when the profiler cannot raise it
     String out = probe(0, 200);
-    Assert.assertTrue(out, out.startsWith("raised=false truncated="));
-    Assert.assertFalse(out, out.startsWith("raised=false truncated=0 "));
+    Assertions.assertTrue(out.startsWith("raised=false truncated="), out);
+    Assertions.assertFalse(out.startsWith("raised=false truncated=0 "), out);
   }
 
   @Test
@@ -38,10 +38,10 @@ public class StackDepthTest {
     try (Recording r = new Recording()) {
       r.start();
     }
-    Assert.assertFalse(StackDepth.raise(512));
+    Assertions.assertFalse(StackDepth.raise(512));
     // the depth kept, which it logs: 64, or what a test raised it to first
     int current = StackDepth.current();
-    Assert.assertTrue("depth: " + current, current >= 64 && current < 512);
+    Assertions.assertTrue(current >= 64 && current < 512, "depth: " + current);
   }
 
   @Test
@@ -57,10 +57,10 @@ public class StackDepthTest {
     }
     try {
       SamplingSummary s = SamplingSummary.of(Analysis.load(f));
-      Assert.assertTrue("samples: " + s.getJavaSamples(), s.getTruncated() > 0);
-      Assert.assertTrue("depth: " + s.getStackDepth(), s.getStackDepth() >= 64 && s.getStackDepth() <= StackDepth.MAX);
-      Assert.assertEquals(StackDepth.DEFAULT, StackDepth.suggest(64));
-      Assert.assertEquals(StackDepth.MAX, StackDepth.suggest(StackDepth.MAX));
+      Assertions.assertTrue(s.getTruncated() > 0, "samples: " + s.getJavaSamples());
+      Assertions.assertTrue(s.getStackDepth() >= 64 && s.getStackDepth() <= StackDepth.MAX, "depth: " + s.getStackDepth());
+      Assertions.assertEquals(StackDepth.DEFAULT, StackDepth.suggest(64));
+      Assertions.assertEquals(StackDepth.MAX, StackDepth.suggest(StackDepth.MAX));
     }
     finally {
       Files.delete(f);
@@ -77,7 +77,7 @@ public class StackDepthTest {
                                    String.valueOf(depth), String.valueOf(frames))
       .redirectErrorStream(true)
       .start();
-    Assert.assertTrue("probe ended", p.waitFor(60, TimeUnit.SECONDS));
+    Assertions.assertTrue(p.waitFor(60, TimeUnit.SECONDS), "probe ended");
     String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
     String last = out.substring(out.lastIndexOf('\n') + 1);
     return last;

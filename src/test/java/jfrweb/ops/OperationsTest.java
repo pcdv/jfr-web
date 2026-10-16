@@ -20,10 +20,10 @@ import jfrweb.analysis.FlameGraphs;
 import jfrweb.analysis.OperationDetails;
 import jfrweb.analysis.OperationStats;
 import jfrweb.analysis.RecordedOperation;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static jfrweb.analysis.AnalysisTest.Handlers.burn;
 
@@ -36,7 +36,7 @@ public class OperationsTest {
   private static Path file;
   private static Analysis analysis;
 
-  @BeforeClass
+  @BeforeAll
   public static void record() throws Exception {
     file = Files.createTempFile("jfr-web", ".jfr");
     ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -63,7 +63,7 @@ public class OperationsTest {
         }));
       }));
       // not this thread's: it waits
-      Assert.assertTrue(done.await(10, TimeUnit.SECONDS));
+      Assertions.assertTrue(done.await(10, TimeUnit.SECONDS));
 
       try (Operation failed = Operations.begin("sync").detail("bad")) {
         failed.failed(new IllegalStateException("no luck"));
@@ -78,7 +78,7 @@ public class OperationsTest {
     analysis = Analysis.load(file);
   }
 
-  @AfterClass
+  @AfterAll
   public static void cleanUp() throws IOException {
     Files.deleteIfExists(file);
   }
@@ -86,32 +86,32 @@ public class OperationsTest {
   @Test
   public void testOperationsRead() {
     List<OperationStats> stats = OperationStats.of(analysis.getOperations());
-    Assert.assertEquals(List.of("sync", "async"), stats.stream().map(OperationStats::name).collect(Collectors.toList()));
+    Assertions.assertEquals(List.of("sync", "async"), stats.stream().map(OperationStats::name).collect(Collectors.toList()));
     OperationStats sync = stats.get(0);
-    Assert.assertEquals(4, sync.count());
-    Assert.assertEquals(1, sync.errors());
+    Assertions.assertEquals(4, sync.count());
+    Assertions.assertEquals(1, sync.errors());
 
     RecordedOperation async = find("quote");
-    Assert.assertTrue(async.async());
-    Assert.assertTrue("both tasks: " + async.durationNanos(), async.durationNanos() >= 300_000_000);
-    Assert.assertEquals(10, async.bytesIn());
-    Assert.assertEquals(20, async.bytesOut());
+    Assertions.assertTrue(async.async());
+    Assertions.assertTrue(async.durationNanos() >= 300_000_000, "both tasks: " + async.durationNanos());
+    Assertions.assertEquals(10, async.bytesIn());
+    Assertions.assertEquals(20, async.bytesOut());
 
     RecordedOperation bad = find("bad");
-    Assert.assertTrue(bad.failed());
-    Assert.assertEquals("java.lang.IllegalStateException: no luck", bad.error());
+    Assertions.assertTrue(bad.failed());
+    Assertions.assertEquals("java.lang.IllegalStateException: no luck", bad.error());
   }
 
   @Test
   public void testSegments() throws IOException {
     RecordedOperation async = find("quote");
     OperationDetails d = OperationDetails.of(analysis, async);
-    Assert.assertEquals("two tasks", 2, d.getSegments().size());
-    Assert.assertTrue("pool threads: " + d.getSegments(), d.getSegments().get(0).threadName().startsWith("pool-"));
-    Assert.assertTrue("samples of both tasks: " + d.getJavaSamples(), d.getJavaSamples() >= 10);
+    Assertions.assertEquals(2, d.getSegments().size(), "two tasks");
+    Assertions.assertTrue(d.getSegments().get(0).threadName().startsWith("pool-"), "pool threads: " + d.getSegments());
+    Assertions.assertTrue(d.getJavaSamples() >= 10, "samples of both tasks: " + d.getJavaSamples());
 
     RecordedOperation sync = find("job 0");
-    Assert.assertEquals("a synchronous one is its own segment", 1, analysis.getSegments(sync).size());
+    Assertions.assertEquals(1, analysis.getSegments(sync).size(), "a synchronous one is its own segment");
   }
 
   @Test
@@ -120,9 +120,9 @@ public class OperationsTest {
     FlameGraphs.write(analysis, new FlameGraphs.Options().collapsed(true),
                       new PrintStream(out, true, StandardCharsets.UTF_8));
     String collapsed = out.toString(StandardCharsets.UTF_8);
-    Assert.assertTrue(collapsed.contains("\nsync;") || collapsed.startsWith("sync;"));
-    Assert.assertTrue("the samples of the pool threads, in segments", collapsed.contains("async;"));
-    Assert.assertTrue(collapsed.contains("burn"));
+    Assertions.assertTrue(collapsed.contains("\nsync;") || collapsed.startsWith("sync;"));
+    Assertions.assertTrue(collapsed.contains("async;"), "the samples of the pool threads, in segments");
+    Assertions.assertTrue(collapsed.contains("burn"));
   }
 
   private static RecordedOperation find(String detail) {

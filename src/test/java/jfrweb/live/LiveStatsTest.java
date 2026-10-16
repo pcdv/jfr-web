@@ -16,10 +16,10 @@ import flak.annotations.Route;
 import jfrweb.analysis.OperationStats;
 import jfrweb.ops.Operation;
 import jfrweb.ops.Operations;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class LiveStatsTest {
 
@@ -40,7 +40,7 @@ public class LiveStatsTest {
     }
   }
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     AppFactory factory = Flak.getFactory();
     factory.setLocalAddress(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
@@ -50,7 +50,7 @@ public class LiveStatsTest {
     live.observe(app);
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     live.close();
     app.stop();
@@ -63,8 +63,8 @@ public class LiveStatsTest {
     }
     Operations.beginAsync("live-test job").failed("no luck").close();
     OperationStats job = find(live.getOperations(60), "live-test job");
-    Assert.assertEquals(2, job.count());
-    Assert.assertEquals(1, job.errors());
+    Assertions.assertEquals(2, job.count());
+    Assertions.assertEquals(1, job.errors());
   }
 
   @Test
@@ -77,16 +77,16 @@ public class LiveStatsTest {
 
     List<OperationStats> stats = awaitCount(12);
     OperationStats item = stats.get(0);
-    Assert.assertEquals("sorted by total time", "GET /api/item/:id", item.name());
-    Assert.assertEquals(10, item.count());
-    Assert.assertTrue(item.maxNanos() >= 50_000_000);
-    Assert.assertTrue("p50 is not the slow one", item.p50Nanos() < 50_000_000);
-    Assert.assertEquals("p99 is the slow one", item.maxNanos(), item.p99Nanos());
-    Assert.assertTrue(item.bytesOut() > 0);
+    Assertions.assertEquals("GET /api/item/:id", item.name(), "sorted by total time");
+    Assertions.assertEquals(10, item.count());
+    Assertions.assertTrue(item.maxNanos() >= 50_000_000);
+    Assertions.assertTrue(item.p50Nanos() < 50_000_000, "p50 is not the slow one");
+    Assertions.assertEquals(item.maxNanos(), item.p99Nanos(), "p99 is the slow one");
+    Assertions.assertTrue(item.bytesOut() > 0);
 
     OperationStats fail = find(stats, "GET /api/fail");
-    Assert.assertEquals(1, fail.errors());
-    Assert.assertEquals(1, find(stats, "GET (no route)").count());
+    Assertions.assertEquals(1, fail.errors());
+    Assertions.assertEquals(1, find(stats, "GET (no route)").count());
   }
 
   @Test
@@ -97,19 +97,19 @@ public class LiveStatsTest {
     get("/item/b");
     awaitCount(2);
 
-    Assert.assertEquals("the current minute only", 1, live.getOperations(1).get(0).count());
-    Assert.assertEquals(2, live.getOperations(5).get(0).count());
+    Assertions.assertEquals(1, live.getOperations(1).get(0).count(), "the current minute only");
+    Assertions.assertEquals(2, live.getOperations(5).get(0).count());
 
     minute.addAndGet(60);
-    Assert.assertTrue("older than an hour", live.getOperations(60).isEmpty());
+    Assertions.assertTrue(live.getOperations(60).isEmpty(), "older than an hour");
   }
 
   @Test
   public void testStopsObserving() throws Exception {
     live.close();
     get("/item/a");
-    Assert.assertFalse(live.isObserving());
-    Assert.assertTrue(live.getOperations(60).isEmpty());
+    Assertions.assertFalse(live.isObserving());
+    Assertions.assertTrue(live.getOperations(60).isEmpty());
   }
 
   /**

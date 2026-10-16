@@ -7,8 +7,8 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TriggersTest {
 
@@ -26,9 +26,9 @@ public class TriggersTest {
   @Test
   public void testWithoutUsualLevelOnlyVerySlowRequests() {
     triggers.ended("GET /x", 2_000 * MS, false);
-    Assert.assertEquals(List.of(), triggered);
+    Assertions.assertEquals(List.of(), triggered);
     triggers.ended("GET /x", 11_000 * MS, false);
-    Assert.assertEquals(List.of("GET /x took 11.0 s"), triggered);
+    Assertions.assertEquals(List.of("GET /x took 11.0 s"), triggered);
   }
 
   @Test
@@ -39,13 +39,13 @@ public class TriggersTest {
     triggers.refreshBaselines();
 
     triggers.ended("GET /x", 900 * MS, false);
-    Assert.assertEquals("3x its usual p99 only", List.of(), triggered);
+    Assertions.assertEquals(List.of(), triggered, "3x its usual p99 only");
     triggers.ended("GET /y", 900 * MS, false);
-    Assert.assertEquals(List.of(), triggered);
+    Assertions.assertEquals(List.of(), triggered);
 
     triggers.ended("GET /x", 2_000 * MS, false);
-    Assert.assertEquals(1, triggered.size());
-    Assert.assertTrue(triggered.get(0), triggered.get(0).matches("GET /x took 2\\.0 s, \\dx its usual p99 of 0\\.\\d s"));
+    Assertions.assertEquals(1, triggered.size());
+    Assertions.assertTrue(triggered.get(0).matches("GET /x took 2\\.0 s, \\dx its usual p99 of 0\\.\\d s"), triggered.get(0));
   }
 
   @Test
@@ -56,7 +56,7 @@ public class TriggersTest {
     triggers.refreshBaselines();
     // 500 times its usual p99, but under a second: not worth a snapshot
     triggers.ended("GET /fast", 500 * MS, false);
-    Assert.assertEquals(List.of(), triggered);
+    Assertions.assertEquals(List.of(), triggered);
   }
 
   @Test
@@ -70,8 +70,8 @@ public class TriggersTest {
       triggers.ended("GET /x", 10 * MS, false);
     for (int i = 0; i < 6; i++)
       triggers.ended("GET /x", 10 * MS, true);
-    Assert.assertEquals("once, at the 5th", 1, triggered.size());
-    Assert.assertTrue(triggered.get(0), triggered.get(0).startsWith("5 errors in a minute, 33% of the operations, usually 1.0%"));
+    Assertions.assertEquals(1, triggered.size(), "once, at the 5th");
+    Assertions.assertTrue(triggered.get(0).startsWith("5 errors in a minute, 33% of the operations, usually 1.0%"), triggered.get(0));
   }
 
   @Test
@@ -82,7 +82,7 @@ public class TriggersTest {
         triggers.ended("GET /flaky", 10 * MS, i % 2 == 0);
       now = now.plusSeconds(60);
     }
-    Assert.assertEquals(1, triggered.size());
-    Assert.assertTrue("only the first minute, with nothing usual yet", triggered.get(0).contains("usually 0.0%"));
+    Assertions.assertEquals(1, triggered.size());
+    Assertions.assertTrue(triggered.get(0).contains("usually 0.0%"), "only the first minute, with nothing usual yet");
   }
 }

@@ -25,10 +25,10 @@ import flak.App;
 import flak.AppFactory;
 import flak.Flak;
 import flak.annotations.Route;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class OperationHistoryTest {
 
@@ -75,7 +75,7 @@ public class OperationHistoryTest {
   private OperationHistory history;
   private final TestClock clock = new TestClock("2026-10-13T10:00:30Z");
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     dir = Files.createTempDirectory("jfr-web-history");
     AppFactory factory = Flak.getFactory();
@@ -85,7 +85,7 @@ public class OperationHistoryTest {
     app.start();
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws IOException {
     if (history != null)
       history.close();
@@ -117,26 +117,26 @@ public class OperationHistoryTest {
 
     Path file = dir.resolve("2026-10-13").resolve("10.jsonl");
     List<String> lines = Files.readAllLines(file);
-    Assert.assertEquals("one line per interval, even without requests", 3, lines.size());
-    Assert.assertTrue(lines.get(0), lines.get(0).startsWith(
-      "{\"start\":\"2026-10-13T10:00:30Z\",\"end\":\"2026-10-13T10:01:00Z\",\"operations\":[{\"name\":\"GET /api/item/:id\",\"count\":3,"));
-    Assert.assertTrue("histogram, to add intervals up", lines.get(0).contains("\"histogram\":[["));
-    Assert.assertTrue(lines.get(2), lines.get(2).endsWith("\"operations\":[],\"slowest\":[]}"));
+    Assertions.assertEquals(3, lines.size(), "one line per interval, even without requests");
+    Assertions.assertTrue(lines.get(0).startsWith(
+      "{\"start\":\"2026-10-13T10:00:30Z\",\"end\":\"2026-10-13T10:01:00Z\",\"operations\":[{\"name\":\"GET /api/item/:id\",\"count\":3,"), lines.get(0));
+    Assertions.assertTrue(lines.get(0).contains("\"histogram\":[["), "histogram, to add intervals up");
+    Assertions.assertTrue(lines.get(2).endsWith("\"operations\":[],\"slowest\":[]}"), lines.get(2));
 
     HistoryReader r = HistoryReader.read(dir, Instant.parse("2026-10-13T10:00:00Z"), Instant.parse("2026-10-13T11:00:00Z"));
-    Assert.assertEquals(3, r.getIntervalCount());
-    Assert.assertEquals(Map.of("GET /api/item/:id", 4, "GET /api/fail", 1), r.counts());
-    Assert.assertEquals(1, r.getOperations().stream().filter(e -> e.name().equals("GET /api/fail"))
+    Assertions.assertEquals(3, r.getIntervalCount());
+    Assertions.assertEquals(Map.of("GET /api/item/:id", 4, "GET /api/fail", 1), r.counts());
+    Assertions.assertEquals(1, r.getOperations().stream().filter(e -> e.name().equals("GET /api/fail"))
                             .findFirst().orElseThrow().errors());
 
     List<HistoryReader.Slow> slowest = r.getSlowest(null, 10);
-    Assert.assertEquals("2 kept by the first interval, 1 by the second", 3, slowest.size());
-    Assert.assertEquals("GET /item/slow60", slowest.get(0).detail());
-    Assert.assertTrue(slowest.get(0).nanos() >= 60_000_000);
-    Assert.assertEquals(2, r.getSlowest("GET /api/item/:id", 2).size());
+    Assertions.assertEquals(3, slowest.size(), "2 kept by the first interval, 1 by the second");
+    Assertions.assertEquals("GET /item/slow60", slowest.get(0).detail());
+    Assertions.assertTrue(slowest.get(0).nanos() >= 60_000_000);
+    Assertions.assertEquals(2, r.getSlowest("GET /api/item/:id", 2).size());
 
     HistoryReader second = HistoryReader.read(dir, Instant.parse("2026-10-13T10:01:30Z"), Instant.parse("2026-10-13T10:02:00Z"));
-    Assert.assertEquals("intervals overlapping the period", List.of(Instant.parse("2026-10-13T10:01:00Z")), second.starts());
+    Assertions.assertEquals(List.of(Instant.parse("2026-10-13T10:01:00Z")), second.starts(), "intervals overlapping the period");
   }
 
   @Test
@@ -146,17 +146,17 @@ public class OperationHistoryTest {
     awaitPending(1);
     history.flush(Instant.parse("2026-10-13T10:59:00Z"));
     Path plain = dir.resolve("2026-10-13").resolve("10.jsonl");
-    Assert.assertTrue(Files.exists(plain));
+    Assertions.assertTrue(Files.exists(plain));
 
     clock.now = Instant.parse("2026-10-13T11:00:20Z");
     history.flush(Instant.parse("2026-10-13T11:00:00Z"));
     history.flush(Instant.parse("2026-10-13T11:01:00Z"));
-    Assert.assertFalse("gzipped once the hour is over", Files.exists(plain));
-    Assert.assertTrue(Files.exists(dir.resolve("2026-10-13").resolve("10.jsonl.gz")));
+    Assertions.assertFalse(Files.exists(plain), "gzipped once the hour is over");
+    Assertions.assertTrue(Files.exists(dir.resolve("2026-10-13").resolve("10.jsonl.gz")));
 
     HistoryReader r = HistoryReader.read(dir, Instant.parse("2026-10-13T10:00:00Z"), Instant.parse("2026-10-13T12:00:00Z"));
-    Assert.assertEquals(Map.of("GET /api/item/:id", 1), r.counts());
-    Assert.assertEquals(3, r.getIntervalCount());
+    Assertions.assertEquals(Map.of("GET /api/item/:id", 1), r.counts());
+    Assertions.assertEquals(3, r.getIntervalCount());
   }
 
   @Test
@@ -169,10 +169,10 @@ public class OperationHistoryTest {
     history = null;
 
     HistoryReader r = HistoryReader.read(dir, Instant.now().minusSeconds(60), Instant.now().plusSeconds(1));
-    Assert.assertTrue("an interval per second, and one when closing: " + r.getIntervalCount(), r.getIntervalCount() >= 3);
-    Assert.assertEquals(Map.of("GET /api/item/:id", 1), r.counts());
+    Assertions.assertTrue(r.getIntervalCount() >= 3, "an interval per second, and one when closing: " + r.getIntervalCount());
+    Assertions.assertEquals(Map.of("GET /api/item/:id", 1), r.counts());
     for (Instant start : r.starts().subList(1, r.starts().size()))
-      Assert.assertEquals("on the second", 0, start.getNano());
+      Assertions.assertEquals(0, start.getNano(), "on the second");
   }
 
   @Test
@@ -181,9 +181,9 @@ public class OperationHistoryTest {
     write("2026-10-06", "05.jsonl.gz", 100);
     write("2026-10-12", "05.jsonl.gz", 100);
     history = builder().maxAge(Duration.ofDays(7)).start();
-    Assert.assertFalse(Files.exists(dir.resolve("2026-10-01")));
-    Assert.assertTrue("on the edge: kept", Files.exists(dir.resolve("2026-10-06")));
-    Assert.assertTrue(Files.exists(dir.resolve("2026-10-12")));
+    Assertions.assertFalse(Files.exists(dir.resolve("2026-10-01")));
+    Assertions.assertTrue(Files.exists(dir.resolve("2026-10-06")), "on the edge: kept");
+    Assertions.assertTrue(Files.exists(dir.resolve("2026-10-12")));
   }
 
   @Test
@@ -199,9 +199,8 @@ public class OperationHistoryTest {
       left = s.filter(Files::isRegularFile).map(p -> dir.relativize(p).toString().replace('\\', '/'))
               .sorted().collect(Collectors.toList());
     }
-    Assert.assertEquals("the oldest deleted, the hour in progress kept",
-                        List.of("2026-10-13/09.jsonl.gz", "2026-10-13/10.jsonl"), left);
-    Assert.assertFalse("empty days deleted", Files.exists(dir.resolve("2026-10-12")));
+    Assertions.assertEquals(List.of("2026-10-13/09.jsonl.gz", "2026-10-13/10.jsonl"), left, "the oldest deleted, the hour in progress kept");
+    Assertions.assertFalse(Files.exists(dir.resolve("2026-10-12")), "empty days deleted");
   }
 
   @Test
@@ -210,7 +209,7 @@ public class OperationHistoryTest {
     history.flush(Instant.parse("2026-10-13T10:01:00Z"));
     Files.writeString(dir.resolve("2026-10-13").resolve("10.jsonl"), "{\"start\":\"2026-10-13T10:01",
                       java.nio.file.StandardOpenOption.APPEND);
-    Assert.assertEquals(1, HistoryReader.read(dir, Instant.parse("2026-10-13T10:00:00Z"),
+    Assertions.assertEquals(1, HistoryReader.read(dir, Instant.parse("2026-10-13T10:00:00Z"),
                                               Instant.parse("2026-10-13T11:00:00Z")).getIntervalCount());
   }
 
@@ -225,7 +224,7 @@ public class OperationHistoryTest {
                                                        Instant.parse("2026-10-13T11:00:00Z")).getTimeline();
     // an hour in at most 300 buckets: 12 s at least; 15 s would hold 1 or 2
     // intervals of 10 s in turn
-    Assert.assertEquals(Duration.ofSeconds(30), t.bucket());
+    Assertions.assertEquals(Duration.ofSeconds(30), t.bucket());
   }
 
   @Test
@@ -247,10 +246,10 @@ public class OperationHistoryTest {
     HistoryReader.CountTimeline t = HistoryReader.read(dir, Instant.parse("2026-10-13T00:00:00Z"),
                                                        Instant.parse("2026-10-14T00:00:00Z")).getTimeline();
     // a day in at most 300 buckets, whole minutes: not one bucket for the day
-    Assert.assertEquals(Duration.ofMinutes(5), t.bucket());
+    Assertions.assertEquals(Duration.ofMinutes(5), t.bucket());
     int afterSleep = (int) (Duration.ofHours(18).plusMinutes(10).toSeconds() / t.bucket().toSeconds());
-    Assert.assertEquals(1, t.series().get("GET /api/item/:id")[afterSleep], 0);
-    Assert.assertFalse("left out", t.covered()[(int) (Duration.ofHours(19).toSeconds() / t.bucket().toSeconds())]);
+    Assertions.assertEquals(1, t.series().get("GET /api/item/:id")[afterSleep], 0);
+    Assertions.assertFalse(t.covered()[(int) (Duration.ofHours(19).toSeconds() / t.bucket().toSeconds())], "left out");
   }
 
   @Test
@@ -270,12 +269,12 @@ public class OperationHistoryTest {
 
     HistoryReader.CountTimeline t = HistoryReader.read(dir, Instant.parse("2026-10-13T10:00:00Z"),
                                                        Instant.parse("2026-10-13T10:10:00Z")).getTimeline();
-    Assert.assertEquals("never finer than an interval, here a whole minute", Duration.ofMinutes(1), t.bucket());
-    Assert.assertEquals(2, t.series().get("GET /api/item/:id")[0], 0);
-    Assert.assertTrue("the time they took too", t.seconds().get("GET /api/item/:id")[0] > 0);
-    Assert.assertEquals(1, t.series().get("GET /api/fail")[(int) (Duration.ofMinutes(5).toSeconds() / t.bucket().toSeconds())], 0);
-    Assert.assertTrue(t.covered()[2]);
-    Assert.assertFalse("not written then", t.covered()[7]);
+    Assertions.assertEquals(Duration.ofMinutes(1), t.bucket(), "never finer than an interval, here a whole minute");
+    Assertions.assertEquals(2, t.series().get("GET /api/item/:id")[0], 0);
+    Assertions.assertTrue(t.seconds().get("GET /api/item/:id")[0] > 0, "the time they took too");
+    Assertions.assertEquals(1, t.series().get("GET /api/fail")[(int) (Duration.ofMinutes(5).toSeconds() / t.bucket().toSeconds())], 0);
+    Assertions.assertTrue(t.covered()[2]);
+    Assertions.assertFalse(t.covered()[7], "not written then");
   }
 
   private void write(String day, String file, int size) throws IOException {
@@ -297,7 +296,7 @@ public class OperationHistoryTest {
     // the listener runs once the response is sent, which the client may see first
     for (int i = 0; i < 100 && history.pending() < n; i++)
       Thread.sleep(20);
-    Assert.assertEquals(n, history.pending());
+    Assertions.assertEquals(n, history.pending());
   }
 
   private void get(String path) throws IOException {

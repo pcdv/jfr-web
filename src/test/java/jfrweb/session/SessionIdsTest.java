@@ -6,11 +6,10 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Map;
 
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A link to a session keeps working across restarts: registered recordings
@@ -18,18 +17,18 @@ import static org.junit.Assert.assertEquals;
  */
 public class SessionIdsTest {
 
-  @Rule
-  public TemporaryFolder tmp = new TemporaryFolder();
+  @TempDir
+  Path dir;
 
   /** Writes the file when stopped, as JFR would. */
   private static final Recorder RECORDER = (name, settings, file) -> () -> Files.writeString(file, "jfr");
 
   private Sessions sessions() {
-    return new Sessions(tmp.getRoot().toPath().resolve("sessions"), Map.of(), RECORDER);
+    return new Sessions(dir.resolve("sessions"), Map.of(), RECORDER);
   }
 
   private Path snapshot(String name) throws IOException {
-    Path f = Files.createDirectories(tmp.getRoot().toPath().resolve("snapshots")).resolve(name);
+    Path f = Files.createDirectories(dir.resolve("snapshots")).resolve(name);
     Files.writeString(f, "jfr");
     return f;
   }

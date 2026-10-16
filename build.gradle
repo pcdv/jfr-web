@@ -69,7 +69,9 @@ dependencies {
   implementation "com.github.pcdv.flak:flak-backend-jdk:$flakVersion"
 
   testImplementation "com.github.pcdv.flak:flak-spi:$flakVersion"
-  testImplementation 'junit:junit:4.13.2'
+  testImplementation platform('org.junit:junit-bom:5.11.4')
+  testImplementation 'org.junit.jupiter:junit-jupiter'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 application {
@@ -157,6 +159,7 @@ tasks.register('standalone', JavaExec) {
 }
 
 test {
+  useJUnitPlatform()
   // see AnalysisTest
   def keep = providers.systemProperty('jfrweb.keepRecording')
   if (keep.present)

@@ -25,11 +25,11 @@ import flak.annotations.Route;
 import jfrweb.history.OperationHistory;
 import jfrweb.ops.Operations;
 import jfrweb.snapshot.Snapshots;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Assume;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * Drives the profiler through its REST API, while a flak app of the same JVM
@@ -76,7 +76,7 @@ public class ProfilerTest {
     }
   }
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     dir = Files.createTempDirectory("jfr-web-test");
     AppFactory factory = Flak.getFactory();
@@ -86,7 +86,7 @@ public class ProfilerTest {
     app.start();
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws IOException {
     if (profiler != null)
       profiler.close();
@@ -101,37 +101,37 @@ public class ProfilerTest {
     profiler = Profiler.builder().directory(dir).start();
 
     HttpResponse<String> started = post("api/sessions?name=first+try");
-    Assert.assertEquals(started.body(), 200, started.statusCode());
-    Assert.assertTrue(started.body(), started.body().contains("\"state\":\"RECORDING\",\"name\":\"first try\""));
-    Assert.assertEquals("one session at a time", 409, post("api/sessions").statusCode());
-    Assert.assertEquals("still recording", 409, get("api/sessions/1/report").statusCode());
+    Assertions.assertEquals(200, started.statusCode(), started.body());
+    Assertions.assertTrue(started.body().contains("\"state\":\"RECORDING\",\"name\":\"first try\""), started.body());
+    Assertions.assertEquals(409, post("api/sessions").statusCode(), "one session at a time");
+    Assertions.assertEquals(409, get("api/sessions/1/report").statusCode(), "still recording");
 
     for (int i = 0; i < 3; i++)
-      Assert.assertEquals("done", http.send(HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/busy")).build(),
+      Assertions.assertEquals("done", http.send(HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/busy")).build(),
                                             HttpResponse.BodyHandlers.ofString()).body());
     http.send(HttpRequest.newBuilder(URI.create(app.getRootUrl() + "/io")).build(),
               HttpResponse.BodyHandlers.ofString());
 
     HttpResponse<String> stopped = post("api/sessions/1/stop");
-    Assert.assertTrue(stopped.body(), stopped.body().contains("\"state\":\"STOPPED\""));
+    Assertions.assertTrue(stopped.body().contains("\"state\":\"STOPPED\""), stopped.body());
 
     String list = get("api/sessions").body();
-    Assert.assertTrue(list, list.startsWith("[{\"id\":1,"));
+    Assertions.assertTrue(list.startsWith("[{\"id\":1,"), list);
     // the application of this JVM, e.g. the test runner's main class
-    Assert.assertTrue(get("api/about").body().matches("\\{\"app\":\"[\\w.-]+\",\"recordingsOnly\":false,\"history\":false}"));
-    Assert.assertTrue(post("api/sessions/1/name?name=+renamed+").body().contains("\"name\":\"renamed\""));
-    Assert.assertTrue("blank: no name", post("api/sessions/1/name?name=").body().contains("\"name\":null"));
-    Assert.assertEquals(404, post("api/sessions/9/name?name=x").statusCode());
+    Assertions.assertTrue(get("api/about").body().matches("\\{\"app\":\"[\\w.-]+\",\"recordingsOnly\":false,\"history\":false}"));
+    Assertions.assertTrue(post("api/sessions/1/name?name=+renamed+").body().contains("\"name\":\"renamed\""));
+    Assertions.assertTrue(post("api/sessions/1/name?name=").body().contains("\"name\":null"), "blank: no name");
+    Assertions.assertEquals(404, post("api/sessions/9/name?name=x").statusCode());
 
     HttpResponse<String> report = get("api/sessions/1/report");
-    Assert.assertEquals("application/json", report.headers().firstValue("Content-Type").orElse(null));
-    Assert.assertTrue(report.body(), report.body().contains("\"name\":\"GET /busy\",\"count\":3"));
-    Assert.assertTrue(report.body(), report.body().contains("\"operationEvents\":true"));
-    Assert.assertTrue(report.body(), report.body().matches(".*\"truncated\":\\d+,\"stackDepth\":\\d+,.*"));
+    Assertions.assertEquals("application/json", report.headers().firstValue("Content-Type").orElse(null));
+    Assertions.assertTrue(report.body().contains("\"name\":\"GET /busy\",\"count\":3"), report.body());
+    Assertions.assertTrue(report.body().contains("\"operationEvents\":true"), report.body());
+    Assertions.assertTrue(report.body().matches(".*\"truncated\":\\d+,\"stackDepth\":\\d+,.*"), report.body());
 
     String slowest = get("api/sessions/1/instances?name=GET+/busy&limit=2").body();
-    Assert.assertTrue(slowest, slowest.startsWith("[{\"id\":"));
-    Assert.assertEquals("limited to 2", 2, slowest.split("\"name\":\"GET /busy\"").length - 1);
+    Assertions.assertTrue(slowest.startsWith("[{\"id\":"), slowest);
+    Assertions.assertEquals(2, slowest.split("\"name\":\"GET /busy\"").length - 1, "limited to 2");
 
     // 10 ms within the first of 3 consecutive /busy: only that one in flight
     double first = Arrays.stream(get("api/sessions/1/instances?name=GET+/busy").body()
@@ -141,38 +141,38 @@ public class ProfilerTest {
                          .min().orElseThrow();
     String interval = "from=" + (first + 0.05) + "&to=" + (first + 0.06);
     String inInterval = get("api/sessions/1/operations?" + interval).body();
-    Assert.assertTrue(inInterval, inInterval.startsWith("[{\"name\":\"GET /busy\",\"count\":1,"));
-    Assert.assertEquals(1, get("api/sessions/1/instances?" + interval).body().split("\"name\":").length - 1);
-    Assert.assertEquals("after the session", "[]", get("api/sessions/1/operations?from=999").body());
-    Assert.assertEquals("[]", get("api/sessions/1/instances?from=999").body());
+    Assertions.assertTrue(inInterval.startsWith("[{\"name\":\"GET /busy\",\"count\":1,"), inInterval);
+    Assertions.assertEquals(1, get("api/sessions/1/instances?" + interval).body().split("\"name\":").length - 1);
+    Assertions.assertEquals("[]", get("api/sessions/1/operations?from=999").body(), "after the session");
+    Assertions.assertEquals("[]", get("api/sessions/1/instances?from=999").body());
 
     String io = get("api/sessions/1/instances?name=GET+/io").body();
     String ioId = io.replaceAll("^\\[\\{\"id\":(\\d+),.*", "$1");
     String details = get("api/sessions/1/instances/" + ioId).body();
-    Assert.assertTrue(details, details.contains("\"type\":\"java.lang.IllegalStateException\",\"message\":\"boom\","));
-    Assert.assertTrue(details, details.contains("\"frame\":\"jfrweb.ProfilerTest$Handlers.io\""));
-    Assert.assertTrue(details, details.contains("\"jdk.FileRead\":\"1 ms\""));
-    Assert.assertEquals(404, get("api/sessions/1/instances/9999").statusCode());
+    Assertions.assertTrue(details.contains("\"type\":\"java.lang.IllegalStateException\",\"message\":\"boom\","), details);
+    Assertions.assertTrue(details.contains("\"frame\":\"jfrweb.ProfilerTest$Handlers.io\""), details);
+    Assertions.assertTrue(details.contains("\"jdk.FileRead\":\"1 ms\""), details);
+    Assertions.assertEquals(404, get("api/sessions/1/instances/9999").statusCode());
 
     String instanceFlame = get("api/sessions/1/flame?instance=" + ioId).body();
-    Assert.assertTrue(instanceFlame, instanceFlame.contains("operation " + ioId + ": GET /io"));
+    Assertions.assertTrue(instanceFlame.contains("operation " + ioId + ": GET /io"), instanceFlame);
 
     String timeline = get("api/sessions/1/timeline").body();
-    Assert.assertTrue(timeline, timeline.contains("\"series\":[{\"name\":\"GET /busy\",\"values\":["));
+    Assertions.assertTrue(timeline.contains("\"series\":[{\"name\":\"GET /busy\",\"values\":["), timeline);
 
     String flame = get("api/sessions/1/flame?name=GET+/busy").body();
-    Assert.assertTrue(flame.startsWith("<!DOCTYPE html>"));
-    Assert.assertTrue(flame.contains("GET /busy"));
-    Assert.assertTrue("an interval with no sample", get("api/sessions/1/flame?from=0&to=0").body()
-                                                      .startsWith("<!DOCTYPE html>"));
-    Assert.assertEquals(400, get("api/sessions/1/flame?from=x").statusCode());
+    Assertions.assertTrue(flame.startsWith("<!DOCTYPE html>"));
+    Assertions.assertTrue(flame.contains("GET /busy"));
+    Assertions.assertTrue(get("api/sessions/1/flame?from=0&to=0").body()
+                                                      .startsWith("<!DOCTYPE html>"), "an interval with no sample");
+    Assertions.assertEquals(400, get("api/sessions/1/flame?from=x").statusCode());
 
     HttpResponse<byte[]> jfr = http.send(request("api/sessions/1/recording.jfr").build(),
                                          HttpResponse.BodyHandlers.ofByteArray());
-    Assert.assertEquals("FLR", new String(jfr.body(), 0, 3));
-    Assert.assertTrue(jfr.headers().firstValue("Content-Disposition").orElse("").contains(".jfr"));
+    Assertions.assertEquals("FLR", new String(jfr.body(), 0, 3));
+    Assertions.assertTrue(jfr.headers().firstValue("Content-Disposition").orElse("").contains(".jfr"));
 
-    Assert.assertEquals(404, get("api/sessions/9/report").statusCode());
+    Assertions.assertEquals(404, get("api/sessions/9/report").statusCode());
   }
 
   @Test
@@ -180,8 +180,8 @@ public class ProfilerTest {
     profiler = Profiler.builder().directory(dir).start();
 
     HttpResponse<String> index = get("");
-    Assert.assertEquals(200, index.statusCode());
-    Assert.assertTrue(index.body().contains("<script type=\"module\" src=\"js/main.js\">"));
+    Assertions.assertEquals(200, index.statusCode());
+    Assertions.assertTrue(index.body().contains("<script type=\"module\" src=\"js/main.js\">"));
 
     // browsers refuse a module served with another type
     for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
@@ -190,10 +190,10 @@ public class ProfilerTest {
                                       "components/section", "views/history",
                                       "components/sessionTimeline", "settings"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
-      Assert.assertEquals(module, 200, js.statusCode());
-      Assert.assertEquals(module, "application/javascript", js.headers().firstValue("Content-Type").orElse(null));
+      Assertions.assertEquals(200, js.statusCode(), module);
+      Assertions.assertEquals("application/javascript", js.headers().firstValue("Content-Type").orElse(null), module);
     }
-    Assert.assertEquals(200, get("css/style.css").statusCode());
+    Assertions.assertEquals(200, get("css/style.css").statusCode());
   }
 
   @Test
@@ -207,9 +207,9 @@ public class ProfilerTest {
       Thread.sleep(20);
       live = get("api/live?window=1").body();
     }
-    Assert.assertTrue(live, live.startsWith("{\"observing\":true,\"fed\":false,\"apps\":[\"\"],\"window\":1,"));
-    Assert.assertTrue(live, live.contains("\"name\":\"GET /busy\",\"count\":1"));
-    Assert.assertEquals(400, get("api/live?window=7").statusCode());
+    Assertions.assertTrue(live.startsWith("{\"observing\":true,\"fed\":false,\"apps\":[\"\"],\"window\":1,"), live);
+    Assertions.assertTrue(live.contains("\"name\":\"GET /busy\",\"count\":1"), live);
+    Assertions.assertEquals(400, get("api/live?window=7").statusCode());
   }
 
   @Test
@@ -217,24 +217,24 @@ public class ProfilerTest {
     profiler = Profiler.builder().directory(dir).observe(app).start();
 
     HttpResponse<String> armed = post("api/auto?patterns=GET+/busy&browser=true&idle=0.5&name=slow+busy");
-    Assert.assertTrue(armed.body(), armed.body().contains("\"name\":\"slow busy\""));
-    Assert.assertTrue(armed.body(), armed.body().contains("\"armed\":true,\"patterns\":[\"GET /busy\"],\"browser\":true,\"thisBrowser\":true"));
+    Assertions.assertTrue(armed.body().contains("\"name\":\"slow busy\""), armed.body());
+    Assertions.assertTrue(armed.body().contains("\"armed\":true,\"patterns\":[\"GET /busy\"],\"browser\":true,\"thisBrowser\":true"), armed.body());
     String cookie = armed.headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
-    Assert.assertTrue(cookie, cookie.startsWith("jfrweb-armed="));
+    Assertions.assertTrue(cookie.startsWith("jfrweb-armed="), cookie);
 
     busy(null);
-    Assert.assertEquals("another client", "[]", get("api/sessions").body());
+    Assertions.assertEquals("[]", get("api/sessions").body(), "another client");
 
     busy(cookie);
     String list = get("api/sessions").body();
-    Assert.assertTrue(list, list.contains("\"name\":\"slow busy\",\"trigger\":\"auto: GET /busy, armed browser\""));
+    Assertions.assertTrue(list.contains("\"name\":\"slow busy\",\"trigger\":\"auto: GET /busy, armed browser\""), list);
     for (int i = 0; i < 100 && !get("api/sessions").body().contains("STOPPED"); i++)
       Thread.sleep(50);
-    Assert.assertTrue("stopped once idle", get("api/sessions").body().contains("STOPPED"));
+    Assertions.assertTrue(get("api/sessions").body().contains("STOPPED"), "stopped once idle");
 
     HttpResponse<String> disarmed = http.send(request("api/auto").DELETE().build(), HttpResponse.BodyHandlers.ofString());
-    Assert.assertTrue(disarmed.body(), disarmed.body().startsWith("{\"observing\":true,\"fed\":false,\"flakApps\":true,\"armed\":false"));
-    Assert.assertTrue(disarmed.headers().firstValue("Set-Cookie").orElse("").contains("Max-Age=0"));
+    Assertions.assertTrue(disarmed.body().startsWith("{\"observing\":true,\"fed\":false,\"flakApps\":true,\"armed\":false"), disarmed.body());
+    Assertions.assertTrue(disarmed.headers().firstValue("Set-Cookie").orElse("").contains("Max-Age=0"));
   }
 
   @Test
@@ -248,58 +248,57 @@ public class ProfilerTest {
     }
 
     String body = get("api/history").body();
-    Assert.assertTrue(body, body.startsWith("{\"available\":true,"));
-    Assert.assertTrue(body, body.contains("\"operations\":[{\"name\":\"GET /busy\",\"count\":1,"));
-    Assert.assertTrue(body, body.contains("\"slowest\":[{\"end\":"));
-    Assert.assertTrue(body, body.contains("\"timeline\":{\"start\":"));
-    Assert.assertEquals(400, get("api/history?from=yesterday").statusCode());
+    Assertions.assertTrue(body.startsWith("{\"available\":true,"), body);
+    Assertions.assertTrue(body.contains("\"operations\":[{\"name\":\"GET /busy\",\"count\":1,"), body);
+    Assertions.assertTrue(body.contains("\"slowest\":[{\"end\":"), body);
+    Assertions.assertTrue(body.contains("\"timeline\":{\"start\":"), body);
+    Assertions.assertEquals(400, get("api/history?from=yesterday").statusCode());
 
     // the same from the command line
     ByteArrayOutputStream out = new ByteArrayOutputStream();
-    Assert.assertEquals(0, jfrweb.cli.MainAccess.run(new String[]{"history", historyDir.toString()},
+    Assertions.assertEquals(0, jfrweb.cli.MainAccess.run(new String[]{"history", historyDir.toString()},
                                                      new PrintStream(out, true, StandardCharsets.UTF_8)));
     String text = out.toString(StandardCharsets.UTF_8);
-    Assert.assertTrue(text, text.contains("GET /busy"));
-    Assert.assertTrue(text, text.contains("Slowest operations:"));
+    Assertions.assertTrue(text.contains("GET /busy"), text);
+    Assertions.assertTrue(text.contains("Slowest operations:"), text);
   }
 
   @Test
   public void testSnapshots() throws Exception {
     try (Snapshots snapshots = Snapshots.builder().directory(dir.resolve("snapshots")).observe(app).start()) {
       profiler = Profiler.builder().directory(dir).snapshots(snapshots).start();
-      Assert.assertTrue(get("api/snapshots").body().startsWith("{\"available\":true,\"window\":300.0,"));
+      Assertions.assertTrue(get("api/snapshots").body().startsWith("{\"available\":true,\"window\":300.0,"));
 
       busy(null);
       HttpResponse<String> saved = post("api/snapshots");
-      Assert.assertTrue(saved.body(), saved.body().contains("\"state\":\"STOPPED\",\"name\":null,\"trigger\":\"snapshot: saved by hand\""));
+      Assertions.assertTrue(saved.body().contains("\"state\":\"STOPPED\",\"name\":null,\"trigger\":\"snapshot: saved by hand\""), saved.body());
       String id = saved.body().replaceAll("^\\{\"id\":(\\d+),.*", "$1");
 
       String report = get("api/sessions/" + id + "/report").body();
-      Assert.assertTrue("the request made before the snapshot: " + report,
-                        report.contains("\"name\":\"GET /busy\",\"count\":1"));
-      Assert.assertTrue(get("api/sessions").body().contains("snapshot: saved by hand"));
+      Assertions.assertTrue(report.contains("\"name\":\"GET /busy\",\"count\":1"), "the request made before the snapshot: " + report);
+      Assertions.assertTrue(get("api/sessions").body().contains("snapshot: saved by hand"));
     }
   }
 
   @Test
   public void testNoSnapshots() throws Exception {
     profiler = Profiler.builder().directory(dir).start();
-    Assert.assertEquals("{\"available\":false}", get("api/snapshots").body());
-    Assert.assertEquals(409, post("api/snapshots").statusCode());
+    Assertions.assertEquals("{\"available\":false}", get("api/snapshots").body());
+    Assertions.assertEquals(409, post("api/snapshots").statusCode());
   }
 
   @Test
   public void testNoHistory() throws Exception {
     profiler = Profiler.builder().directory(dir).start();
-    Assert.assertEquals("{\"available\":false}", get("api/history").body());
+    Assertions.assertEquals("{\"available\":false}", get("api/history").body());
   }
 
   @Test
   public void testAutoModeNeedsObservedApps() throws Exception {
     // operations of the API may come once one was begun, by another test
-    Assume.assumeFalse(Operations.isUsed());
+    Assumptions.assumeFalse(Operations.isUsed());
     profiler = Profiler.builder().directory(dir).start();
-    Assert.assertEquals(409, post("api/auto").statusCode());
+    Assertions.assertEquals(409, post("api/auto").statusCode());
   }
 
   private void busy(String cookie) throws Exception {
@@ -317,8 +316,8 @@ public class ProfilerTest {
                                          .POST(HttpRequest.BodyPublishers.noBody())
                                          .build(),
                                        HttpResponse.BodyHandlers.ofString());
-    Assert.assertEquals(403, r.statusCode());
-    Assert.assertNull(profiler.getSessions().getRecording());
+    Assertions.assertEquals(403, r.statusCode());
+    Assertions.assertNull(profiler.getSessions().getRecording());
   }
 
   @Test
@@ -329,7 +328,7 @@ public class ProfilerTest {
                          throw new HttpException(401, "who are you?");
                        })
                        .start();
-    Assert.assertEquals(401, get("api/sessions").statusCode());
+    Assertions.assertEquals(401, get("api/sessions").statusCode());
   }
 
   @Test
@@ -341,8 +340,8 @@ public class ProfilerTest {
     host.start();
     try {
       profiler = Profiler.builder().directory(dir).mount(factory, "/profiler").start();
-      Assert.assertTrue(profiler.getUrl(), profiler.getUrl().endsWith("/profiler/"));
-      Assert.assertEquals("[]", get("api/sessions").body());
+      Assertions.assertTrue(profiler.getUrl().endsWith("/profiler/"), profiler.getUrl());
+      Assertions.assertEquals("[]", get("api/sessions").body());
     }
     finally {
       profiler.close();
@@ -363,11 +362,11 @@ public class ProfilerTest {
 
     profiler = Profiler.builder().directory(dir).start();
     String list = get("api/sessions").body();
-    Assert.assertTrue(list, list.matches("\\[\\{\"id\":2,\"state\":\"STOPPED\",\"name\":null,.*"
-                                         + "\\{\"id\":1,\"state\":\"STOPPED\",\"name\":\"renamed\",\"trigger\":\"manual\",.*"));
-    Assert.assertEquals(200, get("api/sessions/1/report").statusCode());
+    Assertions.assertTrue(list.matches("\\[\\{\"id\":2,\"state\":\"STOPPED\",\"name\":null,.*"
+                                         + "\\{\"id\":1,\"state\":\"STOPPED\",\"name\":\"renamed\",\"trigger\":\"manual\",.*"), list);
+    Assertions.assertEquals(200, get("api/sessions/1/report").statusCode());
     // the next one after them
-    Assert.assertTrue(post("api/sessions").body().startsWith("{\"id\":3,"));
+    Assertions.assertTrue(post("api/sessions").body().startsWith("{\"id\":3,"));
     post("api/sessions/3/stop");
 
     // a file deleted: its session goes
@@ -375,7 +374,7 @@ public class ProfilerTest {
       for (Path f : files.filter(f -> f.getFileName().toString().startsWith("session-1-")).toList())
         Files.delete(f);
     }
-    Assert.assertFalse(get("api/sessions").body().contains("\"id\":1,"));
+    Assertions.assertFalse(get("api/sessions").body().contains("\"id\":1,"));
   }
 
   private HttpRequest.Builder request(String path) {

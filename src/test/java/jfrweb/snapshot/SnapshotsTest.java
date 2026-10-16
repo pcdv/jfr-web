@@ -18,10 +18,10 @@ import flak.AppFactory;
 import flak.Flak;
 import flak.annotations.Route;
 import jfrweb.analysis.Analysis;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class SnapshotsTest {
 
@@ -41,7 +41,7 @@ public class SnapshotsTest {
     }
   }
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     dir = Files.createTempDirectory("jfr-web-snapshots");
     AppFactory factory = Flak.getFactory();
@@ -51,7 +51,7 @@ public class SnapshotsTest {
     app.start();
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws IOException {
     if (snapshots != null)
       snapshots.close();
@@ -69,15 +69,14 @@ public class SnapshotsTest {
 
     // saved after the requests: the rolling recording had them already
     Snapshots.Snapshot s = snapshots.save("saved by hand");
-    Assert.assertTrue(Files.size(s.file()) > 0);
-    Assert.assertEquals("saved by hand", s.reason());
-    Assert.assertEquals(Duration.ofMinutes(5), Duration.between(s.start(), s.end()));
-    Assert.assertTrue("the reason next to the file",
-                      Files.readString(dir.resolve(s.file().getFileName().toString().replace(".jfr", ".json")))
-                           .contains("\"reason\":\"saved by hand\""));
+    Assertions.assertTrue(Files.size(s.file()) > 0);
+    Assertions.assertEquals("saved by hand", s.reason());
+    Assertions.assertEquals(Duration.ofMinutes(5), Duration.between(s.start(), s.end()));
+    Assertions.assertTrue(Files.readString(dir.resolve(s.file().getFileName().toString().replace(".jfr", ".json")))
+                           .contains("\"reason\":\"saved by hand\""), "the reason next to the file");
 
     Analysis a = Analysis.load(s.file());
-    Assert.assertEquals(5, a.getOperations().stream().filter(r -> r.name().equals("GET /item/:id")).count());
+    Assertions.assertEquals(5, a.getOperations().stream().filter(r -> r.name().equals("GET /item/:id")).count());
   }
 
   @Test
@@ -91,8 +90,8 @@ public class SnapshotsTest {
     for (int i = 0; i < 100 && seen.isEmpty(); i++)
       Thread.sleep(50);
     Thread.sleep(300);
-    Assert.assertEquals(1, seen.size());
-    Assert.assertEquals("first", seen.get(0).reason());
+    Assertions.assertEquals(1, seen.size());
+    Assertions.assertEquals("first", seen.get(0).reason());
   }
 
   @Test
@@ -105,10 +104,10 @@ public class SnapshotsTest {
       get("/fail");
     for (int i = 0; i < 100 && seen.isEmpty(); i++)
       Thread.sleep(50);
-    Assert.assertEquals(1, seen.size());
-    Assert.assertTrue(seen.get(0).reason(), seen.get(0).reason().startsWith("5 errors in a minute"));
-    Assert.assertEquals("the failing requests are in it", 5,
-                        Analysis.load(seen.get(0).file()).getOperations().stream().filter(r -> r.status() == 500).count());
+    Assertions.assertEquals(1, seen.size());
+    Assertions.assertTrue(seen.get(0).reason().startsWith("5 errors in a minute"), seen.get(0).reason());
+    Assertions.assertEquals(5,
+                        Analysis.load(seen.get(0).file()).getOperations().stream().filter(r -> r.status() == 500).count(), "the failing requests are in it");
   }
 
   @Test
@@ -117,13 +116,13 @@ public class SnapshotsTest {
     Snapshots.Snapshot first = snapshots.save("1");
     snapshots.save("2");
     snapshots.save("3");
-    Assert.assertEquals(List.of("2", "3"), snapshots.list().stream().map(Snapshots.Snapshot::reason).toList());
-    Assert.assertFalse(Files.exists(first.file()));
+    Assertions.assertEquals(List.of("2", "3"), snapshots.list().stream().map(Snapshots.Snapshot::reason).toList());
+    Assertions.assertFalse(Files.exists(first.file()));
     snapshots.close();
 
     // after a restart, as after an incident: the snapshots are still there
     snapshots = Snapshots.builder().directory(dir).start();
-    Assert.assertEquals(List.of("2", "3"), snapshots.list().stream().map(Snapshots.Snapshot::reason).toList());
+    Assertions.assertEquals(List.of("2", "3"), snapshots.list().stream().map(Snapshots.Snapshot::reason).toList());
   }
 
   private void get(String path) throws IOException {

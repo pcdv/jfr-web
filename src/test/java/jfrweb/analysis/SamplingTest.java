@@ -2,8 +2,8 @@ package jfrweb.analysis;
 
 import java.time.Duration;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class SamplingTest {
 
@@ -15,7 +15,7 @@ public class SamplingTest {
     // one sample per period, unsorted as in a recording
     for (long i : new long[]{3, 0, 2, 1, 4})
       t.add(i * 12 * MS);
-    Assert.assertEquals(Duration.ofMillis(12), Analysis.observedSampleInterval(t));
+    Assertions.assertEquals(Duration.ofMillis(12), Analysis.observedSampleInterval(t));
   }
 
   @Test
@@ -31,7 +31,7 @@ public class SamplingTest {
       t.add(time);
       t.add(time + 100_000);
     }
-    Assert.assertEquals(Duration.ofMillis(15), Analysis.observedRoundInterval(t));
+    Assertions.assertEquals(Duration.ofMillis(15), Analysis.observedRoundInterval(t));
   }
 
   @Test
@@ -39,7 +39,7 @@ public class SamplingTest {
     LongList t = new LongList();
     t.add(0);
     t.add(10 * MS);
-    Assert.assertNull(Analysis.observedRoundInterval(t));
+    Assertions.assertNull(Analysis.observedRoundInterval(t));
   }
 
   @Test
@@ -50,16 +50,16 @@ public class SamplingTest {
     index.add(segment(1, 40, 50));
     index.seal();
 
-    Assert.assertFalse(index.isAnyRunning(5));
-    Assert.assertTrue(index.isAnyRunning(10));
-    Assert.assertTrue(index.isAnyRunning(25));
-    Assert.assertTrue(index.isAnyRunning(30));
-    Assert.assertFalse(index.isAnyRunning(35));
-    Assert.assertTrue(index.isAnyRunning(45));
-    Assert.assertFalse(index.isAnyRunning(51));
+    Assertions.assertFalse(index.isAnyRunning(5));
+    Assertions.assertTrue(index.isAnyRunning(10));
+    Assertions.assertTrue(index.isAnyRunning(25));
+    Assertions.assertTrue(index.isAnyRunning(30));
+    Assertions.assertFalse(index.isAnyRunning(35));
+    Assertions.assertTrue(index.isAnyRunning(45));
+    Assertions.assertFalse(index.isAnyRunning(51));
 
-    Assert.assertNull("thread 1 was idle", index.find(1, 25));
-    Assert.assertNotNull(index.find(2, 25));
+    Assertions.assertNull(index.find(1, 25), "thread 1 was idle");
+    Assertions.assertNotNull(index.find(2, 25));
   }
 
   @Test
@@ -73,12 +73,12 @@ public class SamplingTest {
     index.add(test2);
     index.seal();
 
-    Assert.assertSame(cls.operation(), index.find(1, 15));
-    Assert.assertSame("the innermost", test1.operation(), index.find(1, 25));
-    Assert.assertSame("back to the class between tests", cls.operation(), index.find(1, 35));
-    Assert.assertSame(test2.operation(), index.find(1, 45));
-    Assert.assertSame("after the last test", cls.operation(), index.find(1, 60));
-    Assert.assertNull(index.find(1, 101));
+    Assertions.assertSame(cls.operation(), index.find(1, 15));
+    Assertions.assertSame(test1.operation(), index.find(1, 25), "the innermost");
+    Assertions.assertSame(cls.operation(), index.find(1, 35), "back to the class between tests");
+    Assertions.assertSame(test2.operation(), index.find(1, 45));
+    Assertions.assertSame(cls.operation(), index.find(1, 60), "after the last test");
+    Assertions.assertNull(index.find(1, 101));
   }
 
   private static OperationIndex.Segment segment(long thread, long start, long end) {

@@ -18,10 +18,10 @@ import jfrweb.live.LiveStats;
 import jfrweb.ops.MappedOperations;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static jfrweb.analysis.AnalysisTest.Handlers.burn;
 
@@ -63,12 +63,12 @@ public class EventMappingsTest {
 
   private Path dir;
 
-  @Before
+  @BeforeEach
   public void setUp() throws Exception {
     dir = Files.createTempDirectory("jfr-web-mappings");
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws Exception {
     EventMappings.unregister("test.RpcCall");
     try (Stream<Path> files = Files.walk(dir)) {
@@ -96,7 +96,7 @@ public class EventMappingsTest {
       "test.RpcCall.detail = {requestId}",
       "test.RpcCall.failed = error"));
     List<EventMapping> loaded = EventMappings.load(file);
-    Assert.assertEquals(List.of(new EventMapping("test.RpcCall", "{service}.{method}", "{requestId}", "error")), loaded);
+    Assertions.assertEquals(List.of(new EventMapping("test.RpcCall", "{service}.{method}", "{requestId}", "error")), loaded);
 
     // the session enables the event, off by default
     Sessions sessions = new Sessions(dir, Sessions.defaultSettings(), false);
@@ -107,19 +107,19 @@ public class EventMappingsTest {
     sessions.stop(s.getId());
 
     Analysis a = s.getAnalysis();
-    Assert.assertTrue(a.getInfo().hasOperationEvents());
+    Assertions.assertTrue(a.getInfo().hasOperationEvents());
     List<RecordedOperation> ops = a.getOperations().stream()
                                    .sorted(Comparator.comparing(RecordedOperation::name))
                                    .toList();
-    Assert.assertEquals(List.of("orders.cancel", "orders.place", "orders.place"),
+    Assertions.assertEquals(List.of("orders.cancel", "orders.place", "orders.place"),
                         ops.stream().map(RecordedOperation::name).toList());
     RecordedOperation cancel = ops.get(0);
-    Assert.assertEquals("r-cancel", cancel.detail());
-    Assert.assertTrue(cancel.failed());
-    Assert.assertEquals("no such order", cancel.error());
-    Assert.assertFalse(ops.get(1).failed());
-    Assert.assertEquals(Thread.currentThread().getName(), cancel.threadName());
-    Assert.assertTrue("its duration", cancel.durationNanos() >= 15_000_000);
+    Assertions.assertEquals("r-cancel", cancel.detail());
+    Assertions.assertTrue(cancel.failed());
+    Assertions.assertEquals("no such order", cancel.error());
+    Assertions.assertFalse(ops.get(1).failed());
+    Assertions.assertEquals(Thread.currentThread().getName(), cancel.threadName());
+    Assertions.assertTrue(cancel.durationNanos() >= 15_000_000, "its duration");
   }
 
   @Test
@@ -128,13 +128,13 @@ public class EventMappingsTest {
     try (LiveStats live = new LiveStats();
          AutoMode auto = new AutoMode(sessions)) {
       EventMappings.register(new EventMapping("test.RpcCall", "{service}.{method}", null, "error"));
-      Assert.assertTrue("an operation may come", live.isObserving());
+      Assertions.assertTrue(live.isObserving(), "an operation may come");
 
       // known once over: the session records as armed, until one has ended
       auto.arm(new Trigger(List.of("orders.*"), null, false, Duration.ofMillis(300), Duration.ofSeconds(10)));
       Session s = auto.getSession();
-      Assert.assertNotNull(s);
-      Assert.assertTrue(auto.isWaiting());
+      Assertions.assertNotNull(s);
+      Assertions.assertTrue(auto.isWaiting());
 
       call("place", null);
       call("cancel", "no such order");
@@ -144,13 +144,13 @@ public class EventMappingsTest {
         Thread.sleep(50);
       List<OperationStats> ops = live.getOperations(1).stream()
                                      .sorted(Comparator.comparing(OperationStats::name)).toList();
-      Assert.assertEquals(List.of("orders.cancel", "orders.place"), ops.stream().map(OperationStats::name).toList());
-      Assert.assertEquals(1, ops.get(0).errors());
+      Assertions.assertEquals(List.of("orders.cancel", "orders.place"), ops.stream().map(OperationStats::name).toList());
+      Assertions.assertEquals(1, ops.get(0).errors());
 
       while (s.getState() == Session.State.RECORDING && System.nanoTime() < end)
         Thread.sleep(50);
-      Assert.assertEquals("stopped once idle", Session.State.STOPPED, s.getState());
-      Assert.assertTrue(s.getAnalysis().getOperations().stream().anyMatch(o -> o.name().equals("orders.place")));
+      Assertions.assertEquals(Session.State.STOPPED, s.getState(), "stopped once idle");
+      Assertions.assertTrue(s.getAnalysis().getOperations().stream().anyMatch(o -> o.name().equals("orders.place")));
     }
     finally {
       sessions.close();
@@ -186,24 +186,24 @@ public class EventMappingsTest {
       r.dump(f);
     }
     Analysis a = Analysis.load(f);
-    Assert.assertTrue(a.getInfo().hasOperationEvents());
+    Assertions.assertTrue(a.getInfo().hasOperationEvents());
     List<RecordedOperation> ops = a.getOperations().stream()
                                    .sorted(Comparator.comparing(RecordedOperation::name))
                                    .toList();
-    Assert.assertEquals(List.of("cancel()", "com.acme.OrderResource.get", "place()"),
+    Assertions.assertEquals(List.of("cancel()", "com.acme.OrderResource.get", "place()"),
                         ops.stream().map(RecordedOperation::name).toList());
-    Assert.assertEquals("GET /orders/12", ops.get(1).detail());
-    Assert.assertFalse(ops.get(1).failed());
-    Assert.assertTrue(ops.get(0).failed());
-    Assert.assertEquals("java.lang.AssertionError", ops.get(0).error());
-    Assert.assertFalse(ops.get(2).failed());
-    Assert.assertNull(ops.get(2).error());
+    Assertions.assertEquals("GET /orders/12", ops.get(1).detail());
+    Assertions.assertFalse(ops.get(1).failed());
+    Assertions.assertTrue(ops.get(0).failed());
+    Assertions.assertEquals("java.lang.AssertionError", ops.get(0).error());
+    Assertions.assertFalse(ops.get(2).failed());
+    Assertions.assertNull(ops.get(2).error());
   }
 
   @Test
   public void testBuiltInNotStreamed() throws Exception {
     try (LiveStats live = new LiveStats()) {
-      Assert.assertFalse("sessions would start as armed", MappedOperations.isActive());
+      Assertions.assertFalse(MappedOperations.isActive(), "sessions would start as armed");
     }
   }
 
@@ -219,22 +219,22 @@ public class EventMappingsTest {
       r.dump(f);
     }
     RecordedOperation op = Analysis.load(f).getOperations().get(0);
-    Assert.assertEquals("a field it does not have", "orders/null", op.name());
-    Assert.assertNull(op.detail());
-    Assert.assertFalse(op.failed());
+    Assertions.assertEquals("orders/null", op.name(), "a field it does not have");
+    Assertions.assertNull(op.detail());
+    Assertions.assertFalse(op.failed());
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testBadKey() throws Exception {
     Path file = dir.resolve("bad.properties");
     Files.writeString(file, "test.RpcCall.label = {method}\n");
-    EventMappings.load(file);
+    Assertions.assertThrows(IllegalArgumentException.class, () -> EventMappings.load(file));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testNoName() throws Exception {
     Path file = dir.resolve("bad.properties");
     Files.writeString(file, "test.RpcCall.detail = {method}\n");
-    EventMappings.load(file);
+    Assertions.assertThrows(IllegalArgumentException.class, () -> EventMappings.load(file));
   }
 }

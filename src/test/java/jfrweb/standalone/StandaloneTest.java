@@ -16,10 +16,10 @@ import java.util.stream.Stream;
 
 import jfrweb.analysis.EventMapping;
 import jfrweb.analysis.EventMappings;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * Profiles another JVM, {@link RemoteApp}, through the REST API of jfr-web
@@ -35,7 +35,7 @@ public class StandaloneTest {
   private Process child;
   private Standalone standalone;
 
-  @Before
+  @BeforeEach
   public void setUp() throws Exception {
     dir = Files.createTempDirectory("jfr-web-standalone");
     child = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
@@ -43,10 +43,10 @@ public class StandaloneTest {
       .redirectErrorStream(true)
       .start();
     BufferedReader out = new BufferedReader(new InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8));
-    Assert.assertEquals("ready", out.readLine());
+    Assertions.assertEquals("ready", out.readLine());
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws Exception {
     EventMappings.unregister("test.Batch");
     if (standalone != null)
@@ -60,11 +60,11 @@ public class StandaloneTest {
 
   @Test
   public void testAppKey() {
-    Assert.assertEquals("myapp", Jvms.app("/opt/myapp-7.40.0-5-e71cad50-dirty+devSnapshot-all.jar --port 80", 1));
-    Assert.assertEquals("myapp", Jvms.app("C:\\apps\\myapp.jar", 1));
-    Assert.assertEquals("org.example.Main", Jvms.app("org.example.Main arg", 1));
-    Assert.assertEquals("pid-12", Jvms.app("", 12));
-    Assert.assertEquals("pid-12", Jvms.app(null, 12));
+    Assertions.assertEquals("myapp", Jvms.app("/opt/myapp-7.40.0-5-e71cad50-dirty+devSnapshot-all.jar --port 80", 1));
+    Assertions.assertEquals("myapp", Jvms.app("C:\\apps\\myapp.jar", 1));
+    Assertions.assertEquals("org.example.Main", Jvms.app("org.example.Main arg", 1));
+    Assertions.assertEquals("pid-12", Jvms.app("", 12));
+    Assertions.assertEquals("pid-12", Jvms.app(null, 12));
   }
 
   @Test
@@ -75,53 +75,53 @@ public class StandaloneTest {
     long pid = child.pid();
 
     String jvms = get("api/jvms").body();
-    Assert.assertTrue(jvms, jvms.contains("{\"pid\":" + pid + ",\"name\":\"" + APP + "\",\"app\":\"" + APP
-                                          + "\",\"attached\":false}"));
-    Assert.assertEquals(404, post("api/jvms/1/attach").statusCode());
+    Assertions.assertTrue(jvms.contains("{\"pid\":" + pid + ",\"name\":\"" + APP + "\",\"app\":\"" + APP
+                                          + "\",\"attached\":false}"), jvms);
+    Assertions.assertEquals(404, post("api/jvms/1/attach").statusCode());
 
     HttpResponse<String> attached = post("api/jvms/" + pid + "/attach");
-    Assert.assertEquals(attached.body(), 200, attached.statusCode());
-    Assert.assertEquals("{\"app\":\"" + APP + "\",\"path\":\"" + BASE + "\"}", attached.body());
-    Assert.assertTrue(get(BASE + "api/target").body().contains("\"pid\":" + pid + ","));
-    Assert.assertEquals("{\"app\":\"" + APP + "\",\"recordingsOnly\":false,\"history\":false}",
+    Assertions.assertEquals(200, attached.statusCode(), attached.body());
+    Assertions.assertEquals("{\"app\":\"" + APP + "\",\"path\":\"" + BASE + "\"}", attached.body());
+    Assertions.assertTrue(get(BASE + "api/target").body().contains("\"pid\":" + pid + ","));
+    Assertions.assertEquals("{\"app\":\"" + APP + "\",\"recordingsOnly\":false,\"history\":false}",
                         get(BASE + "api/about").body());
-    Assert.assertEquals("the interface of the profiler", 200, get(BASE).statusCode());
+    Assertions.assertEquals(200, get(BASE).statusCode(), "the interface of the profiler");
 
     // its operations, from their events, once they end
     String live = waitFor(BASE + "api/live?window=1", b -> b.contains("\"name\":\"work\"")
                                                            && b.contains("\"name\":\"batch nightly\""));
-    Assert.assertTrue(live, live.contains("\"observing\":true,\"fed\":true"));
+    Assertions.assertTrue(live.contains("\"observing\":true,\"fed\":true"), live);
 
-    Assert.assertTrue(post(BASE + "api/sessions?name=remote").body().contains("\"state\":\"RECORDING\""));
+    Assertions.assertTrue(post(BASE + "api/sessions?name=remote").body().contains("\"state\":\"RECORDING\""));
     Thread.sleep(1500);
-    Assert.assertTrue(post(BASE + "api/sessions/1/stop").body().contains("\"state\":\"STOPPED\""));
+    Assertions.assertTrue(post(BASE + "api/sessions/1/stop").body().contains("\"state\":\"STOPPED\""));
     String report = get(BASE + "api/sessions/1/report").body();
-    Assert.assertTrue(report, report.contains("\"name\":\"work\",\"count\":"));
-    Assert.assertTrue(report, report.contains("\"javaArguments\":\"" + APP + "\""));
-    Assert.assertEquals(200, get(BASE + "api/sessions/1/flame?name=work").statusCode());
+    Assertions.assertTrue(report.contains("\"name\":\"work\",\"count\":"), report);
+    Assertions.assertTrue(report.contains("\"javaArguments\":\"" + APP + "\""), report);
+    Assertions.assertEquals(200, get(BASE + "api/sessions/1/flame?name=work").statusCode());
 
     // armed: a session once a matching operation ends, as long as they come
-    Assert.assertEquals("no browser in events", 400, post(BASE + "api/auto?patterns=work&browser=true").statusCode());
-    Assert.assertEquals(200, post(BASE + "api/auto?patterns=work&max=1&name=auto+one").statusCode());
+    Assertions.assertEquals(400, post(BASE + "api/auto?patterns=work&browser=true").statusCode(), "no browser in events");
+    Assertions.assertEquals(200, post(BASE + "api/auto?patterns=work&max=1&name=auto+one").statusCode());
     waitFor(BASE + "api/sessions", b -> b.contains("\"id\":2,\"state\":\"STOPPED\",\"name\":\"auto one\","
                                                    + "\"trigger\":\"auto: waiting for work\""));
 
     // disconnected, then connected again
-    Assert.assertEquals(200, post("api/detach").statusCode());
-    Assert.assertTrue(get(BASE + "api/target").body().contains("\"pid\":null"));
-    Assert.assertEquals(200, post("api/jvms/" + pid + "/attach").statusCode());
+    Assertions.assertEquals(200, post("api/detach").statusCode());
+    Assertions.assertTrue(get(BASE + "api/target").body().contains("\"pid\":null"));
+    Assertions.assertEquals(200, post("api/jvms/" + pid + "/attach").statusCode());
 
     // the JVM ends: detached, its sessions stay
     child.destroyForcibly();
     waitFor(BASE + "api/target", b -> b.contains("\"pid\":null"));
-    Assert.assertEquals("no JVM to record", 409, post(BASE + "api/sessions").statusCode());
+    Assertions.assertEquals(409, post(BASE + "api/sessions").statusCode(), "no JVM to record");
 
     // kept for the next run
     standalone.close();
     standalone = Standalone.start(dir, 0);
     String apps = get("api/jvms").body();
-    Assert.assertTrue(apps, apps.contains("{\"app\":\"" + APP + "\",\"path\":\"" + BASE + "\",\"pid\":null,\"sessions\":2,"));
-    Assert.assertTrue(get(BASE + "api/sessions").body().contains("\"name\":\"remote\""));
+    Assertions.assertTrue(apps.contains("{\"app\":\"" + APP + "\",\"path\":\"" + BASE + "\",\"pid\":null,\"sessions\":2,"), apps);
+    Assertions.assertTrue(get(BASE + "api/sessions").body().contains("\"name\":\"remote\""));
   }
 
   private String waitFor(String path, Predicate<String> condition) throws Exception {
@@ -133,7 +133,7 @@ public class StandaloneTest {
         return body;
       Thread.sleep(200);
     } while (System.nanoTime() < end);
-    Assert.fail("Not in time: " + body);
+    Assertions.fail("Not in time: " + body);
     return body;
   }
 

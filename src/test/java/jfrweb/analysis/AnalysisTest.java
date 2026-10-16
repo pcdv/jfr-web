@@ -23,10 +23,10 @@ import flak.Flak;
 import flak.annotations.Route;
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 /**
  * Records a flak app serving requests, then analyzes the recording: the
@@ -71,7 +71,7 @@ public class AnalysisTest {
     }
   }
 
-  @BeforeClass
+  @BeforeAll
   public static void record() throws Exception {
     file = Files.createTempFile("jfr-web", ".jfr");
 
@@ -103,7 +103,7 @@ public class AnalysisTest {
    * -Djfrweb.keepRecording=<path> keeps the recording there, e.g. to try the
    * command line on it.
    */
-  @AfterClass
+  @AfterAll
   public static void cleanUp() throws IOException {
     String keep = System.getProperty("jfrweb.keepRecording");
     if (keep != null)
@@ -128,7 +128,7 @@ public class AnalysisTest {
                                        .stream()
                                        .collect(Collectors.groupingBy(RecordedOperation::name,
                                                                       Collectors.counting()));
-    Assert.assertEquals(Map.of("GET /busy/:id", 5L,
+    Assertions.assertEquals(Map.of("GET /busy/:id", 5L,
                                "GET /fast", 20L,
                                "GET /fail", 1L,
                                "GET (no route)", 1L),
@@ -140,34 +140,33 @@ public class AnalysisTest {
     List<OperationStats> stats = OperationStats.of(analysis.getOperations());
 
     OperationStats busy = stats.get(0);
-    Assert.assertEquals("sorted by total time", "GET /busy/:id", busy.name());
-    Assert.assertEquals(5, busy.count());
-    Assert.assertTrue(busy.p50Nanos() >= 200_000_000);
-    Assert.assertTrue(busy.maxNanos() >= busy.p99Nanos());
-    Assert.assertEquals(0, busy.errors());
-    Assert.assertEquals(5, busy.bytesOut());
+    Assertions.assertEquals("GET /busy/:id", busy.name(), "sorted by total time");
+    Assertions.assertEquals(5, busy.count());
+    Assertions.assertTrue(busy.p50Nanos() >= 200_000_000);
+    Assertions.assertTrue(busy.maxNanos() >= busy.p99Nanos());
+    Assertions.assertEquals(0, busy.errors());
+    Assertions.assertEquals(5, busy.bytesOut());
 
     OperationStats fail = stats.stream().filter(s -> s.name().equals("GET /fail")).findFirst().orElseThrow();
-    Assert.assertEquals(1, fail.errors());
+    Assertions.assertEquals(1, fail.errors());
   }
 
   @Test
   public void testInfo() {
     RecordingInfo info = analysis.getInfo();
-    Assert.assertNotNull(info.getJvmVersion());
-    Assert.assertTrue(info.isEnabled(RecordingInfo.FLAK_REQUEST));
-    Assert.assertEquals(java.time.Duration.ofMillis(10), info.getPeriod(RecordingInfo.EXECUTION_SAMPLE));
-    Assert.assertEquals(java.time.Duration.ofMillis(20), info.getPeriod(RecordingInfo.NATIVE_SAMPLE));
-    Assert.assertTrue(info.getStart().isBefore(info.getEnd()));
+    Assertions.assertNotNull(info.getJvmVersion());
+    Assertions.assertTrue(info.isEnabled(RecordingInfo.FLAK_REQUEST));
+    Assertions.assertEquals(java.time.Duration.ofMillis(10), info.getPeriod(RecordingInfo.EXECUTION_SAMPLE));
+    Assertions.assertEquals(java.time.Duration.ofMillis(20), info.getPeriod(RecordingInfo.NATIVE_SAMPLE));
+    Assertions.assertTrue(info.getStart().isBefore(info.getEnd()));
   }
 
   @Test
   public void testTimeline() throws IOException {
     Timeline t = Timeline.of(analysis);
-    Assert.assertTrue(t.getBuckets() <= Timeline.MAX_BUCKETS);
-    Assert.assertEquals("the endpoint with the most time first",
-                        "GET /busy/:id", t.getSeries().keySet().iterator().next());
-    Assert.assertNull("4 endpoints, all shown", t.getOther());
+    Assertions.assertTrue(t.getBuckets() <= Timeline.MAX_BUCKETS);
+    Assertions.assertEquals("GET /busy/:id", t.getSeries().keySet().iterator().next(), "the endpoint with the most time first");
+    Assertions.assertNull(t.getOther(), "4 endpoints, all shown");
 
     // in flight per bucket, times the bucket, gives back the time of the requests
     double seconds = 0;
@@ -176,20 +175,20 @@ public class AnalysisTest {
     double expected = analysis.getOperations().stream()
                               .filter(r -> r.name().equals("GET /busy/:id"))
                               .mapToLong(RecordedOperation::durationNanos).sum() / 1e9;
-    Assert.assertEquals(expected, seconds, expected * 0.001);
-    Assert.assertTrue(Arrays.stream(t.getJavaSamples()).sum() > 0);
+    Assertions.assertEquals(expected, seconds, expected * 0.001);
+    Assertions.assertTrue(Arrays.stream(t.getJavaSamples()).sum() > 0);
 
     // zoomed in on 200 ms: it starts there, in the finest buckets
     java.time.Instant from = analysis.getInfo().getStart().plusMillis(200);
     Timeline zoomed = Timeline.of(analysis, from, from.plusMillis(200));
-    Assert.assertEquals(from, zoomed.getStart());
-    Assert.assertEquals("10 ms buckets", 20, zoomed.getBuckets());
-    Assert.assertEquals("the same colors as the whole", t.getSeries().keySet(), zoomed.getSeries().keySet());
+    Assertions.assertEquals(from, zoomed.getStart());
+    Assertions.assertEquals(20, zoomed.getBuckets(), "10 ms buckets");
+    Assertions.assertEquals(t.getSeries().keySet(), zoomed.getSeries().keySet(), "the same colors as the whole");
 
-    Assert.assertEquals(10_000_000, Timeline.bucketFor(1_000_000_000));
-    Assert.assertEquals("10 s in 300 buckets: 33 ms at least", 50_000_000, Timeline.bucketFor(10_000_000_000L));
-    Assert.assertEquals(1_000_000_000, Timeline.bucketFor(299_000_000_000L));
-    Assert.assertEquals(2_000_000_000, Timeline.bucketFor(301_000_000_000L));
+    Assertions.assertEquals(10_000_000, Timeline.bucketFor(1_000_000_000));
+    Assertions.assertEquals(50_000_000, Timeline.bucketFor(10_000_000_000L), "10 s in 300 buckets: 33 ms at least");
+    Assertions.assertEquals(1_000_000_000, Timeline.bucketFor(299_000_000_000L));
+    Assertions.assertEquals(2_000_000_000, Timeline.bucketFor(301_000_000_000L));
   }
 
   @Test
@@ -199,9 +198,9 @@ public class AnalysisTest {
     // 1 s burnt in /busy, sampled every 10 ms. JFR drops the samples whose
     // stack it fails to walk, about half of them here
     long busy = weight(collapsed, "GET /busy/:id;", "Handlers.burn");
-    Assert.assertTrue(collapsed, busy >= 200);
-    Assert.assertEquals("burnt nowhere else", 0, weight(collapsed, "GET /fast;", "Handlers.burn"));
-    Assert.assertFalse("samples outside requests are left out", collapsed.contains(FlameGraphs.NO_OPERATION));
+    Assertions.assertTrue(busy >= 200, collapsed);
+    Assertions.assertEquals(0, weight(collapsed, "GET /fast;", "Handlers.burn"), "burnt nowhere else");
+    Assertions.assertFalse(collapsed.contains(FlameGraphs.NO_OPERATION), "samples outside requests are left out");
   }
 
   @Test
@@ -209,46 +208,45 @@ public class AnalysisTest {
     String collapsed = flame(new FlameGraphs.Options()
                                .collapsed(true)
                                .operations(r -> r.name().equals("GET /fast")));
-    Assert.assertFalse(collapsed, collapsed.contains("GET /busy"));
+    Assertions.assertFalse(collapsed.contains("GET /busy"), collapsed);
   }
 
   @Test
   public void testFlameGraphWithSamplesOutsideRequests() throws IOException {
     String collapsed = flame(new FlameGraphs.Options().collapsed(true).outsideOperations(true));
-    Assert.assertTrue(collapsed.contains(FlameGraphs.NO_OPERATION + ";["));
-    Assert.assertTrue(collapsed.contains("GET /busy/:id;"));
+    Assertions.assertTrue(collapsed.contains(FlameGraphs.NO_OPERATION + ";["));
+    Assertions.assertTrue(collapsed.contains("GET /busy/:id;"));
   }
 
   @Test
   public void testFlameGraphMerged() throws IOException {
     String collapsed = flame(new FlameGraphs.Options().collapsed(true).merged(true));
-    Assert.assertFalse("no operation at the root", collapsed.contains("GET /"));
-    Assert.assertEquals("the same samples",
-                        weight(flame(new FlameGraphs.Options().collapsed(true)), "", "Handlers.burn"),
-                        weight(collapsed, "", "Handlers.burn"));
+    Assertions.assertFalse(collapsed.contains("GET /"), "no operation at the root");
+    Assertions.assertEquals(weight(flame(new FlameGraphs.Options().collapsed(true)), "", "Handlers.burn"),
+                        weight(collapsed, "", "Handlers.burn"), "the same samples");
   }
 
   @Test
   public void testFlameGraphReversed() throws IOException {
     String collapsed = flame(new FlameGraphs.Options().collapsed(true).reversed(true));
-    Assert.assertTrue(collapsed, collapsed.lines().noneMatch(l -> l.startsWith("GET /")));
-    Assert.assertTrue("the operation last", collapsed.lines().anyMatch(l -> l.contains(";GET /busy/:id ")));
+    Assertions.assertTrue(collapsed.lines().noneMatch(l -> l.startsWith("GET /")), collapsed);
+    Assertions.assertTrue(collapsed.lines().anyMatch(l -> l.contains(";GET /busy/:id ")), "the operation last");
   }
 
   @Test
   public void testFlameGraphJavaOnly() throws IOException {
     String all = flame(new FlameGraphs.Options().collapsed(true));
     String java = flame(new FlameGraphs.Options().collapsed(true).javaOnly(true));
-    Assert.assertEquals("burnt in Java", weight(all, "GET /busy/:id;", "Handlers.burn"),
-                        weight(java, "GET /busy/:id;", "Handlers.burn"));
-    Assert.assertTrue(weight(java, "", "") <= weight(all, "", ""));
+    Assertions.assertEquals(weight(all, "GET /busy/:id;", "Handlers.burn"),
+                        weight(java, "GET /busy/:id;", "Handlers.burn"), "burnt in Java");
+    Assertions.assertTrue(weight(java, "", "") <= weight(all, "", ""));
   }
 
   @Test
   public void testHtml() throws IOException {
     String html = flame(new FlameGraphs.Options().title("<b>"));
-    Assert.assertTrue(html.contains("<h1>&lt;b&gt;</h1>"));
-    Assert.assertTrue(html.contains("GET /busy/:id"));
+    Assertions.assertTrue(html.contains("<h1>&lt;b&gt;</h1>"));
+    Assertions.assertTrue(html.contains("GET /busy/:id"));
   }
 
   private static String flame(FlameGraphs.Options o) throws IOException {

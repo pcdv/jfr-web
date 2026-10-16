@@ -23,10 +23,10 @@ import jfrweb.ops.Operation;
 import jfrweb.ops.Operations;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class AutoModeTest {
 
@@ -51,7 +51,7 @@ public class AutoModeTest {
     }
   }
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     dir = Files.createTempDirectory("jfr-web-auto");
     sessions = new Sessions(dir, Sessions.defaultSettings(), false);
@@ -65,7 +65,7 @@ public class AutoModeTest {
     auto.observe(app);
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws IOException {
     auto.close();
     sessions.close();
@@ -80,22 +80,22 @@ public class AutoModeTest {
     auto.arm(new Trigger(List.of("GET /busy"), null, false, Duration.ofMillis(300), Duration.ofSeconds(10), " slow busy "));
 
     get("/hello", null);
-    Assert.assertTrue("not a matching endpoint", sessions.list().isEmpty());
+    Assertions.assertTrue(sessions.list().isEmpty(), "not a matching endpoint");
 
     recordingInHandler = false;
     get("/busy", null);
-    Assert.assertTrue("recording when the handler ran", recordingInHandler);
+    Assertions.assertTrue(recordingInHandler, "recording when the handler ran");
     Session s = sessions.list().get(0);
-    Assert.assertEquals("auto: GET /busy", s.getTrigger());
-    Assert.assertEquals("named by the trigger", "slow busy", s.getName());
+    Assertions.assertEquals("auto: GET /busy", s.getTrigger());
+    Assertions.assertEquals("slow busy", s.getName(), "named by the trigger");
 
     await(() -> s.getState() == Session.State.STOPPED);
-    Assert.assertNull("once: disarmed after the session", auto.getTrigger());
+    Assertions.assertNull(auto.getTrigger(), "once: disarmed after the session");
     get("/busy", null);
-    Assert.assertEquals(1, sessions.list().size());
+    Assertions.assertEquals(1, sessions.list().size());
 
     // the request that triggered the session is in it, whole
-    Assert.assertEquals(1, s.getAnalysis().getOperations().stream()
+    Assertions.assertEquals(1, s.getAnalysis().getOperations().stream()
                              .filter(r -> r.name().equals("GET /busy")).count());
   }
 
@@ -104,7 +104,7 @@ public class AutoModeTest {
     auto.arm(new Trigger(List.of("quote"), null, false, Duration.ofMillis(300), Duration.ofSeconds(10)));
 
     Operation op = Operations.beginAsync("quote").detail("ACME");
-    Assert.assertNotNull("recording before the operation runs", sessions.getRecording());
+    Assertions.assertNotNull(sessions.getRecording(), "recording before the operation runs");
     Thread worker = new Thread(op.wrap(() -> {
       try {
         Thread.sleep(100);
@@ -118,15 +118,15 @@ public class AutoModeTest {
     worker.join();
 
     Session s = sessions.list().get(0);
-    Assert.assertEquals("auto: quote", s.getTrigger());
+    Assertions.assertEquals("auto: quote", s.getTrigger());
     await(() -> s.getState() == Session.State.STOPPED);
 
     // in it, whole, with the segment of the worker
     RecordedOperation r = s.getAnalysis().getOperations().stream()
                            .filter(o -> o.name().equals("quote")).findFirst().orElseThrow();
-    Assert.assertTrue(r.async());
-    Assert.assertEquals("ACME", r.detail());
-    Assert.assertEquals(1, s.getAnalysis().getSegments(r).size());
+    Assertions.assertTrue(r.async());
+    Assertions.assertEquals("ACME", r.detail());
+    Assertions.assertEquals(1, s.getAnalysis().getSegments(r).size());
   }
 
   @Test
@@ -135,10 +135,10 @@ public class AutoModeTest {
 
     get("/hello", null);
     get("/hello", "other");
-    Assert.assertTrue("another client", sessions.list().isEmpty());
+    Assertions.assertTrue(sessions.list().isEmpty(), "another client");
 
     get("/hello", "token");
-    Assert.assertEquals("auto: GET /hello, armed browser", sessions.list().get(0).getTrigger());
+    Assertions.assertEquals("auto: GET /hello, armed browser", sessions.list().get(0).getTrigger());
   }
 
   @Test
@@ -149,11 +149,11 @@ public class AutoModeTest {
     while (System.currentTimeMillis() < end)
       get("/hello", null);
 
-    Assert.assertTrue("several sessions: " + sessions.list().size(), sessions.list().size() >= 2);
+    Assertions.assertTrue(sessions.list().size() >= 2, "several sessions: " + sessions.list().size());
     for (Session s : sessions.list())
       if (s.getState() == Session.State.STOPPED)
-        Assert.assertTrue(s.getDuration().toString(), s.getDuration().toMillis() < 1000);
-    Assert.assertNotNull("still armed", auto.getTrigger());
+        Assertions.assertTrue(s.getDuration().toMillis() < 1000, s.getDuration().toString());
+    Assertions.assertNotNull(auto.getTrigger(), "still armed");
   }
 
   @Test
@@ -161,7 +161,7 @@ public class AutoModeTest {
     auto.arm(new Trigger(List.of(), null, true, Duration.ofMillis(200), Duration.ofSeconds(10)));
     get("/hello", null);
     Session s = auto.getSession();
-    Assert.assertNotNull(s);
+    Assertions.assertNotNull(s);
     auto.disarm();
     // it ends with the default idle time
     await(() -> s.getState() == Session.State.STOPPED);
@@ -173,26 +173,26 @@ public class AutoModeTest {
       fed.arm(new Trigger(List.of("work"), null, false, Duration.ofMillis(200), Duration.ofSeconds(10), "fed"));
       // operations are only known once they end: it records from now
       Session s = fed.getSession();
-      Assert.assertNotNull(s);
-      Assert.assertEquals("auto: waiting for work", s.getTrigger());
-      Assert.assertTrue(fed.isWaiting());
+      Assertions.assertNotNull(s);
+      Assertions.assertEquals("auto: waiting for work", s.getTrigger());
+      Assertions.assertTrue(fed.isWaiting());
       fed.ended("other");
       Thread.sleep(500);
-      Assert.assertEquals("waits, whatever the idle time", Session.State.RECORDING, s.getState());
+      Assertions.assertEquals(Session.State.RECORDING, s.getState(), "waits, whatever the idle time");
 
       fed.ended("work");
-      Assert.assertFalse(fed.isWaiting());
+      Assertions.assertFalse(fed.isWaiting());
       for (int i = 0; i < 50 && s.getState() == Session.State.RECORDING; i++)
         Thread.sleep(50);
-      Assert.assertEquals("stopped once idle", Session.State.STOPPED, s.getState());
-      Assert.assertNull("once", fed.getTrigger());
+      Assertions.assertEquals(Session.State.STOPPED, s.getState(), "stopped once idle");
+      Assertions.assertNull(fed.getTrigger(), "once");
 
       // disarmed while waiting: nothing to keep recording for
       fed.arm(new Trigger(List.of("work"), null, false, Duration.ofMillis(200), Duration.ofSeconds(10)));
       Session waiting = fed.getSession();
       fed.disarm();
-      Assert.assertEquals(Session.State.STOPPED, waiting.getState());
-      Assert.assertNull(fed.getSession());
+      Assertions.assertEquals(Session.State.STOPPED, waiting.getState());
+      Assertions.assertNull(fed.getSession());
     }
   }
 
@@ -200,16 +200,16 @@ public class AutoModeTest {
   public void testPatterns() {
     Trigger t = new Trigger(List.of("GET /api/*", "* /static/*.js"), null, false,
                             Trigger.DEFAULT_IDLE, Trigger.DEFAULT_MAX);
-    Assert.assertTrue(t.matches("GET /api/user/:id", null));
-    Assert.assertTrue(t.matches("HEAD /static/*splat.js", null));
-    Assert.assertFalse(t.matches("POST /api/user/:id", null));
-    Assert.assertFalse("regex characters are literal", Trigger.glob("GET /a.c").matcher("GET /abc").matches());
+    Assertions.assertTrue(t.matches("GET /api/user/:id", null));
+    Assertions.assertTrue(t.matches("HEAD /static/*splat.js", null));
+    Assertions.assertFalse(t.matches("POST /api/user/:id", null));
+    Assertions.assertFalse(Trigger.glob("GET /a.c").matcher("GET /abc").matches(), "regex characters are literal");
   }
 
   private static void await(BooleanSupplier condition) throws InterruptedException {
     for (int i = 0; i < 100 && !condition.getAsBoolean(); i++)
       Thread.sleep(50);
-    Assert.assertTrue("timed out", condition.getAsBoolean());
+    Assertions.assertTrue(condition.getAsBoolean(), "timed out");
   }
 
   private void get(String path, String armedCookie) throws IOException {

@@ -15,10 +15,10 @@ import jfrweb.history.OperationHistory;
 import jfrweb.json.Json;
 import jfrweb.ops.Operation;
 import jfrweb.ops.Operations;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static jfrweb.analysis.AnalysisTest.Handlers.burn;
 
@@ -26,12 +26,12 @@ public class StaticExportTest {
 
   private Path dir;
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     dir = Files.createTempDirectory("jfr-web-export-test");
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws IOException {
     try (Stream<Path> all = Files.walk(dir)) {
       all.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
@@ -40,8 +40,8 @@ public class StaticExportTest {
 
   @Test
   public void testKeySortsParametersAndDoesNotEncode() {
-    Assert.assertEquals("api/x", StaticExport.key("api/x", Map.of()));
-    Assert.assertEquals("api/x?a=GET /y&b=1", StaticExport.key("api/x", Map.of("b", "1", "a", "GET /y")));
+    Assertions.assertEquals("api/x", StaticExport.key("api/x", Map.of()));
+    Assertions.assertEquals("api/x?a=GET /y&b=1", StaticExport.key("api/x", Map.of("b", "1", "a", "GET /y")));
   }
 
   @Test
@@ -64,9 +64,9 @@ public class StaticExportTest {
     Path out = dir.resolve("site");
     StaticExport.export(List.of(jfr), historyDir, out, false);
 
-    Assert.assertTrue(Files.exists(out.resolve("index.html")));
-    Assert.assertTrue(Files.exists(out.resolve("js/api.js")));
-    Assert.assertFalse("not for the browser", Files.exists(out.resolve("jsconfig.json")));
+    Assertions.assertTrue(Files.exists(out.resolve("index.html")));
+    Assertions.assertTrue(Files.exists(out.resolve("js/api.js")));
+    Assertions.assertFalse(Files.exists(out.resolve("jsconfig.json")), "not for the browser");
 
     Map<String, Object> manifest = (Map<String, Object>) Json.parse(Files.readString(out.resolve("static.json")));
     Map<String, Object> files = (Map<String, Object>) manifest.get("files");
@@ -74,17 +74,17 @@ public class StaticExportTest {
                                    "api/sessions/1/instances?limit=20&name=export-test job",
                                    "api/sessions/1/flame", "api/sessions/1/flame?all=true",
                                    "api/sessions/1/flame?name=export-test job"})
-      Assert.assertTrue(key + " in " + files.keySet(), files.containsKey(key));
-    Assert.assertFalse("recordings left out", files.containsKey("api/sessions/1/recording.jfr"));
+      Assertions.assertTrue(files.containsKey(key), key + " in " + files.keySet());
+    Assertions.assertFalse(files.containsKey("api/sessions/1/recording.jfr"), "recordings left out");
     for (Object f : files.values())
-      Assert.assertTrue(f + " written", Files.exists(out.resolve((String) f)));
+      Assertions.assertTrue(Files.exists(out.resolve((String) f)), f + " written");
 
     // the history, over the period it covers, without where it was
     Map<String, Object> period = (Map<String, Object>) manifest.get("history");
     String key = "api/history?from=" + period.get("from") + "&to=" + period.get("to");
-    Assert.assertTrue(key + " in " + files.keySet(), files.containsKey(key));
+    Assertions.assertTrue(files.containsKey(key), key + " in " + files.keySet());
     String history = Files.readString(out.resolve((String) files.get(key)), StandardCharsets.UTF_8);
-    Assert.assertTrue(history, history.contains("\"directory\":\"history\""));
-    Assert.assertTrue(history, history.contains("\"name\":\"export-test job\",\"count\":3"));
+    Assertions.assertTrue(history.contains("\"directory\":\"history\""), history);
+    Assertions.assertTrue(history.contains("\"name\":\"export-test job\",\"count\":3"), history);
   }
 }

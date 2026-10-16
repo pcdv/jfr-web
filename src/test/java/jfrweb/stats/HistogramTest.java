@@ -2,8 +2,8 @@ package jfrweb.stats;
 
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class HistogramTest {
 
@@ -15,9 +15,9 @@ public class HistogramTest {
     // within a bucket, about 19%, of the exact values
     assertAbout(50_000_000, h.percentile(50));
     assertAbout(99_000_000, h.percentile(99));
-    Assert.assertEquals(0, new Histogram().percentile(50));
-    Assert.assertEquals(0, Histogram.index(0));
-    Assert.assertEquals(Histogram.BUCKETS - 1, Histogram.index(Long.MAX_VALUE));
+    Assertions.assertEquals(0, new Histogram().percentile(50));
+    Assertions.assertEquals(0, Histogram.index(0));
+    Assertions.assertEquals(Histogram.BUCKETS - 1, Histogram.index(Long.MAX_VALUE));
   }
 
   @Test
@@ -27,13 +27,13 @@ public class HistogramTest {
     h.add(1_000_000);
     h.add(80_000_000);
     List<List<Integer>> sparse = h.toSparse();
-    Assert.assertEquals("only the buckets used", 2, sparse.size());
+    Assertions.assertEquals(2, sparse.size(), "only the buckets used");
 
     Histogram back = Histogram.fromSparse(sparse);
-    Assert.assertEquals(3, back.getTotal());
-    Assert.assertEquals(h.percentile(50), back.percentile(50));
-    Assert.assertEquals(h.percentile(99), back.percentile(99));
-    Assert.assertEquals("unknown buckets ignored", 0, Histogram.fromSparse(List.of(List.of(999, 5))).getTotal());
+    Assertions.assertEquals(3, back.getTotal());
+    Assertions.assertEquals(h.percentile(50), back.percentile(50));
+    Assertions.assertEquals(h.percentile(99), back.percentile(99));
+    Assertions.assertEquals(0, Histogram.fromSparse(List.of(List.of(999, 5))).getTotal(), "unknown buckets ignored");
   }
 
   @Test
@@ -44,11 +44,11 @@ public class HistogramTest {
       a.add(1_000_000);
     b.add(500_000_000);
     a.addAll(b);
-    Assert.assertEquals(100, a.getTotal());
+    Assertions.assertEquals(100, a.getTotal());
     assertAbout(500_000_000, a.percentile(100));
   }
 
   private static void assertAbout(long expected, long actual) {
-    Assert.assertTrue(actual + " vs " + expected, actual >= expected && actual <= expected * 1.2);
+    Assertions.assertTrue(actual >= expected && actual <= expected * 1.2, actual + " vs " + expected);
   }
 }
