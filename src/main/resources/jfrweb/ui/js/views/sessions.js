@@ -96,9 +96,19 @@ function table(sessions, refresh) {
       h('th', {class: 'num'}, '#'), h('th', null, 'Name'), h('th', null, 'State'), h('th', null, 'Started'),
       h('th', {class: 'num'}, 'Duration'), h('th', {class: 'num'}, 'Size'),
       h('th', null, 'Trigger'), h('th', null, ''))),
-    h('tbody', null, sessions.map(s => h('tr', null,
-      h('td', {class: 'num'}, s.id),
-      h('td', null, s.name ?? h('span', {class: 'hint'}, '—')),
+    h('tbody', null, sessions.map(s => h('tr', s.state === 'RECORDING' ? null : {
+        class: 'clickable',
+        title: 'Open the report',
+        // its links and buttons do their own thing
+        onclick: (/** @type {MouseEvent} */ e) => {
+          if (!(e.target instanceof Element && e.target.closest('a, button')))
+            location.hash = reportHash(s);
+        },
+      },
+      h('td', {class: 'num'}, s.state === 'RECORDING' ? s.id : h('a', {href: reportHash(s)}, s.id)),
+      h('td', null, s.name
+        ? (s.state === 'RECORDING' ? s.name : h('a', {href: reportHash(s)}, s.name))
+        : h('span', {class: 'hint'}, '—')),
       h('td', null, h('span', {class: `state ${s.state.toLowerCase()}`}, s.state.toLowerCase())),
       h('td', null, fmt.time(s.start)),
       h('td', {class: 'num'}, fmt.duration(s.duration)),
@@ -106,9 +116,16 @@ function table(sessions, refresh) {
       h('td', null, s.trigger),
       h('td', {class: 'actions'}, s.state === 'RECORDING'
         ? h('button', {onclick: () => act(() => api.stopSession(s.id), refresh)}, 'Stop')
-        : [h('a', {href: `#/sessions/${s.id}`}, 'Report'), ' ',
+        : [h('a', {href: reportHash(s)}, 'Report'), ' ',
            h('a', {href: api.downloadUrl(s.id), download: true}, 'Download .jfr'),
            api.isStatic() ? null : renameButton(s, refresh)])))));
+}
+
+/**
+ * @param {api.Session} s
+ */
+function reportHash(s) {
+  return `#/sessions/${s.id}`;
 }
 
 /**

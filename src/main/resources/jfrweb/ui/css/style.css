@@ -59,10 +59,19 @@ a {
   color: var(--accent);
 }
 
+/* stays at the top of the window, whatever the length of the page */
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   padding: 8px 24px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
+}
+
+/* what is scrolled to is not hidden under it */
+html {
+  scroll-padding-top: 48px;
 }
 
 .topbar {
