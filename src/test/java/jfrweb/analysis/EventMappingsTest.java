@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
 
+import jdk.jfr.Configuration;
 import jdk.jfr.Enabled;
 import jdk.jfr.Event;
 import jdk.jfr.Name;
@@ -14,6 +15,7 @@ import jdk.jfr.Recording;
 import jfrweb.auto.AutoMode;
 import jfrweb.auto.Trigger;
 import jfrweb.live.LiveStats;
+import jfrweb.ops.MappedOperations;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
 import org.junit.After;
@@ -37,6 +39,26 @@ public class EventMappingsTest {
     String method;
     String requestId;
     String error;
+  }
+
+  /** Quarkus' event for a REST request, its fields at least. */
+  @Name("quarkus.Rest")
+  static class QuarkusRest extends Event {
+    String traceId;
+    String httpMethod;
+    String uri;
+    String resourceClass;
+    String resourceMethod;
+  }
+
+  /** The JUnit Platform's event for a test, its fields at least. */
+  @Name("org.junit.TestExecution")
+  static class JUnitTest extends Event {
+    String uniqueId;
+    String displayName;
+    String result;
+    Class<?> exceptionClass;
+    String exceptionMessage;
   }
 
   private Path dir;
@@ -132,6 +154,56 @@ public class EventMappingsTest {
     }
     finally {
       sessions.close();
+    }
+  }
+
+  private static void test(String name, Class<?> exception) {
+    JUnitTest t = new JUnitTest();
+    t.begin();
+    t.uniqueId = "[engine:junit-jupiter]/[class:com.acme.OrderTest]/[method:" + name + "]";
+    t.displayName = name;
+    t.result = exception == null ? "SUCCESSFUL" : "FAILED";
+    t.exceptionClass = exception;
+    t.commit();
+  }
+
+  @Test
+  public void testBuiltIn() throws Exception {
+    Path f = dir.resolve("r.jfr");
+    // as -XX:StartFlightRecording records them, on by default
+    try (Recording r = new Recording(Configuration.getConfiguration("default"))) {
+      r.start();
+      QuarkusRest q = new QuarkusRest();
+      q.begin();
+      q.httpMethod = "GET";
+      q.uri = "/orders/12";
+      q.resourceClass = "com.acme.OrderResource";
+      q.resourceMethod = "get";
+      q.commit();
+      test("place()", null);
+      test("cancel()", AssertionError.class);
+      r.stop();
+      r.dump(f);
+    }
+    Analysis a = Analysis.load(f);
+    Assert.assertTrue(a.getInfo().hasOperationEvents());
+    List<RecordedOperation> ops = a.getOperations().stream()
+                                   .sorted(Comparator.comparing(RecordedOperation::name))
+                                   .toList();
+    Assert.assertEquals(List.of("cancel()", "com.acme.OrderResource.get", "place()"),
+                        ops.stream().map(RecordedOperation::name).toList());
+    Assert.assertEquals("GET /orders/12", ops.get(1).detail());
+    Assert.assertFalse(ops.get(1).failed());
+    Assert.assertTrue(ops.get(0).failed());
+    Assert.assertEquals("java.lang.AssertionError", ops.get(0).error());
+    Assert.assertFalse(ops.get(2).failed());
+    Assert.assertNull(ops.get(2).error());
+  }
+
+  @Test
+  public void testBuiltInNotStreamed() throws Exception {
+    try (LiveStats live = new LiveStats()) {
+      Assert.assertFalse("sessions would start as armed", MappedOperations.isActive());
     }
   }
 

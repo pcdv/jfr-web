@@ -45,7 +45,8 @@ operations are:
   with units of work.
 - **An application that already records its own JFR events**, say one per RPC call, doesn't need
   any code. A small mapping file tells jfr-web [which events are operations](#mapping-your-own-jfr-events)
-  and how to name them.
+  and how to name them. Those of Quarkus REST requests and JUnit tests are
+  [known already](#events-known-out-of-the-box).
 - **A JVM that does neither** still gets sessions, flame graphs by thread and by time interval,
   and the report on how sampling went. Everything that is per operation stays empty.
 
@@ -292,6 +293,22 @@ One thing differs from operations declared in code: jfr-web only learns about a 
 over. So when events are mapped, arming a session (Arm, auto mode) starts recording right away,
 and the session stops once a matching call has completed. Operations jfr-web sees start, like
 flak requests, still end the wait the moment they begin.
+
+### Events known out of the box
+
+Some frameworks record such an event already, and jfr-web reads them without a mapping:
+
+| Event | Recorded by | One operation per | Named | Detail | Failed |
+|---|---|---|---|---|---|
+| `quarkus.Rest` | Quarkus, with the `quarkus-jfr` extension | REST request | `{resourceClass}.{resourceMethod}` | `{httpMethod} {uri}` | |
+| `org.junit.TestExecution` | the JUnit Platform (built in since JUnit 6, `junit-platform-jfr` before) | test, or test class | `{displayName}` | `{uniqueId}` | `exceptionClass` |
+
+Both events are on by default, so a plain `-XX:StartFlightRecording` on the application, or on
+the test JVM, records them, and standalone mode reads them from the JVMs it connects to. A mapping
+of your own for the same event replaces the built-in one. An application embedding jfr-web
+doesn't stream them to its live view, history and auto mode unless it registers them: these
+would otherwise start every armed session right away, for events the application may never
+record.
 
 ## Standalone
 

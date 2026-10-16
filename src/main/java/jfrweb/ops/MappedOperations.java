@@ -12,10 +12,11 @@ import jfrweb.session.StackDepth;
 
 /**
  * The operations of the events of the application mapped (see
- * {@link EventMappings}), heard of in this JVM: while something here listens
- * to operations (live statistics, history, snapshots, auto mode), a stream of
- * these events tells the listeners of each one as it ends, about a second
- * later. They only hear of its end: it is known once over.
+ * {@link EventMappings}), registered rather than built in, heard of in this
+ * JVM: while something here listens to operations (live statistics, history,
+ * snapshots, auto mode), a stream of these events tells the listeners of each
+ * one as it ends, about a second later. They only hear of its end: it is
+ * known once over.
  */
 public final class MappedOperations {
 
@@ -54,7 +55,7 @@ public final class MappedOperations {
       stream.close();
       stream = null;
     }
-    List<EventMapping> mappings = EventMappings.list();
+    List<EventMapping> mappings = EventMappings.registered();
     if (consumers == 0 || mappings.isEmpty())
       return;
     // it may be the first recording of the JVM, which fixes the depth of

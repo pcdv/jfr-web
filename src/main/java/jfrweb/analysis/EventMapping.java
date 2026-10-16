@@ -3,6 +3,7 @@ package jfrweb.analysis;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import jdk.jfr.consumer.RecordedClass;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordedThread;
 
@@ -14,7 +15,8 @@ import jdk.jfr.consumer.RecordedThread;
  * <p>
  * The name and the detail are templates, where {@code {field}} stands for
  * the value of a field of the event, e.g. {@code {service}.{method}}; a
- * field of a field is written {@code {request.path}}.
+ * field of a field is written {@code {request.path}}, and a class stands
+ * for its name.
  *
  * @param event  the name of the event, e.g. "com.acme.RpcCall"
  * @param name   what operations are grouped by: a few distinct values, not
@@ -74,12 +76,16 @@ public record EventMapping(String event, String name, String detail, String fail
     return sb.toString();
   }
 
-  /** The value of a field, null if the event has none of that name. */
+  /**
+   * The value of a field, null if the event has none of that name, or if a
+   * field it is nested in is null; the name of a class.
+   */
   private static Object value(RecordedEvent e, String field) {
     try {
-      return e.getValue(field);
+      Object v = e.getValue(field);
+      return v instanceof RecordedClass c ? c.getName() : v;
     }
-    catch (IllegalArgumentException ex) {
+    catch (IllegalArgumentException | NullPointerException ex) {
       return null;
     }
   }

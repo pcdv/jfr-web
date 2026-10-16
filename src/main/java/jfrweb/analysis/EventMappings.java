@@ -5,6 +5,7 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +27,23 @@ import jfrweb.ops.MappedOperations;
  * com.acme.RpcCall.detail = {requestId}
  * com.acme.RpcCall.failed = error
  * </pre>
+ * Some frameworks record such an event of their own: those are read as
+ * operations out of the box, see {@link #BUILT_IN}.
  */
 public final class EventMappings {
+
+  /**
+   * The events of frameworks read as operations without being registered,
+   * unless registered otherwise. Recordings read and made here, and the JVMs
+   * standalone mode connects to, take operations from them, but this JVM
+   * does not stream them: an application embedding jfr-web would have every
+   * session start as armed for events it may never record.
+   */
+  public static final List<EventMapping> BUILT_IN = List.of(
+    // Quarkus' JFR extension: a REST request
+    new EventMapping("quarkus.Rest", "{resourceClass}.{resourceMethod}", "{httpMethod} {uri}", null),
+    // the JUnit Platform: a test, or a container of tests (a class)
+    new EventMapping("org.junit.TestExecution", "{displayName}", "{uniqueId}", "exceptionClass"));
 
   private static final Map<String, EventMapping> mappings = new ConcurrentHashMap<>();
 
@@ -51,10 +67,30 @@ public final class EventMappings {
    * The mapping of the events of a name, or null.
    */
   public static EventMapping get(String event) {
-    return mappings.get(event);
+    EventMapping m = mappings.get(event);
+    if (m != null)
+      return m;
+    for (EventMapping b : BUILT_IN)
+      if (b.event().equals(event))
+        return b;
+    return null;
   }
 
+  /**
+   * The mappings, those registered and those built in.
+   */
   public static List<EventMapping> list() {
+    List<EventMapping> res = new ArrayList<>(mappings.values());
+    for (EventMapping b : BUILT_IN)
+      if (!mappings.containsKey(b.event()))
+        res.add(b);
+    return res;
+  }
+
+  /**
+   * The mappings registered, without those built in.
+   */
+  public static List<EventMapping> registered() {
     return List.copyOf(mappings.values());
   }
 
@@ -64,7 +100,8 @@ public final class EventMappings {
    */
   public static Map<String, String> settings() {
     Map<String, String> s = new HashMap<>();
-    for (String event : mappings.keySet()) {
+    for (EventMapping m : list()) {
+      String event = m.event();
       s.put(event + "#enabled", "true");
       s.put(event + "#threshold", "0 ms");
       s.put(event + "#stackTrace", "false");
@@ -76,8 +113,6 @@ public final class EventMappings {
    * Some settings, and those of the events mapped, which win.
    */
   public static Map<String, String> withMapped(Map<String, String> settings) {
-    if (mappings.isEmpty())
-      return settings;
     Map<String, String> s = new HashMap<>(settings);
     s.putAll(settings());
     return s;
