@@ -9,6 +9,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -64,8 +66,14 @@ public final class Viewer implements AutoCloseable {
         throw new IllegalStateException("No JVM to record: only recordings opened from files");
       }
     });
-    for (Path f : files) {
-      Instant[] span = span(f);
+    // numbered in the order they were recorded, the oldest first
+    Map<Path, Instant[]> spans = new HashMap<>();
+    for (Path f : files)
+      spans.put(f, span(f));
+    List<Path> byStart = new ArrayList<>(files);
+    byStart.sort(Comparator.comparing((Path f) -> spans.get(f)[0]));
+    for (Path f : byStart) {
+      Instant[] span = spans.get(f);
       String name = f.getFileName().toString();
       sessions.register(span[0], span[1], "file: " + f.toAbsolutePath().normalize(), f)
               .setName(name.substring(0, name.length() - ".jfr".length()));

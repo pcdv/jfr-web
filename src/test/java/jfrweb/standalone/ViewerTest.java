@@ -77,6 +77,22 @@ public class ViewerTest {
   }
 
   @Test
+  public void testNumberedOldestFirst() throws Exception {
+    // recorded after app.jfr, but before it by name
+    try (Recording r = new Recording(Sessions.defaultSettings())) {
+      r.start();
+      burn(30);
+      r.stop();
+      r.dump(dir.resolve("a-later.jfr"));
+    }
+    viewer = Viewer.start(List.of(dir), null, 0);
+
+    String list = get("api/sessions").body();
+    Assert.assertTrue(list, list.contains("{\"id\":1,\"state\":\"STOPPED\",\"name\":\"app\""));
+    Assert.assertTrue(list, list.contains("{\"id\":2,\"state\":\"STOPPED\",\"name\":\"a-later\""));
+  }
+
+  @Test
   public void testSpanFromChunkHeaders() throws Exception {
     Path f = dir.resolve("app.jfr");
     Instant[] span = Viewer.span(f);
