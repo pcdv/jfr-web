@@ -220,6 +220,31 @@ public class AnalysisTest {
   }
 
   @Test
+  public void testFlameGraphMerged() throws IOException {
+    String collapsed = flame(new FlameGraphs.Options().collapsed(true).merged(true));
+    Assert.assertFalse("no operation at the root", collapsed.contains("GET /"));
+    Assert.assertEquals("the same samples",
+                        weight(flame(new FlameGraphs.Options().collapsed(true)), "", "Handlers.burn"),
+                        weight(collapsed, "", "Handlers.burn"));
+  }
+
+  @Test
+  public void testFlameGraphReversed() throws IOException {
+    String collapsed = flame(new FlameGraphs.Options().collapsed(true).reversed(true));
+    Assert.assertTrue(collapsed, collapsed.lines().noneMatch(l -> l.startsWith("GET /")));
+    Assert.assertTrue("the operation last", collapsed.lines().anyMatch(l -> l.contains(";GET /busy/:id ")));
+  }
+
+  @Test
+  public void testFlameGraphJavaOnly() throws IOException {
+    String all = flame(new FlameGraphs.Options().collapsed(true));
+    String java = flame(new FlameGraphs.Options().collapsed(true).javaOnly(true));
+    Assert.assertEquals("burnt in Java", weight(all, "GET /busy/:id;", "Handlers.burn"),
+                        weight(java, "GET /busy/:id;", "Handlers.burn"));
+    Assert.assertTrue(weight(java, "", "") <= weight(all, "", ""));
+  }
+
+  @Test
   public void testHtml() throws IOException {
     String html = flame(new FlameGraphs.Options().title("<b>"));
     Assert.assertTrue(html.contains("<h1>&lt;b&gt;</h1>"));

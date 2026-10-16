@@ -143,6 +143,9 @@ export function getInstance(id, instance) {
  * @property {number} [from] seconds since the start of the recording
  * @property {number} [to] seconds since the start of the recording
  * @property {boolean} [all] adds the samples taken outside operations
+ * @property {boolean} [merged] merges the operations into one tree, instead of rooting them by name
+ * @property {boolean} [reversed] the methods running at the root, their callers above
+ * @property {boolean} [java] keeps the samples of Java code only, without native methods
  */
 
 /**
@@ -467,6 +470,9 @@ export function flameUrl(id, filter) {
   if (filter.from !== undefined) q.set('from', String(filter.from));
   if (filter.to !== undefined) q.set('to', String(filter.to));
   if (filter.all) q.set('all', 'true');
+  if (filter.merged) q.set('merged', 'true');
+  if (filter.reversed) q.set('reversed', 'true');
+  if (filter.java) q.set('java', 'true');
   const qs = q.toString();
   return staticUrl(`api/sessions/${id}/flame${qs ? '?' + qs : ''}`);
 }

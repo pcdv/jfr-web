@@ -147,7 +147,10 @@ call of that operation, from any client.
 went (sampling rates, truncated stacks, the usual JFR biases), then shows a timeline of the
 operations in flight. Hover to bring one forward, drag to select an interval, click a bar to see
 that operation alone. Below it: the operations by total time, the slowest calls, and flame graphs
-by operation, thread, interval or single call. A single call also lists the exceptions it created
+by operation, thread, interval or single call. **Merged** puts every operation kept in one tree,
+instead of one per name, for what costs across all of them; **hot methods** turns the stacks upside
+down, the methods that were running at the root and their callers above; **Java only** leaves out
+the samples taken in native methods, for something closer to CPU time. A single call also lists the exceptions it created
 and its slow file and socket accesses. You can name sessions, download the `.jfr` for JDK Mission
 Control, and if you give the profiler a `directory(...)`, it lists them again after a restart.
 
@@ -404,7 +407,8 @@ jfr-web history logs/operations --from 2026-10-13T10:00 --to 2026-10-13T11:00
 ```
 
 `flame` also takes `--thread <regex>` to keep some threads, `--all` to include samples taken
-outside operations, and `--collapsed` for collapsed stacks instead of HTML.
+outside operations, `--merged`, `--reversed` and `--java` for the merged, hot methods and Java only
+flame graphs, and `--collapsed` for collapsed stacks instead of HTML.
 
 ## Trying it out
 

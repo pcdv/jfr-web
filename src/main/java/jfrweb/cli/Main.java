@@ -37,9 +37,11 @@ public final class Main {
     "  jfr-web report <file.jfr> [--events]",
     "      how the file was recorded, and its operations sorted by total time",
     "  jfr-web flame <file.jfr> [-o <file.html>] [--operation <regex>] [--thread <regex>]",
-    "                           [--all] [--collapsed]",
+    "                           [--all] [--merged] [--reversed] [--java] [--collapsed]",
     "      wall-clock flame graph of the samples taken in operations, rooted by",
-    "      operation (e.g. \"GET /api/user/:id\"); --all adds the other samples",
+    "      operation (e.g. \"GET /api/user/:id\"); --all adds the other samples,",
+    "      --merged merges the operations into one tree, --reversed puts the methods",
+    "      running at the root, --java keeps the samples of Java code only",
     "  jfr-web history <dir> [--from <time>] [--to <time>] [--operation <name>]",
     "      the operations and slowest operations of a period of an operation history,",
     "      the last hour by default; times like 2026-10-13T10:00 (local time) or",
@@ -322,6 +324,12 @@ public final class Main {
       return 2;
     }
     o.outsideOperations(options.remove("--all"));
+    o.merged(options.remove("--merged"));
+    o.reversed(options.remove("--reversed"));
+    if (options.remove("--java")) {
+      o.javaOnly(true);
+      title = title.replace("Wall clock", "Java code");
+    }
     o.collapsed(options.remove("--collapsed"));
     if (!checkNoneLeft(options))
       return 2;

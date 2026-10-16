@@ -511,7 +511,9 @@ public class ProfilerRoutes {
    * recording; {@code thread}, the name of a thread; {@code name}, that of
    * operations, e.g. "GET /api/user/:id", or {@code instance}, the index of
    * one operation; {@code all=true} to add the samples taken outside
-   * operations.
+   * operations; {@code merged=true} to merge the operations into one tree,
+   * {@code reversed=true} for the methods running at the root, and
+   * {@code java=true} to keep the samples of Java code only.
    */
   @Route("/api/sessions/:id/flame")
   public Response flame(int id, Query q, Response resp) throws IOException {
@@ -520,8 +522,11 @@ public class ProfilerRoutes {
 
     FlameGraphs.Options o = new FlameGraphs.Options()
       .interval(offset(start, q.get("from")), offset(start, q.get("to")))
-      .outsideOperations(q.getBool("all", false));
-    StringBuilder title = new StringBuilder("Wall clock");
+      .outsideOperations(q.getBool("all", false))
+      .merged(q.getBool("merged", false))
+      .reversed(q.getBool("reversed", false))
+      .javaOnly(q.getBool("java", false));
+    StringBuilder title = new StringBuilder(q.getBool("java", false) ? "Java code" : "Wall clock");
     String thread = q.get("thread");
     if (thread != null && !thread.isEmpty()) {
       o.thread(Pattern.compile(Pattern.quote(thread)));

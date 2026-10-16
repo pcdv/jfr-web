@@ -41,6 +41,9 @@ export function flamePanel(report, onInstance = () => {}) {
   const from = h('input', {type: 'number', name: 'from', min: 0, max: seconds, step: 'any', placeholder: '0'});
   const to = h('input', {type: 'number', name: 'to', min: 0, max: seconds, step: 'any', placeholder: String(seconds)});
   const all = h('input', {type: 'checkbox', name: 'all'});
+  const merged = h('input', {type: 'checkbox', name: 'merged'});
+  const reversed = h('input', {type: 'checkbox', name: 'reversed'});
+  const java = h('input', {type: 'checkbox', name: 'java'});
   const frame = h('iframe', {class: 'flame', title: 'Flame graph'});
 
   /** @type {number | undefined} one operation shown, instead of the filters */
@@ -55,6 +58,9 @@ export function flamePanel(report, onInstance = () => {}) {
       from: from.value === '' ? undefined : Number(from.value),
       to: to.value === '' ? undefined : Number(to.value),
       all: all.checked,
+      merged: merged.checked,
+      reversed: reversed.checked,
+      java: java.checked,
     });
   }
 
@@ -71,8 +77,9 @@ export function flamePanel(report, onInstance = () => {}) {
       name.value = '';
     if (keep !== thread)
       thread.value = '';
-    if (keep !== all)
-      all.checked = false;
+    for (const c of [all, merged, reversed, java])
+      if (keep !== c)
+        c.checked = false;
   }
 
   /**
@@ -94,7 +101,13 @@ export function flamePanel(report, onInstance = () => {}) {
     api.isStatic() ? null : h('label', null, 'From ', from, ' s'),
     api.isStatic() ? null : h('label', null, 'to ', to, ' s'),
     h('label', {title: 'Mostly idle threads blocked in native code: selectors, acceptors'},
-      all, ' samples outside operations'));
+      all, ' samples outside operations'),
+    h('label', {title: 'One tree for all the operations kept, instead of one per name: what costs in all of them'},
+      merged, ' merged'),
+    h('label', {title: 'The methods that were running at the root, their callers above: the costliest, whatever calls them'},
+      reversed, ' hot methods'),
+    h('label', {title: 'Only the samples of threads running Java code, without native methods: closer to CPU time'},
+      java, ' Java only'));
 
   function clearInstance() {
     if (instance === undefined)

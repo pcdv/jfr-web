@@ -18,7 +18,7 @@ import one.convert.Frame;
 /**
  * Builds flame graphs from the samples of a recording, rooted by operation:
  * the first frame of each stack is the name of the operation the thread was
- * working for. Stacks are assembled here, filtered by operation and thread,
+ * working for, unless they are merged. Stacks are assembled here, filtered by operation and thread,
  * and rendered by async-profiler's converter.
  */
 public final class FlameGraphs {
@@ -38,6 +38,9 @@ public final class FlameGraphs {
     Instant from;
     Instant to;
     boolean outsideOperations;
+    boolean merged;
+    boolean reversed;
+    boolean javaOnly;
     boolean collapsed;
     String title = "Wall clock";
 
@@ -80,6 +83,34 @@ public final class FlameGraphs {
     }
 
     /**
+     * Merges the samples of every operation kept into one tree, instead of
+     * rooting them by the name of their operation: what costs in all of them.
+     */
+    public Options merged(boolean merged) {
+      this.merged = merged;
+      return this;
+    }
+
+    /**
+     * Turns the stacks upside down: the methods that were running at the
+     * root, their callers above, and the operation last. Shows the methods
+     * that cost the most, whatever the paths they are called from.
+     */
+    public Options reversed(boolean reversed) {
+      this.reversed = reversed;
+      return this;
+    }
+
+    /**
+     * Keeps the samples of threads running Java code only, without those
+     * taken in native methods: closer to CPU time.
+     */
+    public Options javaOnly(boolean javaOnly) {
+      this.javaOnly = javaOnly;
+      return this;
+    }
+
+    /**
      * Produces collapsed stacks, one line per stack, instead of HTML.
      */
     public Options collapsed(boolean collapsed) {
@@ -102,6 +133,7 @@ public final class FlameGraphs {
   public static void write(Analysis analysis, Options o, PrintStream out) throws IOException {
     Arguments args = new Arguments();
     args.title = escapeHtml(o.title);
+    args.reverse = o.reversed;
     if (o.collapsed)
       args.output = "collapsed";
 
@@ -109,6 +141,8 @@ public final class FlameGraphs {
     CallStack stack = new CallStack();
 
     analysis.visitSamples((sample, thread, operation, weight) -> {
+      if (o.javaOnly && !sample.getEventType().getName().equals(RecordingInfo.EXECUTION_SAMPLE))
+        return;
       if (o.thread != null && !o.thread.matcher(String.valueOf(thread.getJavaName())).matches())
         return;
       Instant time = sample.getStartTime();
@@ -118,7 +152,8 @@ public final class FlameGraphs {
       if (operation != null) {
         if (!o.operations.test(operation))
           return;
-        stack.push(operation.name(), Frame.TYPE_CPP);
+        if (!o.merged)
+          stack.push(operation.name(), Frame.TYPE_CPP);
       }
       else {
         if (!o.outsideOperations)

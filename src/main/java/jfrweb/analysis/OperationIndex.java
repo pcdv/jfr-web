@@ -1,5 +1,6 @@
 package jfrweb.analysis;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -12,7 +13,8 @@ import java.util.TreeMap;
 /**
  * Finds the operation a thread worked for at a given time. A thread works for
  * one operation at a time: the whole of a synchronous operation it runs, or a
- * segment of an asynchronous one.
+ * segment of an asynchronous one. When operations nest, e.g. a test inside
+ * its test class, it works for the innermost one.
  */
 public final class OperationIndex {
 
@@ -26,6 +28,12 @@ public final class OperationIndex {
 
   private final Map<Long, TreeMap<Long, Segment>> byThread = new HashMap<>();
   private final Map<RecordedOperation, List<Segment>> byOperation = new IdentityHashMap<>();
+
+  /**
+   * The segment of the same thread a segment started in, still running when
+   * it started: the one the thread is back to once it ends.
+   */
+  private final Map<Segment, Segment> enclosing = new IdentityHashMap<>();
 
   /**
    * When at least one thread worked for an operation: sorted intervals that
@@ -65,6 +73,17 @@ public final class OperationIndex {
       merged.add(end);
     }
     running = merged.sorted();
+
+    for (TreeMap<Long, Segment> segments : byThread.values()) {
+      ArrayDeque<Segment> open = new ArrayDeque<>();
+      for (Segment s : segments.values()) {
+        while (!open.isEmpty() && open.peek().endNanos() < s.startNanos())
+          open.pop();
+        if (!open.isEmpty())
+          enclosing.put(s, open.peek());
+        open.push(s);
+      }
+    }
     byOperation.values().forEach(l -> l.sort(Comparator.comparingLong(Segment::startNanos)));
   }
 
@@ -82,7 +101,11 @@ public final class OperationIndex {
     if (segments == null)
       return null;
     Map.Entry<Long, Segment> e = segments.floorEntry(timeNanos);
-    return e != null && timeNanos <= e.getValue().endNanos() ? e.getValue().operation() : null;
+    // the latest started, or once over, one it started in
+    Segment s = e == null ? null : e.getValue();
+    while (s != null && timeNanos > s.endNanos())
+      s = enclosing.get(s);
+    return s == null ? null : s.operation();
   }
 
   /**

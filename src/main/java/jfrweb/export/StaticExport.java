@@ -152,6 +152,8 @@ public final class StaticExport {
     // flame graphs: all, then one filter at a time
     get(api + "/flame", Map.of(), ".html");
     get(api + "/flame", Map.of("all", "true"), ".html");
+    for (String option : List.of("merged", "reversed", "java"))
+      get(api + "/flame", Map.of(option, "true"), ".html");
     for (String n : names)
       get(api + "/flame", Map.of("name", n), ".html");
     List<Map<String, Object>> threads = new ArrayList<>((List<Map<String, Object>>) report.get("threads"));

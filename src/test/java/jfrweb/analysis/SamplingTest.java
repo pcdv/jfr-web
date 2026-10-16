@@ -62,6 +62,25 @@ public class SamplingTest {
     Assert.assertNotNull(index.find(2, 25));
   }
 
+  @Test
+  public void testNestedOperations() {
+    OperationIndex index = new OperationIndex();
+    OperationIndex.Segment cls = segment(1, 10, 100);
+    OperationIndex.Segment test1 = segment(1, 20, 30);
+    OperationIndex.Segment test2 = segment(1, 40, 50);
+    index.add(cls);
+    index.add(test1);
+    index.add(test2);
+    index.seal();
+
+    Assert.assertSame(cls.operation(), index.find(1, 15));
+    Assert.assertSame("the innermost", test1.operation(), index.find(1, 25));
+    Assert.assertSame("back to the class between tests", cls.operation(), index.find(1, 35));
+    Assert.assertSame(test2.operation(), index.find(1, 45));
+    Assert.assertSame("after the last test", cls.operation(), index.find(1, 60));
+    Assert.assertNull(index.find(1, 101));
+  }
+
   private static OperationIndex.Segment segment(long thread, long start, long end) {
     RecordedOperation op = new RecordedOperation(thread, "t" + thread, start, end, "GET /x", "GET /x", 200, false,
                                                  null, 0, 0, false);
