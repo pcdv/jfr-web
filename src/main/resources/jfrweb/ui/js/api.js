@@ -360,6 +360,14 @@ export function listSessions() {
   return call('api/sessions');
 }
 
+/**
+ * @param {number} id
+ * @returns {Promise<Session>}
+ */
+export function getSession(id) {
+  return call(`api/sessions/${id}`);
+}
+
 /** @returns {Promise<Session>} */
 export function startSession() {
   return call('api/sessions', {method: 'POST'});

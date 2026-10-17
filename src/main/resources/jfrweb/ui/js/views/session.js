@@ -13,9 +13,13 @@ import {renameButton} from '../components/sessionName.js';
 import {sessionTimeline} from '../components/sessionTimeline.js';
 import {slowestPanel} from '../components/slowest.js';
 
+/** How often a session still recording is checked, in ms. */
+const POLL = 1000;
+
 /**
  * @param {HTMLElement} root
  * @param {string[]} params the id of the session
+ * @returns {() => void}
  */
 export function renderSession(root, params) {
   const id = Number(params[0]);
@@ -25,44 +29,132 @@ export function renderSession(root, params) {
               title,
               content);
 
+  /** @type {number | undefined} */
+  let timer;
+  let left = false;
+
   /** @param {api.Session} s */
   const showTitle = s => replace(title, `Session ${id}`, s.name ? ` · ${s.name}` : null, ' ',
     api.isStatic() ? null : h('span', {class: 'title-action'}, renameButton(s, showTitle)));
 
-  Promise.all([api.getReport(id), api.getTimeline(id)]).then(
-    ([report, timeline]) => {
-      showTitle(report.session);
-      /** @type {string | undefined} the operation clicked on the timeline, whose filters it set */
-      let clicked;
-      // the interval selected on the timeline, or zoomed in on, narrows
-      // everything below it; an operation clicked there narrows the slowest
-      // and the flame graph to it, until the next selection
-      const showInterval = (/** @type {api.Interval} */ i, /** @type {string | undefined} */ name) => {
-        operations.showInterval(i);
-        // back to all of them after a click, else as they were
-        const names = name ?? (clicked !== undefined ? null : undefined);
-        slowest.showInterval(i, names);
-        flame.showInterval(i.from, i.to, names);
-        clicked = name;
-      };
-      const timelinePanel = sessionTimeline(id, timeline, showInterval);
-      // the operation picked among the slowest is outlined on the timeline
-      // while its flame graph shows
-      const flame = flamePanel(report, op => timelinePanel.mark(op));
-      const slowest = slowestPanel(id, flame.showInstance);
-      const operations = operationsPanel(id, report.operations, n => {
-        slowest.showName(n);
-        flame.showName(n);
+  /** @type {ReturnType<typeof recordingNow> | undefined} */
+  let progress;
+  /** Whether the report was asked for: a check after a stop may cross the one polling. */
+  let reported = false;
+
+  // a session still recording has no report yet: how far it got, until it
+  // stops, here or elsewhere
+  async function waitForStop() {
+    clearTimeout(timer);
+    try {
+      const s = await api.getSession(id);
+      if (left || reported)
+        return;
+      if (s.state === 'STOPPED') {
+        reported = true;
+        replace(content, h('p', {class: 'empty'}, 'Reading the recording…'));
+        showReport();
+        return;
+      }
+      if (!progress) {
+        // no rename button while it records: the report's title has one
+        replace(title, `Session ${id}`, s.name ? ` · ${s.name}` : null);
+        progress = recordingNow(id, waitForStop);
+        replace(content, progress.element);
+      }
+      progress.show(s);
+      clearTimeout(timer);
+      timer = window.setTimeout(waitForStop, POLL);
+    }
+    catch (e) {
+      if (!left)
+        replace(content, errorBox(e));
+    }
+  }
+
+  // sessions of a static export are all stopped
+  if (api.isStatic())
+    showReport();
+  else
+    waitForStop();
+  return () => {
+    left = true;
+    clearTimeout(timer);
+  };
+
+  function showReport() {
+    Promise.all([api.getReport(id), api.getTimeline(id)]).then(
+      ([report, timeline]) => {
+        if (left)
+          return;
+        showTitle(report.session);
+        /** @type {string | undefined} the operation clicked on the timeline, whose filters it set */
+        let clicked;
+        // the interval selected on the timeline, or zoomed in on, narrows
+        // everything below it; an operation clicked there narrows the slowest
+        // and the flame graph to it, until the next selection
+        const showInterval = (/** @type {api.Interval} */ i, /** @type {string | undefined} */ name) => {
+          operations.showInterval(i);
+          // back to all of them after a click, else as they were
+          const names = name ?? (clicked !== undefined ? null : undefined);
+          slowest.showInterval(i, names);
+          flame.showInterval(i.from, i.to, names);
+          clicked = name;
+        };
+        const timelinePanel = sessionTimeline(id, timeline, showInterval);
+        // the operation picked among the slowest is outlined on the timeline
+        // while its flame graph shows
+        const flame = flamePanel(report, op => timelinePanel.mark(op));
+        const slowest = slowestPanel(id, flame.showInstance);
+        const operations = operationsPanel(id, report.operations, n => {
+          slowest.showName(n);
+          flame.showName(n);
+        });
+        replace(content,
+          summary(report),
+          recording(report),
+          section('timeline', 'Timeline', timelinePanel.element),
+          operations.element,
+          slowest.element,
+          section('flame', 'Flame graph', flame.element));
+      },
+      e => {
+        if (!left)
+          replace(content, errorBox(e));
       });
-      replace(content,
-        summary(report),
-        recording(report),
-        section('timeline', 'Timeline', timelinePanel.element),
-        operations.element,
-        slowest.element,
-        section('flame', 'Flame graph', flame.element));
+  }
+}
+
+/**
+ * A session still recording: since when, and a button to stop it. Built
+ * once, its text updated as it goes.
+ *
+ * @param {number} id
+ * @param {() => void} refresh checks the session again
+ */
+function recordingNow(id, refresh) {
+  const text = h('p', {class: 'summary'});
+  const stop = h('button', {
+    class: 'primary',
+    onclick: async () => {
+      stop.disabled = true;
+      try {
+        await api.stopSession(id);
+      }
+      catch (e) {
+        alert(e instanceof Error ? e.message : String(e));
+        stop.disabled = false;
+      }
+      refresh();
     },
-    e => replace(content, errorBox(e)));
+  }, 'Stop');
+  return {
+    element: h('div', null, text, h('div', {class: 'toolbar'}, stop)),
+    /** @param {api.Session} s */
+    show: s => replace(text,
+      // whole seconds: it ticks once a second
+      `Recording since ${fmt.time(s.start)}, ${Math.floor(s.duration / 1000)} s so far. The report shows once it stops.`),
+  };
 }
 
 /**
