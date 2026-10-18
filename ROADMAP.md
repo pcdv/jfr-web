@@ -195,6 +195,19 @@ A session's span starts with it: a recording made while another one runs (the st
 rolling recording of the snapshots) gets the events of the other from the start of the current
 chunk.
 
+## M10: flame graphs of our own
+
+A session's samples sent to the browser once, with their time, thread and operation, and drawn
+by a renderer of our own: filters change and combine with no request, in the static export too.
+Plan and format in [docs/flame-graphs.md](docs/flame-graphs.md).
+
+- [ ] Measured: size of a session's profile, time to build and to draw it
+- [ ] Profile format and endpoint
+- [ ] Renderer at parity with async-profiler's page (zoom, search, tooltips, colors), in the
+  interface's look
+- [ ] Static export, `jfr-web flame` and `--collapsed` on it; `jfr-converter` removed
+- [ ] Timeline and flame graph linked; hot methods; method view; frames hidden by pattern; diff
+
 ## Later
 
 - [ ] async-profiler as an additional source on Linux and macOS
