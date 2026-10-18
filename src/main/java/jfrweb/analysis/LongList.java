@@ -17,6 +17,10 @@ final class LongList {
     values[size++] = v;
   }
 
+  long get(int i) {
+    return values[i];
+  }
+
   int size() {
     return size;
   }

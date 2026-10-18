@@ -1,13 +1,19 @@
 package jfrweb.session;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.lang.ref.SoftReference;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.zip.GZIPOutputStream;
 
 import jfrweb.analysis.Analysis;
+import jfrweb.analysis.ProfileWriter;
 
 /**
  * One profiling recording, kept on disk as one .jfr file.
@@ -36,6 +42,9 @@ public final class Session {
 
   /** Loaded on demand, and dropped under memory pressure. */
   private SoftReference<Analysis> analysis = new SoftReference<>(null);
+
+  /** Its profile, gzipped: the same. */
+  private SoftReference<byte[]> profile = new SoftReference<>(null);
 
   Session(int id, Instant start, String trigger, Path file) {
     this.id = id;
@@ -130,5 +139,24 @@ public final class Session {
       analysis = new SoftReference<>(a);
     }
     return a;
+  }
+
+  /**
+   * The samples of the recording as a profile, gzipped (see ProfileWriter):
+   * built once, and kept as long as memory allows.
+   *
+   * @throws IllegalStateException while recording
+   */
+  public synchronized byte[] getProfile() throws IOException {
+    byte[] p = profile.get();
+    if (p == null) {
+      ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+      try (Writer w = new OutputStreamWriter(new GZIPOutputStream(bytes), StandardCharsets.UTF_8)) {
+        ProfileWriter.write(getAnalysis(), w);
+      }
+      p = bytes.toByteArray();
+      profile = new SoftReference<>(p);
+    }
+    return p;
   }
 }

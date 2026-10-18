@@ -203,7 +203,7 @@ Plan and format in [docs/flame-graphs.md](docs/flame-graphs.md).
 
 - [x] Measured: size of a session's profile, time to build and to sum it (drawing waits for the
   renderer)
-- [ ] Profile format and endpoint
+- [x] Profile format and endpoint
 - [ ] Renderer at parity with async-profiler's page (zoom, search, tooltips, colors), in the
   interface's look
 - [ ] Static export, `jfr-web flame` and `--collapsed` on it; `jfr-converter` removed

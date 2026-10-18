@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.io.StringWriter;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -11,16 +12,22 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import flak.App;
 import flak.AppFactory;
 import flak.Flak;
 import flak.annotations.Route;
+import jfrweb.json.Json;
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
 import org.junit.jupiter.api.AfterAll;
@@ -247,6 +254,139 @@ public class AnalysisTest {
     String html = flame(new FlameGraphs.Options().title("<b>"));
     Assertions.assertTrue(html.contains("<h1>&lt;b&gt;</h1>"));
     Assertions.assertTrue(html.contains("GET /busy/:id"));
+  }
+
+  /**
+   * The profile, read back, gives every stack of the flame graphs with its
+   * weight, the samples outside operations included.
+   * <p>
+   * Frames compare by name: async-profiler merges a method's frames whatever
+   * their type (a method interpreted, then compiled), and counts the types
+   * merged. The profile keeps the type of each.
+   */
+  @Test
+  public void testProfileHoldsTheStacksOfTheFlameGraphs() throws IOException {
+    Map<String, Long> expected = new TreeMap<>();
+    for (String line : flame(new FlameGraphs.Options().collapsed(true).outsideOperations(true)).split("\n")) {
+      int space = line.lastIndexOf(' ');
+      // its marks of type: _[j] compiled, _[i] inlined, _[0] interpreted
+      expected.merge(line.substring(0, space).replaceAll("_\\[[ij0]\\](?=;|$)", ""),
+                     Long.parseLong(line.substring(space + 1)), Long::sum);
+    }
+    Assertions.assertTrue(expected.keySet().stream().anyMatch(s -> s.startsWith("GET /busy/:id;")), "samples to compare");
+    Map<String, Object> profile = profile();
+    Map<String, Long> actual = collapse(profile);
+    // the stacks that differ only, readable among hundreds
+    Map<String, String> differences = new TreeMap<>();
+    for (String stack : new TreeSet<>(expected.keySet()) {{ addAll(actual.keySet()); }})
+      if (!Objects.equals(expected.get(stack), actual.get(stack)))
+        differences.put(stack, expected.get(stack) + " expected, " + actual.get(stack) + " in the profile");
+    Assertions.assertEquals(Map.of(), differences);
+
+    // the types: a request handled first runs interpreted, a second burnt
+    // sorting gets compiled
+    List<?> stacks = (List<?>) profile.get("stacks");
+    Set<Integer> types = new TreeSet<>();
+    for (int i = 1; i < stacks.size(); i += 2)
+      types.add((int) ((Long) stacks.get(i) & 7));
+    Assertions.assertTrue(types.containsAll(List.of(ProfileWriter.COMPILED, ProfileWriter.INTERPRETED)),
+                          types.toString());
+  }
+
+  @Test
+  public void testProfileFormat() throws IOException {
+    Map<String, Object> p = profile();
+    Assertions.assertEquals(1L, p.get("version"));
+
+    List<String> strings = strings(p);
+    Assertions.assertEquals(new TreeSet<>(strings).stream().toList(), strings, "sorted, each once");
+    Assertions.assertTrue(strings.contains("jfrweb.analysis.AnalysisTest$Handlers.burn"), strings.toString());
+    // front-coded: the prefix shared with the previous name goes in one character
+    int codedLength = ((List<?>) p.get("strings")).stream().mapToInt(s -> ((String) s).length()).sum();
+    int length = strings.stream().mapToInt(String::length).sum();
+    Assertions.assertTrue(codedLength < length / 2, codedLength + " of " + length);
+
+    List<?> stacks = (List<?>) p.get("stacks");
+    long previous = -1;
+    for (int i = 0; i < stacks.size(); i += 2) {
+      long depth = (Long) stacks.get(i);
+      Assertions.assertTrue(depth <= previous + 1, "depth first, each node after its parent");
+      previous = depth;
+    }
+
+    Map<?, ?> samples = (Map<?, ?>) p.get("samples");
+    Assertions.assertTrue(((List<?>) samples.get("time")).stream().allMatch(t -> (Long) t >= 0), "sorted by time");
+    for (String column : List.of("stack", "thread", "operation", "kind"))
+      Assertions.assertEquals(((List<?>) samples.get("time")).size(), ((List<?>) samples.get(column)).size(), column);
+
+    // an operation is known by its index in the analysis, as in the API
+    List<?> operations = (List<?>) p.get("operations");
+    Assertions.assertEquals(analysis.getOperations().size(), operations.size());
+    for (int i = 0; i < operations.size(); i++)
+      Assertions.assertEquals(analysis.getOperations().get(i).name(), strings.get((int) (long) (Long) operations.get(i)));
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> profile() throws IOException {
+    StringWriter out = new StringWriter();
+    ProfileWriter.write(analysis, out);
+    return (Map<String, Object>) Json.parse(out.toString());
+  }
+
+  /** The strings of a profile, front coding undone. */
+  private static List<String> strings(Map<String, Object> p) {
+    List<String> strings = new ArrayList<>();
+    String previous = "";
+    for (Object o : (List<?>) p.get("strings")) {
+      String s = (String) o;
+      previous = previous.substring(0, s.charAt(0) - 32) + s.substring(1);
+      strings.add(previous);
+    }
+    return strings;
+  }
+
+  /**
+   * The samples of a profile as FlameGraphs writes collapsed stacks: rooted by
+   * operation, or by thread outside any; frames by name only.
+   */
+  private static Map<String, Long> collapse(Map<String, Object> p) {
+    List<String> strings = strings(p);
+    List<?> stacks = (List<?>) p.get("stacks");
+    int n = stacks.size() / 2;
+    int[] parent = new int[n];
+    String[] frame = new String[n];
+    int[] last = new int[256];
+    for (int i = 0; i < n; i++) {
+      int depth = (int) (long) (Long) stacks.get(2 * i);
+      int f = (int) (long) (Long) stacks.get(2 * i + 1);
+      parent[i] = depth == 0 ? -1 : last[depth - 1];
+      last[depth] = i;
+      frame[i] = strings.get(f >>> 3);
+    }
+    List<?> weights = (List<?>) p.get("weights");
+    List<?> threads = (List<?>) p.get("threads");
+    List<?> operations = (List<?>) p.get("operations");
+    Map<?, ?> samples = (Map<?, ?>) p.get("samples");
+
+    Map<String, Long> collapsed = new TreeMap<>();
+    int count = ((List<?>) samples.get("time")).size();
+    for (int i = 0; i < count; i++) {
+      int op = (int) (long) (Long) ((List<?>) samples.get("operation")).get(i);
+      String root;
+      if (op >= 0) {
+        root = strings.get((int) (long) (Long) operations.get(op));
+      }
+      else {
+        List<?> t = (List<?>) threads.get((int) (long) (Long) ((List<?>) samples.get("thread")).get(i));
+        root = FlameGraphs.NO_OPERATION + ";[" + strings.get((int) (long) (Long) t.get(0)) + " tid=" + t.get(1) + "]";
+      }
+      StringBuilder path = new StringBuilder();
+      for (int node = (int) (long) (Long) ((List<?>) samples.get("stack")).get(i); node >= 0; node = parent[node])
+        path.insert(0, ";" + frame[node]);
+      long weight = (Long) weights.get((int) (long) (Long) ((List<?>) samples.get("kind")).get(i));
+      collapsed.merge(root + path, weight, Long::sum);
+    }
+    return collapsed;
   }
 
   private static String flame(FlameGraphs.Options o) throws IOException {

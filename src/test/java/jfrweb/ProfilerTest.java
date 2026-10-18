@@ -1,5 +1,6 @@
 package jfrweb;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -16,6 +17,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Random;
 import java.util.stream.Stream;
+import java.util.zip.GZIPInputStream;
 
 import flak.App;
 import flak.AppFactory;
@@ -166,6 +168,19 @@ public class ProfilerTest {
     Assertions.assertTrue(get("api/sessions/1/flame?from=0&to=0").body()
                                                       .startsWith("<!DOCTYPE html>"), "an interval with no sample");
     Assertions.assertEquals(400, get("api/sessions/1/flame?from=x").statusCode());
+
+    // the profile: kept gzipped, sent so when the request accepts it
+    HttpResponse<byte[]> gzipped = http.send(request("api/sessions/1/profile").header("Accept-Encoding", "gzip, br").build(),
+                                             HttpResponse.BodyHandlers.ofByteArray());
+    Assertions.assertEquals("gzip", gzipped.headers().firstValue("Content-Encoding").orElse(null));
+    HttpResponse<String> profile = get("api/sessions/1/profile");
+    Assertions.assertEquals("application/json", profile.headers().firstValue("Content-Type").orElse(null));
+    Assertions.assertTrue(profile.headers().firstValue("Content-Encoding").isEmpty());
+    Assertions.assertEquals(profile.body(), new String(new GZIPInputStream(new ByteArrayInputStream(gzipped.body()))
+                                                         .readAllBytes(), StandardCharsets.UTF_8));
+    Assertions.assertTrue(profile.body().startsWith("{\"version\":1,"), profile.body().substring(0, 40));
+    Assertions.assertTrue(profile.body().contains("ProfilerTest$Handlers.busy"), "front-coded, but whole here");
+    Assertions.assertEquals(404, get("api/sessions/9/profile").statusCode());
 
     HttpResponse<byte[]> jfr = http.send(request("api/sessions/1/recording.jfr").build(),
                                          HttpResponse.BodyHandlers.ofByteArray());

@@ -1,6 +1,7 @@
 package jfrweb.web;
 
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
 
 import flak.HttpException;
 import flak.Query;
@@ -552,6 +554,24 @@ public class ProfilerRoutes {
     FlameGraphs.write(a, o, out);
     out.flush();
     return resp;
+  }
+
+  /**
+   * The samples of a session as a profile, from which the page draws flame
+   * graphs by itself: see ProfileWriter. Kept gzipped, and sent so when the
+   * request accepts it.
+   */
+  @Route("/api/sessions/:id/profile")
+  public InputStream profile(int id, Request req, Response resp) throws IOException {
+    byte[] gzipped = stopped(id).getProfile();
+    resp.addHeader("Content-Type", "application/json");
+    resp.addHeader("Vary", "Accept-Encoding");
+    String accepted = req.getHeader("Accept-Encoding");
+    if (accepted != null && accepted.contains("gzip")) {
+      resp.addHeader("Content-Encoding", "gzip");
+      return new ByteArrayInputStream(gzipped);
+    }
+    return new GZIPInputStream(new ByteArrayInputStream(gzipped));
   }
 
   private Session find(int id) {

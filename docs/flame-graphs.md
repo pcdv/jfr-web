@@ -37,27 +37,42 @@ roadmap; the format should not prevent it), or a general purpose profile viewer.
 
 ## The profile format
 
-A JSON document per session, version 1 (sizes measured in phase 0, below).
+A JSON document per session, version 1, from `GET /api/sessions/:id/profile` (sizes measured in
+phase 0, below). It changes only with its version. Written by `ProfileWriter`; every index below
+counts from 0.
+
+```json
+{"version": 1,
+ "weights": [20, 5],
+ "strings": [" (truncated)", " GET /busy/:id", " java.lang.Thread.run", "%util.Arrays.sort", "..."],
+ "stacks": [0, 18, 1, 26, 2, 41, "..."],
+ "samples": {"time": [12, 0, 5, "..."], "stack": [3, 7, -1, "..."], "thread": [0, 0, 1, "..."],
+             "operation": [4, 4, -1, "..."], "kind": [0, 1, 0, "..."]},
+ "threads": [[12, 31], "..."],
+ "operations": [1, 1, "..."]}
+```
 
 | Field | Content |
 |---|---|
 | `version` | `1` |
-| `weights` | the milliseconds one Java sample and one native sample stand for, as `Analysis` computes them today |
-| `strings` | every name, sorted and front-coded as in async-profiler's `cpool`: the first character's code minus 32 is the length of the prefix shared with the previous string |
-| `stacks` | the tree of stacks with their common beginnings shared, depth first: a node is a pair `depth, frame`, its parent the last node one level up, so no parent index is stored; `frame` is `string << 3 \| type` |
-| `samples` | columns of equal length, sorted by time: `time` (ms since the start of the recording, as deltas), `stack` (index of the node of the top frame), `thread`, `operation` (index, or -1 outside any), `kind` (Java or native) |
-| `threads` | name and thread id, for the thread filter and the per-thread roots of the samples outside operations |
-| `operations` | the operations, in the order of `Analysis.getOperations()` so that an index is the instance id the API already uses, each the index of its name in `strings` |
+| `weights` | the milliseconds a sample stands for: `[Java, native]`, as `Analysis` computes them |
+| `strings` | every name (methods as `class.method`, operations, threads), each once, sorted and front-coded as in async-profiler's pages: the code of the first character minus 32 is the length of the prefix shared with the previous string (95 at most), the rest follows |
+| `stacks` | the tree of stacks, their common beginnings shared, written depth first as pairs `depth, frame`: a node's parent is the last node written one level up, and a root has depth 0. A frame is `string << 3 \| type` |
+| `samples` | columns of equal length, one entry per sample, sorted by time: `time` in ms since the start of the recording, each the difference with the previous one; `stack`, the node of the top frame, -1 when JFR kept no stack; `thread`, an index in `threads`; `operation`, an index in `operations`, -1 outside any; `kind`, 0 for Java, 1 for native |
+| `threads` | `[name, thread id]` for each thread sampled, the name an index in `strings` |
+| `operations` | the name of each operation, an index in `strings`; in the order of `Analysis.getOperations()`, so that an operation's index is the id the API already gives it |
 
-Frame types: compiled, inlined, interpreted, native method, and synthetic (`(truncated)`, which
-stays a frame at the bottom of a truncated stack). Today native methods show as compiled code;
-the format keeps them apart and the renderer chooses.
+Frame types: 0 compiled, 1 inlined, 2 interpreted, 3 native method, 4 synthetic (`(truncated)`,
+the bottom of a stack JFR cut). Today's pages show native methods as compiled code; the format
+keeps them apart and the renderer chooses.
+
+The type is part of a node: a method interpreted in one sample and compiled in the next makes two
+nodes. The renderer merges frames by name, as async-profiler does, and counts their types for the
+tooltip (async-profiler shows "int=" and "inln=").
 
 Operations and threads are columns, not frames: the renderer adds the operation roots (unless
 merged) and the thread roots of the samples outside operations, as `FlameGraphs.write` pushes them
 today. Samples sorted by time make an interval two binary searches.
-
-The format is documented in this file once phase 1 settles it, and changes only with its version.
 
 ## Server
 
@@ -67,8 +82,9 @@ The format is documented in this file once phase 1 settles it, and changes only 
   once stopped: the document is built on the first request and kept gzipped in memory, beside the
   `Analysis` and like it behind a soft reference. No file on disk: building it costs about what
   one flame graph costs today (phase 0).
-- Sent with `Content-Encoding: gzip` when the request accepts it (flak does not compress by
-  itself), plain otherwise. GitHub Pages gzips the static export by itself.
+- Sent with `Content-Encoding: gzip` as kept when the request accepts it, unzipped otherwise.
+  flak can compress a response itself (`setCompressionAllowed`), but on each request. GitHub
+  Pages gzips the static export by itself.
 
 ## Client
 
@@ -120,9 +136,10 @@ Each phase ends usable, like the milestones of the roadmap.
 **0. Measure.** Done on 2026-10-18, see "Measurements": the document is kept gzipped in memory,
 and sessions need no limit for now.
 
-**1. Format and endpoint.** `ProfileWriter`, `/api/sessions/:id/profile`, the format written down
-here. Tests on the recordings of the existing tests: per operation, the total weight equals the
-one of today's collapsed output; strings and stacks decoded back equal what was written.
+**1. Format and endpoint.** Done on 2026-10-18: `ProfileWriter`, `/api/sessions/:id/profile`, the
+format above. `AnalysisTest` decodes the profile back into collapsed stacks and finds every stack
+of today's collapsed output with its weight, frames compared by name; `ProfilerTest` checks the
+endpoint, gzipped and plain.
 
 **2. Renderer at parity.** `profile.js`, `render.js`, the flame panel on them. The old page stays
 reachable (`?flame=classic` or a setting) until this phase is checked in Firefox, Edge, and VS
