@@ -71,7 +71,7 @@ public class ViewerTest {
 
     String report = get("api/sessions/1/report").body();
     Assertions.assertTrue(report.contains("\"name\":\"work\",\"count\":5"), report);
-    Assertions.assertEquals(200, get("api/sessions/1/flame?name=work&from=0&to=1").statusCode());
+    Assertions.assertEquals(200, get("api/sessions/1/profile").statusCode());
     Assertions.assertEquals(409, post("api/sessions").statusCode(), "no JVM to record");
     Assertions.assertEquals(409, post("api/auto?patterns=work").statusCode(), "no operation to trigger one");
   }

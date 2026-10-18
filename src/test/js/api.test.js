@@ -27,8 +27,9 @@ test('without static.json, the profiler answers', () => {
 });
 
 test('requests carry their parameters encoded, and their method', async () => {
-  assert.deepEqual(await api.listInstances(1, 'GET /x', {from: 2, to: 4.5}, 20),
-                   {url: 'api/sessions/1/instances?limit=20&name=GET+%2Fx&from=2&to=4.5'});
+  assert.deepEqual(await api.getHistory(new Date(0), new Date(1000), 'GET /x'),
+                   {url: 'api/history?from=1970-01-01T00%3A00%3A00.000Z&to=1970-01-01T00%3A00%3A01.000Z&name=GET+%2Fx'});
+  assert.deepEqual(await api.getTimeline(1, {from: 0, to: 4.5}), {url: 'api/sessions/1/timeline?from=0&to=4.5'});
   await api.renameSession(1, 'a b');
   assert.deepEqual(fetched.at(-1), {url: 'api/sessions/1/name?name=a+b', method: 'POST'});
 });
@@ -37,8 +38,6 @@ test('an error carries the status and the text of the answer', async () => {
   await assert.rejects(api.getSession(9), {message: '404 No session 9'});
 });
 
-test('flame graph URLs keep only the filters set', () => {
-  assert.equal(api.flameUrl(1, {}), 'api/sessions/1/flame');
-  assert.equal(api.flameUrl(1, {name: 'GET /x', from: 0, merged: true, reversed: false}),
-               'api/sessions/1/flame?name=GET+%2Fx&from=0&merged=true');
+test('a download is the request itself', () => {
+  assert.equal(api.downloadUrl(1), 'api/sessions/1/recording.jfr');
 });

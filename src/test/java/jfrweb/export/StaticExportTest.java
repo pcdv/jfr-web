@@ -71,10 +71,14 @@ public class StaticExportTest {
     Map<String, Object> manifest = (Map<String, Object>) Json.parse(Files.readString(out.resolve("static.json")));
     Map<String, Object> files = (Map<String, Object>) manifest.get("files");
     for (String key : new String[]{"api/sessions", "api/sessions/1/report", "api/sessions/1/timeline",
-                                   "api/sessions/1/instances?limit=20&name=export-test job",
-                                   "api/sessions/1/flame", "api/sessions/1/flame?all=true",
-                                   "api/sessions/1/flame?name=export-test job"})
+                                   "api/sessions/1/profile"})
       Assertions.assertTrue(files.containsKey(key), key + " in " + files.keySet());
+    // the page computes flame graphs and lists from the profile: only the
+    // details of the slowest operations are asked for
+    Assertions.assertTrue(files.keySet().stream().anyMatch(k -> k.matches("api/sessions/1/instances/\\d+")), files.keySet().toString());
+    Assertions.assertTrue(files.keySet().stream().noneMatch(k -> k.contains("/flame") || k.contains("/instances?")),
+                          files.keySet().toString());
+    Assertions.assertTrue(Files.readString(out.resolve((String) files.get("api/sessions/1/profile"))).startsWith("{\"version\":2,"));
     Assertions.assertFalse(files.containsKey("api/sessions/1/recording.jfr"), "recordings left out");
     for (Object f : files.values())
       Assertions.assertTrue(Files.exists(out.resolve((String) f)), f + " written");

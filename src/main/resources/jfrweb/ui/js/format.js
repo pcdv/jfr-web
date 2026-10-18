@@ -42,6 +42,15 @@ export function interval(i) {
 }
 
 /**
+ * What an operation worked on, or its name.
+ *
+ * @param {{name: string, detail: string | null}} r
+ */
+export function label(r) {
+  return r.detail ?? r.name;
+}
+
+/**
  * @param {number} ratio between 0 and 1
  * @returns {string}
  */

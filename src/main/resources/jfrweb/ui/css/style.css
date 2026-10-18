@@ -279,6 +279,19 @@ table.grid {
   width: 100%;
 }
 
+/* a long table, e.g. many operations: it scrolls, its header stays */
+.table-scroll {
+  max-height: 24em;
+  overflow-y: auto;
+}
+
+.table-scroll .grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg);
+}
+
 .grid th, .grid td {
   padding: 4px 10px;
   border-bottom: 1px solid var(--border);
@@ -700,14 +713,6 @@ svg.timeline .outline {
 
 .flame-tooltip-hint:empty {
   display: none;
-}
-
-iframe.flame {
-  width: 100%;
-  height: 70vh;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #ffffff;
 }
 
 /* standalone: the application profiled, and its JVM */

@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 
 const files = {
   'api/sessions': 'files/sessions.json',
-  'api/sessions/1/instances?limit=20&name=GET /x': 'files/instances-1.json',
-  'api/sessions/1/flame?merged=true&name=GET /x': 'files/flame-1.html',
+  'api/sessions/1/profile': 'files/profile-1.json',
+  'api/history?from=1970-01-01T00:00:00.000Z&name=GET /x&to=1970-01-01T00:00:01.000Z': 'files/history-1.json',
   'api/sessions/1/recording.jfr': 'files/recording-1.jfr',
 };
 
@@ -38,13 +38,14 @@ test('a static export is recognized by its static.json', () => {
 
 test('a call reads the file of its request, parameters in any order and encoded', async () => {
   assert.deepEqual(await api.listSessions(), {file: 'files/sessions.json'});
-  // URLSearchParams writes the space as "+", and limit comes first here
-  assert.deepEqual(await api.listInstances(1, 'GET /x', {}, 20), {file: 'files/instances-1.json'});
+  assert.deepEqual(await api.getProfile(1), {file: 'files/profile-1.json'});
+  // URLSearchParams writes the space as "+" and the colons encoded, name after to here
+  assert.deepEqual(await api.getHistory(new Date(0), new Date(1000), 'GET /x'), {file: 'files/history-1.json'});
 });
 
 test('a request not exported fails, telling which', async () => {
-  await assert.rejects(api.listInstances(1, 'GET /y', {}, 20),
-                       /Not in this static export: api\/sessions\/1\/instances\?limit=20&name=GET \/y/);
+  await assert.rejects(api.getHistory(new Date(0), new Date(1000), 'GET /y'),
+                       /Not in this static export: api\/history\?from=1970-01-01T00:00:00.000Z&name=GET \/y&to=/);
 });
 
 test('what changes something is refused', async () => {
@@ -52,8 +53,7 @@ test('what changes something is refused', async () => {
   assert.ok(!fetched.some(u => u.includes('/name')));
 });
 
-test('pages the browser loads by itself point to their file, or to the missing page', () => {
-  assert.equal(api.flameUrl(1, {name: 'GET /x', merged: true}), 'files/flame-1.html');
-  assert.equal(api.flameUrl(1, {name: 'GET /x', from: 2}), 'missing.html');
+test('a download points to its file, or to the missing page', () => {
   assert.equal(api.downloadUrl(1), 'files/recording-1.jfr');
+  assert.equal(api.downloadUrl(2), 'missing.html');
 });

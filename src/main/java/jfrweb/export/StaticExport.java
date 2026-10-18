@@ -42,15 +42,16 @@ import jfrweb.session.Session;
 /**
  * Writes the web interface and a set of recordings as a static site, which
  * any web server can serve (e.g. GitHub Pages), with no Java behind it: the
- * responses of the REST API are computed beforehand, for everything that can
- * be reached by clicking. What takes a free input is left out: an interval
- * selected on a timeline, the From and To of a flame graph, a filter combined
- * with another.
+ * responses of the REST API are computed beforehand. Each session's profile
+ * is one of them: from it, the page computes its flame graphs, operations and
+ * slowest operations for any interval and filter. What is left out: the
+ * timeline zoomed in, in finer buckets, and the details (threads, exceptions,
+ * slow accesses) of operations other than the slowest of each name.
  * <p>
  * It runs a profiler on the recordings, crawls its API, and writes each
  * response to a file. {@code static.json} maps each request to its file, as
  * the interface asks it: the path, then its parameters sorted by name, not
- * encoded, e.g. {@code api/sessions/1/instances?limit=20&name=GET /x}.
+ * encoded, e.g. {@code api/history?from=...&name=GET /x&to=...}.
  * <p>
  * Before publishing one, mind what a recording holds: unless its settings
  * turned them off, the environment variables and system properties of the
@@ -62,9 +63,6 @@ public final class StaticExport {
 
   /** The slowest operations listed, as the interface asks for them. */
   private static final int LIMIT = 20;
-
-  /** The flame graphs of the busiest threads only. */
-  private static final int MAX_THREADS = 20;
 
   /** Times as JavaScript's Date.toISOString() writes them. */
   private static final DateTimeFormatter JS_TIME =
@@ -130,38 +128,24 @@ public final class StaticExport {
     get(api, Map.of(), ".json");
     Map<String, Object> report = (Map<String, Object>) Json.parse(get(api + "/report", Map.of(), ".json"));
     get(api + "/timeline", Map.of(), ".json");
+    // its samples and operations: the page computes the rest, flame graphs,
+    // operations and slowest of any interval
+    get(api + "/profile", Map.of(), ".json");
     if (withRecordings)
       download(api + "/recording.jfr");
 
-    List<String> names = new ArrayList<>();
-    for (Object o : (List<Object>) report.get("operations"))
-      names.add((String) ((Map<String, Object>) o).get("name"));
-
-    // the slowest operations, of all names and of each one, and their details
+    // the details of the slowest operations, of all names and of each one:
+    // the lists are asked for, not written, since the page computes them
     Set<Object> instances = new LinkedHashSet<>();
     List<Map<String, String>> lists = new ArrayList<>();
     lists.add(Map.of("limit", String.valueOf(LIMIT)));
-    for (String n : names)
-      lists.add(Map.of("limit", String.valueOf(LIMIT), "name", n));
+    for (Object o : (List<Object>) report.get("operations"))
+      lists.add(Map.of("limit", String.valueOf(LIMIT), "name", (String) ((Map<String, Object>) o).get("name")));
     for (Map<String, String> q : lists)
-      for (Object o : (List<Object>) Json.parse(get(api + "/instances", q, ".json")))
+      for (Object o : (List<Object>) Json.parse(send(api + "/instances", q, HttpResponse.BodyHandlers.ofString()).body()))
         instances.add(((Map<String, Object>) o).get("id"));
     for (Object i : instances)
       get(api + "/instances/" + number(i), Map.of(), ".json");
-
-    // flame graphs: all, then one filter at a time
-    get(api + "/flame", Map.of(), ".html");
-    get(api + "/flame", Map.of("all", "true"), ".html");
-    for (String option : List.of("merged", "reversed", "java"))
-      get(api + "/flame", Map.of(option, "true"), ".html");
-    for (String n : names)
-      get(api + "/flame", Map.of("name", n), ".html");
-    List<Map<String, Object>> threads = new ArrayList<>((List<Map<String, Object>>) report.get("threads"));
-    threads.sort(Comparator.comparingLong((Map<String, Object> t) -> ((Number) t.get("samples")).longValue()).reversed());
-    for (Map<String, Object> t : threads.subList(0, Math.min(MAX_THREADS, threads.size())))
-      get(api + "/flame", Map.of("thread", (String) t.get("name")), ".html");
-    for (Object i : instances)
-      get(api + "/flame", Map.of("instance", number(i)), ".html");
   }
 
   /**

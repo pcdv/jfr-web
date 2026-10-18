@@ -12,8 +12,8 @@ what was running when, the slowest calls with their exceptions and slow I/O, and
 one operation or a single call.
 
 **[Try the demo](https://pcdv.github.io/jfr-web/)**: a static copy of the TCP demo described
-below, rebuilt on every push. Being static, it can't do everything (no interval selection, no
-live view).
+below, rebuilt on every push. Being static, it can't do everything (no live view, no timeline zoom),
+but intervals and flame graph filters work as they do against a running profiler.
 
 To run the demo yourself:
 ```
@@ -389,8 +389,11 @@ jfr-web export app.jfr other.jfr -o site/ --history logs/operations
 ./gradlew tcpDemo -Pdemo.export=site/       # the TCP demo: one session, 3 minutes of history
 ```
 
-Every API response reachable by clicking is computed up front. What needs free input isn't:
-selecting an interval on a timeline, the From and To of a flame graph, combined filters.
+The API responses are computed up front, and each session's profile with them: its samples and
+operations, from which the page computes flame graphs, the operations table and the slowest calls of
+any interval and filter, as it does live. What it can't do: zoom the timeline into finer buckets,
+and show the threads, exceptions and slow accesses of calls other than the slowest of each
+operation.
 
 Before you publish one, remember what a recording can contain: the JVM's environment variables,
 system properties and command line, and the processes of the machine with theirs, unless the
@@ -410,9 +413,12 @@ jfr-web flame app.jfr -o busy.html --operation 'GET /api/.*'
 jfr-web history logs/operations --from 2026-10-13T10:00 --to 2026-10-13T11:00
 ```
 
-`flame` also takes `--thread <regex>` to keep some threads, `--all` to include samples taken
-outside operations, `--merged`, `--reversed` and `--java` for the merged, hot methods and Java only
-flame graphs, and `--collapsed` for collapsed stacks instead of HTML.
+`flame` writes one HTML file that works opened from the disk: the interface's flame graph, its
+filters still changeable. `--operation` and `--thread <regex>` keep the samples it holds; `--all`
+(samples taken outside operations), `--merged`, `--reversed` and `--java` (the merged, hot methods
+and Java only flame graphs) are the filters it opens with. `--collapsed` writes collapsed stacks
+instead, the input of other flame graph tools: one line per stack, frames by name, then the
+milliseconds.
 
 ## Trying it out
 

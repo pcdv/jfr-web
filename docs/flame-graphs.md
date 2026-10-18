@@ -37,12 +37,18 @@ roadmap; the format should not prevent it), or a general purpose profile viewer.
 
 ## The profile format
 
-A JSON document per session, version 1, from `GET /api/sessions/:id/profile` (sizes measured in
-phase 0, below). It changes only with its version. Written by `ProfileWriter`; every index below
-counts from 0.
+A JSON document per session, version 2, from `GET /api/sessions/:id/profile` (sizes measured in
+phase 0, below). Written by `ProfileWriter`; every index below counts from 0.
+
+Any change of the format raises its version, however small, released or not: a page loaded
+before the server changed (a tab left open across an upgrade, modules in the browser's cache)
+then refuses the document and asks to be reloaded, instead of reading it wrong. Version 1 had
+the operations' names only; phase 2b added their other fields in place, and a page of version 1
+read the new document without noticing: the flame graph of any operation came out empty. Version
+2 is that document.
 
 ```json
-{"version": 1,
+{"version": 2,
  "weights": [20, 5],
  "strings": [" (truncated)", " GET /busy/:id", " java.lang.Thread.run", "%util.Arrays.sort", "..."],
  "stacks": [0, 18, 1, 26, 2, 41, "..."],
@@ -102,20 +108,28 @@ Plain modules like the rest of the interface:
   the share matched, colors by frame type from the CSS tokens, sharp on high-density screens,
   redrawn on resize.
 - `components/flame.js` keeps its panel and filters; the iframe gives way to the canvas, and
-  `update()` rebuilds the tree locally. `onlyFilter`, which keeps the static export to one filter
+  `update()` rebuilds the tree locally. `onlyFilter`, which kept the static export to one filter
   at a time, goes away.
 
 ## Command line
 
-`jfr-web flame` writes one self-contained HTML file: the renderer, its styles and the profile,
-with the options given (`--thread`, `--operation`, `--from`...) as the filters it opens with, all
-still changeable in the page. Modules loaded from `file://` are refused by browsers, so they are
-inlined: through an import map pointing at `data:` URLs, which keeps the modules unchanged with no
-build step, or by keeping the renderer free of imports and concatenating it. To try in phase 3.
+`jfr-web flame` writes one self-contained HTML file (`FlamePage`): the profile, the styles, and
+the interface's flame graph panel (`components/flame.js`, which needs nothing but a profile).
+`--operation` and `--thread` keep the samples written; `--all`, `--merged`, `--reversed` and
+`--java` are the filters it opens with, all still changeable in the page.
 
-`--collapsed` is written by our own code: one line per stack, frames joined by `;`, then its
-weight. Before switching, its output is compared with `jfr-converter`'s on the same recordings,
-for scripts that read it.
+Browsers refuse modules loaded from `file://`, and an inlined module cannot resolve its relative
+imports (an import map to `data:` URLs fails there too: a `data:` module has no base to resolve
+`./x.js` against). So `ModuleBundle` joins them into one script, with no build step and no
+dependency: each module becomes a function returning its exports, called after the modules it
+imports from, its imports lookups of their exports. It understands the forms the interface uses
+(`import {a, b as c} from`, `import * as x from`, `export function`, `export const`) and refuses
+any other, rather than writing a page that breaks.
+
+`--collapsed` is written by our own code (`FlameGraphs`): one line per stack, frames joined by
+`;`, then its weight in ms. Frames are known by their name, as in the page: async-profiler's
+converter marked their types (`_[j]`, `_[i]`, `_[0]`), which split a method interpreted then
+compiled in two for the tools reading the lines; the standard format has no marks.
 
 ## Features
 
@@ -162,7 +176,7 @@ table and the slowest list too, and those still ask the server (`/operations`, `
 the static export cannot select an interval at all. The profile gets the operations themselves,
 in columns like the samples: start and end, thread (the one that ended an asynchronous operation),
 detail, status, failed and its error, asynchronous or not, bytes in and out; details and errors
-go into `strings`. Version 1 is extended in place, since nothing released reads it yet. The page
+go into `strings`: version 2 of the format (see the format). The page
 then computes, for an interval or a name:
 
 - the operations table (`OperationStats`): count, total, p50, p99, max, errors, bytes in and out,
@@ -190,6 +204,16 @@ own; `/api/sessions/:id/flame`, `FlameGraphs`' use of the converter, the jar tri
 `build.gradle` and the dependency go; README and requirements updated (the packaging requirement
 names `jfr-converter`).
 
+Done on 2026-10-18. The page uses the profile everywhere, a static export included: there, an
+interval dragged on the timeline narrows the operations, the slowest and the flame graph as it
+does live, and the flame graph's filters combine; only the timeline's zoom (finer buckets) and the
+details of operations other than the slowest of each name are missing. The export writes the
+profile, report and timeline of each session and the details of its slowest operations: for the
+demo recording and an application server session, 453 files, 1.9 MB (the export before was not
+measured, its build being gone). The flame graph route is removed (no links to keep), and the
+page's link to it. Checked in headless Edge: the page of `jfr-web flame` opened from the disk,
+and a static export served by a plain file server, an interval dragged with no request.
+
 **4. Features**, in the order above, each on its own.
 
 ## Tests
@@ -200,10 +224,6 @@ names `jfr-converter`).
   (`./gradlew jsTest`).
 - Browsers: checked by hand and with scripted headless runs, as for the dialogs; not in CI.
 - `tsc` over `jsconfig.json`, as for every module.
-
-## Open questions
-
-- `/api/sessions/:id/flame` removed in phase 3, or kept, serving our page, for links people keep?
 
 ## Measurements
 

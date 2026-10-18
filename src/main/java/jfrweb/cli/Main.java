@@ -2,7 +2,8 @@ package jfrweb.cli;
 
 import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -20,6 +21,7 @@ import jfrweb.analysis.Analysis;
 import jfrweb.analysis.EventMapping;
 import jfrweb.analysis.EventMappings;
 import jfrweb.analysis.FlameGraphs;
+import jfrweb.export.FlamePage;
 import jfrweb.export.StaticExport;
 import jfrweb.standalone.Standalone;
 import jfrweb.standalone.Viewer;
@@ -41,7 +43,9 @@ public final class Main {
     "      wall-clock flame graph of the samples taken in operations, rooted by",
     "      operation (e.g. \"GET /api/user/:id\"); --all adds the other samples,",
     "      --merged merges the operations into one tree, --reversed puts the methods",
-    "      running at the root, --java keeps the samples of Java code only",
+    "      running at the root, --java keeps the samples of Java code only. A page that",
+    "      works opened from the disk, its filters changeable; --operation and --thread",
+    "      keep the samples it holds. --collapsed: collapsed stacks instead, one line each",
     "  jfr-web history <dir> [--from <time>] [--to <time>] [--operation <name>]",
     "      the operations and slowest operations of a period of an operation history,",
     "      the last hour by default; times like 2026-10-13T10:00 (local time) or",
@@ -330,23 +334,35 @@ public final class Main {
       o.javaOnly(true);
       title = title.replace("Wall clock", "Java code");
     }
-    o.collapsed(options.remove("--collapsed"));
+    boolean collapsed = options.remove("--collapsed");
     if (!checkNoneLeft(options))
       return 2;
 
-    o.title(title + " (ms)");
     Analysis analysis = Analysis.load(file);
+    String source = file.getFileName().toString();
     if (output == null) {
-      FlameGraphs.write(analysis, o, stdout);
+      flame(analysis, o, collapsed, title, source, stdout);
     }
     else {
-      try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(output));
-           PrintStream ps = new PrintStream(os, false, StandardCharsets.UTF_8)) {
-        FlameGraphs.write(analysis, o, ps);
+      try (PrintStream ps = new PrintStream(new BufferedOutputStream(Files.newOutputStream(output)), false,
+                                            StandardCharsets.UTF_8)) {
+        flame(analysis, o, collapsed, title, source, ps);
       }
       System.err.println("Wrote " + output);
     }
     return 0;
+  }
+
+  /** Collapsed stacks, or a page of their flame graph. */
+  private static void flame(Analysis analysis, FlameGraphs.Options o, boolean collapsed, String title, String source,
+                            PrintStream out) throws IOException {
+    if (collapsed) {
+      FlameGraphs.write(analysis, o, out);
+      return;
+    }
+    Writer w = new OutputStreamWriter(out, StandardCharsets.UTF_8);
+    FlamePage.write(analysis, o, title, source, w);
+    w.flush();
   }
 
   /**

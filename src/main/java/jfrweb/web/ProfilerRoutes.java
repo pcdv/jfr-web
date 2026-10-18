@@ -1,10 +1,8 @@
 package jfrweb.web;
 
-import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Duration;
@@ -14,7 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
@@ -27,7 +24,6 @@ import flak.annotations.OutputFormat;
 import flak.annotations.Post;
 import flak.annotations.Route;
 import jfrweb.analysis.Analysis;
-import jfrweb.analysis.FlameGraphs;
 import jfrweb.analysis.OperationDetails;
 import jfrweb.analysis.OperationIndex;
 import jfrweb.analysis.OperationStats;
@@ -504,56 +500,6 @@ public class ProfilerRoutes {
     m.put("bytesIn", op.bytesIn());
     m.put("bytesOut", op.bytesOut());
     return m;
-  }
-
-  /**
-   * A flame graph, as a self-contained HTML page.
-   * <p>
-   * Query: {@code from} and {@code to}, in seconds since the start of the
-   * recording; {@code thread}, the name of a thread; {@code name}, that of
-   * operations, e.g. "GET /api/user/:id", or {@code instance}, the index of
-   * one operation; {@code all=true} to add the samples taken outside
-   * operations; {@code merged=true} to merge the operations into one tree,
-   * {@code reversed=true} for the methods running at the root, and
-   * {@code java=true} to keep the samples of Java code only.
-   */
-  @Route("/api/sessions/:id/flame")
-  public Response flame(int id, Query q, Response resp) throws IOException {
-    Analysis a = stopped(id).getAnalysis();
-    Instant start = a.getInfo().getStart();
-
-    FlameGraphs.Options o = new FlameGraphs.Options()
-      .interval(offset(start, q.get("from")), offset(start, q.get("to")))
-      .outsideOperations(q.getBool("all", false))
-      .merged(q.getBool("merged", false))
-      .reversed(q.getBool("reversed", false))
-      .javaOnly(q.getBool("java", false));
-    StringBuilder title = new StringBuilder(q.getBool("java", false) ? "Java code" : "Wall clock");
-    String thread = q.get("thread");
-    if (thread != null && !thread.isEmpty()) {
-      o.thread(Pattern.compile(Pattern.quote(thread)));
-      title.append(", thread ").append(thread);
-    }
-    String name = q.get("name");
-    String instance = q.get("instance");
-    if (instance != null && !instance.isEmpty()) {
-      RecordedOperation op = instance(a, instance);
-      o.operations(op::equals);
-      title.append(", operation ").append(instance).append(": ")
-           .append(op.detail() != null ? op.detail() : op.name());
-    }
-    else if (name != null && !name.isEmpty()) {
-      o.operations(op -> op.name().equals(name));
-      title.append(", ").append(name);
-    }
-    o.title(title.append(" (ms)").toString());
-
-    resp.addHeader("Content-Type", "text/html; charset=utf-8");
-    PrintStream out = new PrintStream(new BufferedOutputStream(resp.getOutputStream()),
-                                      false, StandardCharsets.UTF_8);
-    FlameGraphs.write(a, o, out);
-    out.flush();
-    return resp;
   }
 
   /**

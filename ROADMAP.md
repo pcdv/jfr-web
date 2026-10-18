@@ -208,7 +208,7 @@ Plan and format in [docs/flame-graphs.md](docs/flame-graphs.md).
   interface's look
 - [x] Operations table and slowest list of an interval computed by the page, from the operations
   added to the profile
-- [ ] Static export, `jfr-web flame` and `--collapsed` on it; `jfr-converter` removed
+- [x] Static export, `jfr-web flame` and `--collapsed` on it; `jfr-converter` removed
 - [ ] Timeline and flame graph linked; hot methods; method view; frames hidden by pattern; diff
 
 ## Later

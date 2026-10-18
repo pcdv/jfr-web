@@ -11,7 +11,7 @@ const SVG = 'http://www.w3.org/2000/svg';
 
 /** Drawing size, in the units of the viewBox: the chart scales to its container. */
 const W = 1000;
-const H = 200;
+const H = 140;
 const LEFT = 44;
 const RIGHT = 8;
 const TOP = 8;

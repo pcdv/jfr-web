@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiPredicate;
 import java.util.function.IntToLongFunction;
 
 import jdk.jfr.consumer.RecordedFrame;
@@ -30,7 +31,12 @@ import jfrweb.json.Json;
  */
 public final class ProfileWriter {
 
-  public static final int VERSION = 1;
+  /**
+   * Raised with any change of the format: a page loaded before the server
+   * changed refuses what it cannot read, instead of reading it wrong. 2 added
+   * the fields of the operations to their names.
+   */
+  public static final int VERSION = 2;
 
   /** Types of frames. */
   public static final int COMPILED = 0, INLINED = 1, INTERPRETED = 2, NATIVE = 3, SYNTHETIC = 4;
@@ -73,12 +79,22 @@ public final class ProfileWriter {
    * @param out written to, not closed
    */
   public static void write(Analysis analysis, Writer out) throws IOException {
+    write(analysis, out, (thread, operation) -> true);
+  }
+
+  /**
+   * @param keep the samples written, by thread and operation (null outside
+   *             any): e.g. those of some operations only
+   * @param out  written to, not closed
+   */
+  public static void write(Analysis analysis, Writer out, BiPredicate<RecordedThread, RecordedOperation> keep)
+    throws IOException {
     ProfileWriter w = new ProfileWriter();
-    w.read(analysis);
+    w.read(analysis, keep);
     w.writeJson(out);
   }
 
-  private void read(Analysis analysis) throws IOException {
+  private void read(Analysis analysis, BiPredicate<RecordedThread, RecordedOperation> keep) throws IOException {
     // an operation is known by its index, the id the API gives it
     ops = analysis.getOperations();
     Map<RecordedOperation, Integer> operations = new IdentityHashMap<>();
@@ -98,6 +114,8 @@ public final class ProfileWriter {
     int truncated = frame(FlameGraphs.TRUNCATED, SYNTHETIC);
 
     analysis.visitSamples((sample, thread, operation, weight) -> {
+      if (!keep.test(thread, operation))
+        return;
       int kind = sample.getEventType().getName().equals(RecordingInfo.EXECUTION_SAMPLE) ? JAVA : NATIVE_SAMPLE;
       weights[kind] = weight;
 

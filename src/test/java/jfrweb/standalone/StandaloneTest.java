@@ -98,7 +98,7 @@ public class StandaloneTest {
     String report = get(BASE + "api/sessions/1/report").body();
     Assertions.assertTrue(report.contains("\"name\":\"work\",\"count\":"), report);
     Assertions.assertTrue(report.contains("\"javaArguments\":\"" + APP + "\""), report);
-    Assertions.assertEquals(200, get(BASE + "api/sessions/1/flame?name=work").statusCode());
+    Assertions.assertEquals(200, get(BASE + "api/sessions/1/profile").statusCode());
 
     // armed: a session once a matching operation ends, as long as they come
     Assertions.assertEquals(400, post(BASE + "api/auto?patterns=work&browser=true").statusCode(), "no browser in events");

@@ -2,24 +2,29 @@ package jfrweb.analysis;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 import jdk.jfr.consumer.RecordedFrame;
-import jdk.jfr.consumer.RecordedMethod;
 import jdk.jfr.consumer.RecordedStackTrace;
-import one.convert.Arguments;
-import one.convert.CallStack;
-import one.convert.FlameGraph;
-import one.convert.Frame;
+import jdk.jfr.consumer.RecordedThread;
 
 /**
- * Builds flame graphs from the samples of a recording, rooted by operation:
- * the first frame of each stack is the name of the operation the thread was
- * working for, unless they are merged. Stacks are assembled here, filtered by operation and thread,
- * and rendered by async-profiler's converter.
+ * The samples of a recording as collapsed stacks, the input of flame graph
+ * tools: one line per stack, its frames from the root joined by ';', then
+ * its weight in milliseconds. Rooted by operation, the first frame being the
+ * name of the operation the thread was working for, unless merged.
+ * <p>
+ * Frames are methods, known by their name only, as in the flame graphs of
+ * the interface: a method interpreted, then compiled, is one frame. The
+ * interface draws its flame graphs from a profile ({@link ProfileWriter}),
+ * with the same filters and the same results.
  */
 public final class FlameGraphs {
 
@@ -35,14 +40,10 @@ public final class FlameGraphs {
   public static final class Options {
     Predicate<RecordedOperation> operations = op -> true;
     Pattern thread;
-    Instant from;
-    Instant to;
     boolean outsideOperations;
     boolean merged;
     boolean reversed;
     boolean javaOnly;
-    boolean collapsed;
-    String title = "Wall clock";
 
     /**
      * Keeps the samples of the operations that match, e.g. those of a name.
@@ -57,18 +58,6 @@ public final class FlameGraphs {
      */
     public Options thread(Pattern name) {
       this.thread = name;
-      return this;
-    }
-
-    /**
-     * Keeps the samples taken in an interval.
-     *
-     * @param from inclusive, or null from the start
-     * @param to   exclusive, or null to the end
-     */
-    public Options interval(Instant from, Instant to) {
-      this.from = from;
-      this.to = to;
       return this;
     }
 
@@ -111,95 +100,74 @@ public final class FlameGraphs {
     }
 
     /**
-     * Produces collapsed stacks, one line per stack, instead of HTML.
+     * Whether a sample passes the operation and thread filters, those a page
+     * cannot change: its operation, null outside any, matches, and its thread.
      */
-    public Options collapsed(boolean collapsed) {
-      this.collapsed = collapsed;
-      return this;
+    public boolean keeps(RecordedThread thread, RecordedOperation operation) {
+      return (operation == null || operations.test(operation))
+             && (this.thread == null || this.thread.matcher(String.valueOf(thread.getJavaName())).matches());
     }
 
-    public Options title(String title) {
-      this.title = title;
-      return this;
+    /**
+     * @return the other filters, as a page opens with them: see the
+     *         interface's flame/profile.js
+     */
+    public Map<String, Object> pageFilter() {
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("all", outsideOperations);
+      m.put("merged", merged);
+      m.put("reversed", reversed);
+      m.put("java", javaOnly);
+      return m;
     }
   }
 
   private FlameGraphs() {}
 
   /**
-   * Writes a flame graph, whose widths are in milliseconds: each sample
-   * weighs the interval at which its event was sampled.
+   * Writes the collapsed stacks, sorted, each weighing the interval at which
+   * its samples' events were taken.
    */
   public static void write(Analysis analysis, Options o, PrintStream out) throws IOException {
-    Arguments args = new Arguments();
-    args.title = escapeHtml(o.title);
-    args.reverse = o.reversed;
-    if (o.collapsed)
-      args.output = "collapsed";
-
-    FlameGraph fg = new FlameGraph(args);
-    CallStack stack = new CallStack();
+    Map<String, Long> stacks = new TreeMap<>();
+    List<String> frames = new ArrayList<>();
 
     analysis.visitSamples((sample, thread, operation, weight) -> {
       if (o.javaOnly && !sample.getEventType().getName().equals(RecordingInfo.EXECUTION_SAMPLE))
         return;
-      if (o.thread != null && !o.thread.matcher(String.valueOf(thread.getJavaName())).matches())
-        return;
-      Instant time = sample.getStartTime();
-      if ((o.from != null && time.isBefore(o.from)) || (o.to != null && !time.isBefore(o.to)))
+      if (!o.keeps(thread, operation))
         return;
 
+      frames.clear();
       if (operation != null) {
-        if (!o.operations.test(operation))
-          return;
         if (!o.merged)
-          stack.push(operation.name(), Frame.TYPE_CPP);
+          frames.add(operation.name());
       }
       else {
         if (!o.outsideOperations)
           return;
-        stack.push(NO_OPERATION, Frame.TYPE_CPP);
-        stack.push("[" + thread.getJavaName() + " tid=" + thread.getJavaThreadId() + "]",
-                   Frame.TYPE_CPP);
+        frames.add(NO_OPERATION);
+        frames.add("[" + thread.getJavaName() + " tid=" + thread.getJavaThreadId() + "]");
       }
 
       RecordedStackTrace st = sample.getStackTrace();
       if (st != null) {
         if (st.isTruncated())
-          stack.push(TRUNCATED, Frame.TYPE_CPP);
+          frames.add(TRUNCATED);
         // JFR lists the frames from the top of the stack
-        List<RecordedFrame> frames = st.getFrames();
-        for (int i = frames.size() - 1; i >= 0; i--) {
-          RecordedFrame f = frames.get(i);
-          stack.push(name(f.getMethod()), type(f));
-        }
+        List<RecordedFrame> list = st.getFrames();
+        for (int i = list.size() - 1; i >= 0; i--)
+          frames.add(list.get(i).getMethod().getType().getName() + "." + list.get(i).getMethod().getName());
       }
-
-      fg.addSample(stack, weight);
-      stack.clear();
+      if (frames.isEmpty())
+        return;
+      if (o.reversed)
+        Collections.reverse(frames);
+      stacks.merge(String.join(";", frames), weight, Long::sum);
     });
 
-    fg.dump(out);
+    // \n whatever the system: tools split on it
+    stacks.forEach((stack, weight) -> out.print(stack + " " + weight + "\n"));
     out.flush();
-  }
-
-  private static String name(RecordedMethod m) {
-    return m.getType().getName() + "." + m.getName();
-  }
-
-  private static byte type(RecordedFrame f) {
-    switch (f.getType()) {
-      case "Interpreted":
-        return Frame.TYPE_INTERPRETED;
-      case "Inlined":
-        return Frame.TYPE_INLINED;
-      default:
-        // compiled, or a native method of a Java class: shown as Java code
-        return Frame.TYPE_JIT_COMPILED;
-    }
-  }
-
-  private static String escapeHtml(String s) {
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
   }
 }

@@ -51,13 +51,18 @@ export const NO_OPERATION = '(no operation)';
  * @property {Float64Array} bytesOut
  */
 
+/** The version of the format this page reads: ProfileWriter.VERSION. */
+export const VERSION = 2;
+
 /**
- * @param {any} doc the JSON document, version 1
+ * @param {any} doc the JSON document
  * @returns {Profile}
+ * @throws {Error} for another version: the page was loaded before the server changed
  */
 export function decode(doc) {
-  if (doc.version !== 1)
-    throw new Error(`Profile of version ${doc.version}: this page reads version 1`);
+  if (doc.version !== VERSION)
+    throw new Error(`The server sends its samples in a newer form (version ${doc.version}) than this page reads `
+                    + `(${VERSION}): reload the page.`);
 
   // front-coded: the first character tells the length of the prefix shared
   // with the previous string
@@ -123,6 +128,21 @@ function operations(o) {
 }
 
 /**
+ * What a flame graph keeps of the samples.
+ *
+ * @typedef {object} Filter
+ * @property {number} [instance] keeps the samples of one operation, ignoring the other filters
+ * @property {string} [name] keeps the samples of the operations of a name
+ * @property {string} [thread] keeps the samples of one thread
+ * @property {number} [from] seconds since the start of the recording
+ * @property {number} [to] seconds since the start of the recording
+ * @property {boolean} [all] adds the samples taken outside operations
+ * @property {boolean} [merged] merges the operations into one tree, instead of rooting them by name
+ * @property {boolean} [reversed] the methods running at the root, their callers above
+ * @property {boolean} [java] keeps the samples of Java code only, without native methods
+ */
+
+/**
  * A frame of a flame graph: the frames of one name under the same path,
  * merged whatever their type.
  *
@@ -140,7 +160,7 @@ function operations(o) {
  * and their thread when added.
  *
  * @param {Profile} p
- * @param {import('../api.js').FlameFilter} filter
+ * @param {Filter} filter
  * @returns {{root: Frame, samples: number}} the samples kept
  */
 export function tree(p, filter) {

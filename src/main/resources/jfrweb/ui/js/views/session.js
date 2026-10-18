@@ -83,10 +83,10 @@ export function renderSession(root, params, signal) {
 
   function showReport() {
     // the samples and operations, for the flame graph and the tables of an
-    // interval; a static export has the server's answers instead
-    const profile = api.isStatic() ? null : api.getProfile(id).then(decode);
+    // interval: computed here, in a static export too
+    const profile = api.getProfile(id).then(decode);
     // each panel tells its own failure
-    profile?.catch(() => {});
+    profile.catch(() => {});
     Promise.all([api.getReport(id), api.getTimeline(id)]).then(
       ([report, timeline]) => {
         if (signal.aborted)
@@ -108,9 +108,9 @@ export function renderSession(root, params, signal) {
         const timelinePanel = sessionTimeline(id, timeline, showInterval);
         // the operation picked among the slowest is outlined on the timeline
         // while its flame graph shows
-        const flame = flamePanel(report, profile, signal, op => timelinePanel.mark(op));
+        const flame = flamePanel(profile, signal, {onInstance: op => timelinePanel.mark(op)});
         const slowest = slowestPanel(id, profile, flame.showInstance);
-        const operations = operationsPanel(id, report.operations, profile, n => {
+        const operations = operationsPanel(report.operations, profile, n => {
           slowest.showName(n);
           flame.showName(n);
         });

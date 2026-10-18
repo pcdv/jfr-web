@@ -29,9 +29,8 @@ const FEW_SAMPLES = 10;
 
 /**
  * @param {number} sessionId
- * @param {Promise<import('../profile/profile.js').Profile> | null} profile the session's,
- *        which gives the slowest of a name or an interval with no request; null in a
- *        static export
+ * @param {Promise<import('../profile/profile.js').Profile>} profile the session's, which
+ *        gives the slowest of a name or an interval with no request
  * @param {(op: api.InstanceRow) => void} onPick called when an operation is picked
  * @returns {SlowestPanel}
  */
@@ -51,9 +50,7 @@ export function slowestPanel(sessionId, profile, onPick) {
       label ? h('span', {class: 'interval'}, ` · ${label}`) : null);
     replace(detail);
     try {
-      const rows = profile
-        ? instanceRows(await profile, name, interval, LIMIT)
-        : await api.listInstances(sessionId, name, interval, LIMIT);
+      const rows = instanceRows(await profile, name, interval, LIMIT);
       replace(list, table(rows, pick, label ? 'No operation in flight in this interval.' : 'No operation recorded.'));
     }
     catch (e) {
@@ -72,7 +69,10 @@ export function slowestPanel(sessionId, profile, onPick) {
       replace(detail, details(await api.getInstance(sessionId, row.id)));
     }
     catch (e) {
-      replace(detail, errorBox(e));
+      replace(detail, api.isStatic()
+        ? h('p', {class: 'empty'}, 'Its threads, exceptions and slow accesses are not in this export: it has those '
+                                   + 'of the slowest operations of the whole session, of each name.')
+        : errorBox(e));
     }
   }
 
@@ -92,14 +92,7 @@ export function slowestPanel(sessionId, profile, onPick) {
   };
 }
 
-/**
- * What an operation worked on, or its name.
- *
- * @param {{name: string, detail: string | null}} r
- */
-export function label(r) {
-  return r.detail ?? r.name;
-}
+const label = fmt.label;
 
 /**
  * @param {api.InstanceRow[]} rows

@@ -58,8 +58,6 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 dependencies {
-  implementation 'tools.profiler:jfr-converter:4.0'
-
   // in the API: an AppFactory to mount on, a BeforeHook as guard
   api "com.github.pcdv.flak:flak-api:$flakVersion"
   implementation "com.github.pcdv.flak:flak-util:$flakVersion"
@@ -97,17 +95,8 @@ tasks.register('cliJar', Jar) {
   }
   from sourceSets.main.output
   dependsOn configurations.runtimeClasspath
-  def isConverter = { it.name.startsWith('jfr-converter') }
   from {
-    configurations.runtimeClasspath.findAll { !isConverter(it) }.collect { zipTree(it) }
-  }
-  // of the converter, only what FlameGraphs reaches: the flame graph writer
-  // and its page, not the readers, the other formats and their pages
-  from({ configurations.runtimeClasspath.findAll(isConverter).collect { zipTree(it) } }) {
-    include 'one/convert/Arguments.class', 'one/convert/CallStack.class',
-        'one/convert/FlameGraph.class', 'one/convert/Frame.class',
-        'one/convert/Index.class', 'one/convert/ResourceProcessor.class',
-        'flame.html'
+    configurations.runtimeClasspath.collect { zipTree(it) }
   }
   // their manifests and signatures; no two dependencies declare the same
   // service

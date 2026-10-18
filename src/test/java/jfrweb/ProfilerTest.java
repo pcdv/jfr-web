@@ -156,18 +156,11 @@ public class ProfilerTest {
     Assertions.assertTrue(details.contains("\"jdk.FileRead\":\"1 ms\""), details);
     Assertions.assertEquals(404, get("api/sessions/1/instances/9999").statusCode());
 
-    String instanceFlame = get("api/sessions/1/flame?instance=" + ioId).body();
-    Assertions.assertTrue(instanceFlame.contains("operation " + ioId + ": GET /io"), instanceFlame);
-
     String timeline = get("api/sessions/1/timeline").body();
     Assertions.assertTrue(timeline.contains("\"series\":[{\"name\":\"GET /busy\",\"values\":["), timeline);
-
-    String flame = get("api/sessions/1/flame?name=GET+/busy").body();
-    Assertions.assertTrue(flame.startsWith("<!DOCTYPE html>"));
-    Assertions.assertTrue(flame.contains("GET /busy"));
-    Assertions.assertTrue(get("api/sessions/1/flame?from=0&to=0").body()
-                                                      .startsWith("<!DOCTYPE html>"), "an interval with no sample");
-    Assertions.assertEquals(400, get("api/sessions/1/flame?from=x").statusCode());
+    Assertions.assertEquals(400, get("api/sessions/1/timeline?from=x").statusCode());
+    // the page draws its flame graphs from the profile
+    Assertions.assertEquals(404, get("api/sessions/1/flame").statusCode());
 
     // the profile: kept gzipped, sent so when the request accepts it
     HttpResponse<byte[]> gzipped = http.send(request("api/sessions/1/profile").header("Accept-Encoding", "gzip, br").build(),
@@ -178,7 +171,7 @@ public class ProfilerTest {
     Assertions.assertTrue(profile.headers().firstValue("Content-Encoding").isEmpty());
     Assertions.assertEquals(profile.body(), new String(new GZIPInputStream(new ByteArrayInputStream(gzipped.body()))
                                                          .readAllBytes(), StandardCharsets.UTF_8));
-    Assertions.assertTrue(profile.body().startsWith("{\"version\":1,"), profile.body().substring(0, 40));
+    Assertions.assertTrue(profile.body().startsWith("{\"version\":2,"), profile.body().substring(0, 40));
     Assertions.assertTrue(profile.body().contains("ProfilerTest$Handlers.busy"), "front-coded, but whole here");
     Assertions.assertEquals(404, get("api/sessions/9/profile").statusCode());
 
@@ -204,7 +197,8 @@ public class ProfilerTest {
                                       "components/timeline", "components/slowest", "components/auto",
                                       "components/section", "views/history",
                                       "components/sessionTimeline", "lib/dom", "lib/settings",
-                                      "lib/dialog", "lib/router", "profile/profile", "profile/operations", "flame/render"}) {
+                                      "lib/dialog", "lib/router", "profile/profile", "profile/operations", "flame/render",
+                                      "flamePage"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assertions.assertEquals(200, js.statusCode(), module);
       Assertions.assertEquals("application/javascript", js.headers().firstValue("Content-Type").orElse(null), module);

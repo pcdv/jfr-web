@@ -25,7 +25,7 @@ const f = (string, type) => string << 3 | type;
 // Main.work > x.Sort.sort, 3 Main.run > Main.work (interpreted), 4 Main.run >
 // x.Sort.sort
 const doc = {
-  version: 1,
+  version: 2,
   weights: [20, 5],
   strings: frontCode(strings),
   stacks: [0, f(3, INTERPRETED),
@@ -60,7 +60,7 @@ test('strings, stacks and samples decoded', () => {
   assert.deepEqual([...p.parent], [-1, 0, 1, 0, 0]);
   assert.deepEqual([...p.time], [0, 1000, 1500, 2000, 3000, 3000]);
   assert.deepEqual(p.threads, [{name: 'main', id: 1}, {name: 'pool-1', id: 22}]);
-  assert.throws(() => decode({...doc, version: 2}), /version 2/);
+  assert.throws(() => decode({...doc, version: 3}), /version 3.*reload the page/);
 });
 
 test('rooted by operation; samples outside left out; a sample with no stack counts for its operation', () => {

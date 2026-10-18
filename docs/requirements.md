@@ -56,10 +56,10 @@ The contract any HTTP stack can emit to get route context. Fields beyond JFR's o
 ## Packaging
 
 - Independent project, depending on flak to expose its web interface.
-- Rendering of flame graphs and heatmaps delegated to async-profiler's `jfr-converter`
-  (pure Java, Apache 2.0, on Maven Central). Recordings are read with the JDK's
-  `jdk.jfr.consumer`: joining samples to requests and filtering threads happen there, on
-  collapsed stacks, and `jfr-converter` only renders them.
+- Recordings are read with the JDK's `jdk.jfr.consumer`: joining samples to operations happens
+  there. Flame graphs are drawn by the interface, from a profile of each session (its samples and
+  operations, see [flame-graphs.md](flame-graphs.md)); async-profiler's `jfr-converter` drew them
+  until M10.
 - As few other dependencies as possible: the profiler is embedded in host applications, and
   each dependency is a version it may impose on them (see the open question on JSON).
 - Java 17, like flak.

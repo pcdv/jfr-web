@@ -103,50 +103,12 @@ function addInterval(q, interval) {
 
 /**
  * @param {number} id
- * @param {Interval} interval keeps the operations in flight during it
- * @returns {Promise<OperationRow[]>} sorted by total time
- */
-export function listOperations(id, interval) {
-  const q = new URLSearchParams();
-  addInterval(q, interval);
-  return call(`api/sessions/${id}/operations?${q}`);
-}
-
-/**
- * @param {number} id
- * @param {string | undefined} name all operations if undefined
- * @param {Interval} interval keeps the operations in flight during it
- * @param {number} limit
- * @returns {Promise<InstanceRow[]>} the slowest first
- */
-export function listInstances(id, name, interval, limit) {
-  const q = new URLSearchParams({limit: String(limit)});
-  if (name) q.set('name', name);
-  addInterval(q, interval);
-  return call(`api/sessions/${id}/instances?${q}`);
-}
-
-/**
- * @param {number} id
  * @param {number} instance
  * @returns {Promise<InstanceRow & InstanceDetail>}
  */
 export function getInstance(id, instance) {
   return call(`api/sessions/${id}/instances/${instance}`);
 }
-
-/**
- * @typedef {object} FlameFilter
- * @property {number} [instance] keeps the samples of one operation, ignoring the other filters
- * @property {string} [name] keeps the samples of the operations of a name
- * @property {string} [thread] keeps the samples of one thread
- * @property {number} [from] seconds since the start of the recording
- * @property {number} [to] seconds since the start of the recording
- * @property {boolean} [all] adds the samples taken outside operations
- * @property {boolean} [merged] merges the operations into one tree, instead of rooting them by name
- * @property {boolean} [reversed] the methods running at the root, their callers above
- * @property {boolean} [java] keeps the samples of Java code only, without native methods
- */
 
 /**
  * @param {string} path
@@ -471,26 +433,6 @@ export function getTimeline(id, range = {}) {
  */
 export function downloadUrl(id) {
   return staticUrl(`api/sessions/${id}/recording.jfr`);
-}
-
-/**
- * @param {number} id
- * @param {FlameFilter} filter
- * @returns {string} the URL of the flame graph, a page of its own
- */
-export function flameUrl(id, filter) {
-  const q = new URLSearchParams();
-  if (filter.instance !== undefined) q.set('instance', String(filter.instance));
-  if (filter.name) q.set('name', filter.name);
-  if (filter.thread) q.set('thread', filter.thread);
-  if (filter.from !== undefined) q.set('from', String(filter.from));
-  if (filter.to !== undefined) q.set('to', String(filter.to));
-  if (filter.all) q.set('all', 'true');
-  if (filter.merged) q.set('merged', 'true');
-  if (filter.reversed) q.set('reversed', 'true');
-  if (filter.java) q.set('java', 'true');
-  const qs = q.toString();
-  return staticUrl(`api/sessions/${id}/flame${qs ? '?' + qs : ''}`);
 }
 
 /**

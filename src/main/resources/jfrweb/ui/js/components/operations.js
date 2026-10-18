@@ -20,16 +20,16 @@ import {operationRows} from '../profile/operations.js';
  * The operations of a session, as a foldable section, over the whole session
  * or an interval.
  *
- * @param {number} sessionId
  * @param {api.OperationRow[]} rows those of the whole session
- * @param {Promise<import('../profile/profile.js').Profile> | null} profile the session's,
- *        which gives the rows of an interval with no request; null in a static export
+ * @param {Promise<import('../profile/profile.js').Profile>} profile the session's, which
+ *        gives the rows of an interval with no request
  * @param {(name: string) => void} onSelect called when a row is clicked
  * @returns {OperationsPanel}
  */
-export function operationsPanel(sessionId, rows, profile, onSelect) {
+export function operationsPanel(rows, profile, onSelect) {
   const title = h('span', null, 'Operations');
-  const body = h('div', null, operationsTable(rows, onSelect));
+  // many names: the table scrolls, its header in view
+  const body = h('div', {class: 'table-scroll'}, operationsTable(rows, onSelect));
 
   /** @param {api.Interval} interval */
   async function showInterval(interval) {
@@ -37,8 +37,7 @@ export function operationsPanel(sessionId, rows, profile, onSelect) {
     replace(title, 'Operations', label ? h('span', {class: 'interval'}, ` · ${label}`) : null);
     try {
       replace(body, label
-        ? operationsTable(profile ? operationRows(await profile, interval) : await api.listOperations(sessionId, interval),
-                          onSelect, 'No operation in flight in this interval.')
+        ? operationsTable(operationRows(await profile, interval), onSelect, 'No operation in flight in this interval.')
         : operationsTable(rows, onSelect));
     }
     catch (e) {

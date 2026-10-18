@@ -21,12 +21,14 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import flak.App;
 import flak.AppFactory;
 import flak.Flak;
 import flak.annotations.Route;
+import jfrweb.export.FlamePage;
 import jfrweb.json.Json;
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
@@ -200,7 +202,7 @@ public class AnalysisTest {
 
   @Test
   public void testFlameGraphRootedByOperation() throws IOException {
-    String collapsed = flame(new FlameGraphs.Options().collapsed(true));
+    String collapsed = flame(new FlameGraphs.Options());
 
     // 1 s burnt in /busy, sampled every 10 ms. JFR drops the samples whose
     // stack it fails to walk, about half of them here
@@ -213,47 +215,69 @@ public class AnalysisTest {
   @Test
   public void testFlameGraphOfOneOperation() throws IOException {
     String collapsed = flame(new FlameGraphs.Options()
-                               .collapsed(true)
                                .operations(r -> r.name().equals("GET /fast")));
     Assertions.assertFalse(collapsed.contains("GET /busy"), collapsed);
   }
 
   @Test
   public void testFlameGraphWithSamplesOutsideRequests() throws IOException {
-    String collapsed = flame(new FlameGraphs.Options().collapsed(true).outsideOperations(true));
+    String collapsed = flame(new FlameGraphs.Options().outsideOperations(true));
     Assertions.assertTrue(collapsed.contains(FlameGraphs.NO_OPERATION + ";["));
     Assertions.assertTrue(collapsed.contains("GET /busy/:id;"));
   }
 
   @Test
   public void testFlameGraphMerged() throws IOException {
-    String collapsed = flame(new FlameGraphs.Options().collapsed(true).merged(true));
+    String collapsed = flame(new FlameGraphs.Options().merged(true));
     Assertions.assertFalse(collapsed.contains("GET /"), "no operation at the root");
-    Assertions.assertEquals(weight(flame(new FlameGraphs.Options().collapsed(true)), "", "Handlers.burn"),
+    Assertions.assertEquals(weight(flame(new FlameGraphs.Options()), "", "Handlers.burn"),
                         weight(collapsed, "", "Handlers.burn"), "the same samples");
   }
 
   @Test
   public void testFlameGraphReversed() throws IOException {
-    String collapsed = flame(new FlameGraphs.Options().collapsed(true).reversed(true));
+    String collapsed = flame(new FlameGraphs.Options().reversed(true));
     Assertions.assertTrue(collapsed.lines().noneMatch(l -> l.startsWith("GET /")), collapsed);
     Assertions.assertTrue(collapsed.lines().anyMatch(l -> l.contains(";GET /busy/:id ")), "the operation last");
   }
 
   @Test
   public void testFlameGraphJavaOnly() throws IOException {
-    String all = flame(new FlameGraphs.Options().collapsed(true));
-    String java = flame(new FlameGraphs.Options().collapsed(true).javaOnly(true));
+    String all = flame(new FlameGraphs.Options());
+    String java = flame(new FlameGraphs.Options().javaOnly(true));
     Assertions.assertEquals(weight(all, "GET /busy/:id;", "Handlers.burn"),
                         weight(java, "GET /busy/:id;", "Handlers.burn"), "burnt in Java");
     Assertions.assertTrue(weight(java, "", "") <= weight(all, "", ""));
   }
 
   @Test
-  public void testHtml() throws IOException {
-    String html = flame(new FlameGraphs.Options().title("<b>"));
+  public void testFlamePage() throws IOException {
+    StringWriter out = new StringWriter();
+    FlamePage.write(analysis, new FlameGraphs.Options().operations(op -> op.name().equals("GET /busy/:id")).reversed(true),
+                    "<b>", "x.jfr", out);
+    String html = out.toString();
     Assertions.assertTrue(html.contains("<h1>&lt;b&gt;</h1>"));
-    Assertions.assertTrue(html.contains("GET /busy/:id"));
+    Assertions.assertTrue(html.contains("{\"all\":false,\"merged\":false,\"reversed\":true,\"java\":false}"),
+                          "the filters it opens with");
+
+    // the modules inlined, after the ones they import from
+    String script = between(html, "<script type=\"module\">", "</script>");
+    Assertions.assertFalse(Pattern.compile("^\\s*(import|export)\\b", Pattern.MULTILINE).matcher(script).find(), script);
+    Assertions.assertTrue(script.indexOf("modules['js/lib/dom.js'] =") < script.indexOf("modules['js/components/flame.js'] ="));
+    Assertions.assertTrue(script.contains("modules['js/flamePage.js'] ="));
+
+    // of the operations, those of the one kept only; the samples outside
+    // operations stay, which the page can add
+    @SuppressWarnings("unchecked")
+    Map<String, Object> profile = (Map<String, Object>) Json.parse(between(html, "id=\"profile\">", "</script>"));
+    Set<String> roots = new TreeSet<>();
+    collapse(profile).keySet().forEach(s -> roots.add(s.substring(0, s.indexOf(';'))));
+    Assertions.assertEquals(Set.of("GET /busy/:id", FlameGraphs.NO_OPERATION), roots);
+  }
+
+  private static String between(String s, String before, String after) {
+    int start = s.indexOf(before) + before.length();
+    return s.substring(start, s.indexOf(after, start));
   }
 
   /**
@@ -267,7 +291,7 @@ public class AnalysisTest {
   @Test
   public void testProfileHoldsTheStacksOfTheFlameGraphs() throws IOException {
     Map<String, Long> expected = new TreeMap<>();
-    for (String line : flame(new FlameGraphs.Options().collapsed(true).outsideOperations(true)).split("\n")) {
+    for (String line : flame(new FlameGraphs.Options().outsideOperations(true)).split("\n")) {
       int space = line.lastIndexOf(' ');
       // its marks of type: _[j] compiled, _[i] inlined, _[0] interpreted
       expected.merge(line.substring(0, space).replaceAll("_\\[[ij0]\\](?=;|$)", ""),
@@ -296,7 +320,7 @@ public class AnalysisTest {
   @Test
   public void testProfileFormat() throws IOException {
     Map<String, Object> p = profile();
-    Assertions.assertEquals(1L, p.get("version"));
+    Assertions.assertEquals(2L, p.get("version"));
 
     List<String> strings = strings(p);
     Assertions.assertEquals(new TreeSet<>(strings).stream().toList(), strings, "sorted, each once");

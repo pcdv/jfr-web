@@ -47,13 +47,6 @@ export function sessionTimeline(sessionId, whole, onInterval) {
   /** @param {api.TimelineData} data */
   function draw(data) {
     const offset = range.from ?? 0;
-    // a static export has the timeline of the whole session only
-    if (api.isStatic()) {
-      drawn = timelineChart(data, null, {timeLabel: t => `${round(t)} s`});
-      replace(chart, drawn);
-      applyMark();
-      return;
-    }
     drawn = timelineChart(data, (from, to, name) => {
       selection = from === undefined || to === undefined
         ? null
@@ -103,6 +96,8 @@ export function sessionTimeline(sessionId, whole, onInterval) {
 
   draw(whole);
   return {
+    // a static export has the buckets of the whole session only: no zoom,
+    // but a selection, which the sections below follow from the profile
     element: h('div', null, api.isStatic() ? null : toolbar, chart),
     mark(op) {
       marked = op;

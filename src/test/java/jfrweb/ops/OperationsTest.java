@@ -117,7 +117,7 @@ public class OperationsTest {
   @Test
   public void testFlameGraphRootedByOperation() throws IOException {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
-    FlameGraphs.write(analysis, new FlameGraphs.Options().collapsed(true),
+    FlameGraphs.write(analysis, new FlameGraphs.Options(),
                       new PrintStream(out, true, StandardCharsets.UTF_8));
     String collapsed = out.toString(StandardCharsets.UTF_8);
     Assertions.assertTrue(collapsed.contains("\nsync;") || collapsed.startsWith("sync;"));

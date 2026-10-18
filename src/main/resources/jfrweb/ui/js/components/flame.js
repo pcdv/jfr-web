@@ -3,19 +3,20 @@
  * A flame graph of a session, with its filters: operation, thread, time
  * interval, and the samples taken outside operations.
  *
- * The session's samples are loaded once, and the flame graph of each filter
- * built and drawn here. A static export still shows the flame graphs the
- * server drew, one filter at a time.
+ * Built from the session's profile, loaded once: each filter's flame graph
+ * is summed and drawn here, with no request. It needs nothing else, so the
+ * page `jfr-web flame` writes shows it too.
  */
-import * as api from '../api.js';
 import * as fmt from '../format.js';
 import {h, replace} from '../lib/dom.js';
 import {errorBox} from './errorBox.js';
-import {label} from './slowest.js';
 import {tree} from '../profile/profile.js';
+import {operationRows} from '../profile/operations.js';
 import {flameGraph} from '../flame/render.js';
 
 /** @typedef {import('../profile/profile.js').Profile} Profile */
+/** @typedef {import('../profile/profile.js').Filter} FlameFilter */
+/** @typedef {import('../api.js').InstanceRow} InstanceRow */
 
 /**
  * @typedef {object} FlamePanel
@@ -24,38 +25,30 @@ import {flameGraph} from '../flame/render.js';
  * @property {(from: number | undefined, to: number | undefined, name?: string | null) => void}
  *           showInterval selects an interval, in seconds since the start, or the whole
  *           session; and the operations of a name too when given, null for all
- * @property {(op: api.InstanceRow) => void} showInstance shows one operation, until a
+ * @property {(op: InstanceRow) => void} showInstance shows one operation, until a
  *           filter changes, and brings the flame graph into view
  */
 
 /**
- * @param {api.Report} report
- * @param {Promise<Profile> | null} profile the session's, null in a static export
+ * @param {Promise<Profile>} profile the session's
  * @param {AbortSignal} signal the view's
- * @param {(op: api.InstanceRow | null) => void} [onInstance] told of the operation shown
+ * @param {object} [options]
+ * @param {(op: InstanceRow | null) => void} [options.onInstance] told of the operation shown
  *        alone, and with null once the flame graph is back to the filters
+ * @param {FlameFilter} [options.filter] the filters it opens with
  * @returns {FlamePanel}
  */
-export function flamePanel(report, profile, signal, onInstance = () => {}) {
-  const id = report.session.id;
-  const seconds = Math.ceil(report.session.duration / 1000);
-
-  const name = h('select', {name: 'name'},
-    h('option', {value: ''}, 'All operations'),
-    report.operations.map(o => h('option', {value: o.name}, o.name)));
-
-  // the busiest threads first
-  const threads = [...report.threads].sort((a, b) => b.samples - a.samples);
-  const thread = h('select', {name: 'thread'},
-    h('option', {value: ''}, 'Any thread'),
-    threads.map(t => h('option', {value: t.name}, `${t.name} (${t.samples})`)));
-
-  const from = h('input', {type: 'number', name: 'from', min: 0, max: seconds, step: 'any', placeholder: '0'});
-  const to = h('input', {type: 'number', name: 'to', min: 0, max: seconds, step: 'any', placeholder: String(seconds)});
-  const all = h('input', {type: 'checkbox', name: 'all'});
-  const merged = h('input', {type: 'checkbox', name: 'merged'});
-  const reversed = h('input', {type: 'checkbox', name: 'reversed'});
-  const java = h('input', {type: 'checkbox', name: 'java'});
+export function flamePanel(profile, signal, {onInstance = () => {}, filter: initial = {}} = {}) {
+  const name = h('select', {name: 'name'}, h('option', {value: ''}, 'All operations'));
+  const thread = h('select', {name: 'thread'}, h('option', {value: ''}, 'Any thread'));
+  const from = h('input', {type: 'number', name: 'from', min: 0, step: 'any', placeholder: '0',
+                           value: initial.from ?? ''});
+  const to = h('input', {type: 'number', name: 'to', min: 0, step: 'any', placeholder: 'end',
+                         value: initial.to ?? ''});
+  const all = h('input', {type: 'checkbox', name: 'all', checked: !!initial.all});
+  const merged = h('input', {type: 'checkbox', name: 'merged', checked: !!initial.merged});
+  const reversed = h('input', {type: 'checkbox', name: 'reversed', checked: !!initial.reversed});
+  const java = h('input', {type: 'checkbox', name: 'java', checked: !!initial.java});
 
   /** @type {number | undefined} one operation shown, instead of the filters */
   let instance;
@@ -63,16 +56,43 @@ export function flamePanel(report, profile, signal, onInstance = () => {}) {
   let instanceLabel = '';
   const instanceChip = h('span', {class: 'chip', hidden: true});
 
-  // a static export: the pages the server drew
-  const frame = profile ? null : h('iframe', {class: 'flame', title: 'Flame graph'});
-  const graph = profile ? flameGraph(signal) : null;
+  const graph = flameGraph(signal);
   const caption = h('div', {class: 'flame-caption'}, 'Loading the samples…');
-  const serverPage = h('a', {target: '_blank', rel: 'noopener',
-                             title: "The same flame graph, drawn by the server with async-profiler's converter"},
-                       'Drawn by the server');
-  const body = h('div', null, frame ?? [h('div', {class: 'flame-caption-bar'}, caption, serverPage), graph?.element]);
+  const body = h('div', null, h('div', {class: 'flame-caption-bar'}, caption), graph.element);
 
-  /** @returns {api.FlameFilter} */
+  // the operations by total time, the busiest threads first, as the profile
+  // has them; a name asked for before, selected once there
+  let listed = false;
+  let wanted = initial.name ?? '';
+  profile.then(p => {
+    // those with samples: a page of a few operations has theirs only
+    const sampled = new Set();
+    for (const op of p.operation)
+      if (op >= 0)
+        sampled.add(p.strings[p.operations.name[op]]);
+    for (const o of operationRows(p, {}))
+      if (sampled.has(o.name))
+        name.append(h('option', {value: o.name}, o.name));
+    /** @type {Map<string, number>} */
+    const samples = new Map();
+    for (const t of p.thread)
+      samples.set(p.threads[t].name, (samples.get(p.threads[t].name) ?? 0) + 1);
+    for (const [n, count] of [...samples].sort((a, b) => b[1] - a[1]))
+      thread.append(h('option', {value: n}, `${n} (${count})`));
+    name.value = wanted;
+    thread.value = initial.thread ?? '';
+    listed = true;
+  }, () => {});
+
+  /** @param {string} n */
+  function selectName(n) {
+    if (listed)
+      name.value = n;
+    else
+      wanted = n;
+  }
+
+  /** @returns {FlameFilter} */
   function filter() {
     return instance !== undefined ? {instance} : {
       name: name.value || undefined,
@@ -88,15 +108,11 @@ export function flamePanel(report, profile, signal, onInstance = () => {}) {
 
   function update() {
     instanceChip.hidden = instance === undefined;
-    const f = filter();
-    if (frame) {
-      frame.src = api.flameUrl(id, f);
-      return;
-    }
-    serverPage.href = api.flameUrl(id, f);
-    profile?.then(p => {
-      if (signal.aborted || !graph)
+    profile.then(p => {
+      if (signal.aborted)
         return;
+      // read once the lists are in
+      const f = filter();
       const {root, samples} = tree(p, f);
       const what = [f.java ? 'Java code' : 'Wall clock'];
       if (f.instance !== undefined)
@@ -118,33 +134,9 @@ export function flamePanel(report, profile, signal, onInstance = () => {}) {
     });
   }
 
-  /**
-   * A static export has the flame graphs of one filter at a time: the others
-   * are cleared.
-   *
-   * @param {EventTarget | null} keep the filter just changed
-   */
-  function onlyFilter(keep) {
-    if (!api.isStatic())
-      return;
-    if (keep !== name)
-      name.value = '';
-    if (keep !== thread)
-      thread.value = '';
-    for (const c of [all, merged, reversed, java])
-      if (keep !== c)
-        c.checked = false;
-  }
-
-  /**
-   * Back to the filters, as soon as one of them changes.
-   *
-   * @param {Event} [e]
-   */
-  function onFilterChange(e) {
+  /** Back to the filters, as soon as one of them changes. */
+  function onFilterChange() {
     clearInstance();
-    if (e)
-      onlyFilter(e.target);
     update();
   }
 
@@ -152,8 +144,8 @@ export function flamePanel(report, profile, signal, onInstance = () => {}) {
     instanceChip,
     h('label', null, 'Operation ', name),
     h('label', null, 'Thread ', thread),
-    api.isStatic() ? null : h('label', null, 'From ', from, ' s'),
-    api.isStatic() ? null : h('label', null, 'to ', to, ' s'),
+    h('label', null, 'From ', from, ' s'),
+    h('label', null, 'to ', to, ' s'),
     h('label', {title: 'Mostly idle threads blocked in native code: selectors, acceptors'},
       all, ' samples outside operations'),
     h('label', {title: 'One tree for all the operations kept, instead of one per name: what costs in all of them'},
@@ -183,8 +175,7 @@ export function flamePanel(report, profile, signal, onInstance = () => {}) {
     element: h('div', null, form, body),
     showName(n) {
       clearInstance();
-      name.value = n;
-      onlyFilter(name);
+      selectName(n);
       update();
       reveal();
     },
@@ -193,14 +184,14 @@ export function flamePanel(report, profile, signal, onInstance = () => {}) {
       from.value = f === undefined ? '' : String(f);
       to.value = t === undefined ? '' : String(t);
       if (n !== undefined)
-        name.value = n ?? '';
+        selectName(n ?? '');
       update();
     },
     showInstance(r) {
       instance = r.id;
-      instanceLabel = `${label(r)} at ${r.start.toFixed(3)} s`;
+      instanceLabel = `${fmt.label(r)} at ${r.start.toFixed(3)} s`;
       replace(instanceChip,
-        `${label(r)} at ${r.start.toFixed(3)} s `,
+        `${instanceLabel} `,
         h('button', {type: 'button', title: 'Back to the filters', onclick: () => onFilterChange()}, '×'));
       update();
       onInstance(r);
