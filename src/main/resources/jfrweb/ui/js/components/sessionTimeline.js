@@ -74,7 +74,7 @@ export function sessionTimeline(whole, profile, onInterval) {
         : {from: round(offset + from), to: round(offset + to)};
       drawToolbar();
       onInterval(selection ?? range, name);
-    }, {timeLabel: t => `${round(offset + t)} s`, controls: toolbar});
+    }, {timeLabel: t => `${round(offset + t)} s`, controls: toolbar, frames: true});
     replace(chart, drawn);
     applyMark();
     applyFrame(data);

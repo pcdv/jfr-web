@@ -724,11 +724,17 @@ svg.timeline .frame-samples {
 .frame-legend {
   margin-top: 4px;
   font-size: 12px;
+  line-height: 18px;
+  height: 18px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  visibility: hidden;
 }
 
-.frame-legend[hidden] {
-  display: none;
+.frame-legend.shown {
+  visibility: visible;
 }
 
 .frame-swatch {

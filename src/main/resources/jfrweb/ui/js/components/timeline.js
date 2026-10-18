@@ -40,6 +40,8 @@ const PLOT_H = H - TOP - BOTTOM;
  * @property {string} [unit] after the values, e.g. " s"
  * @property {HTMLElement} [controls] shown over the chart, in its top right corner, e.g. zoom
  *           buttons
+ * @property {boolean} [frames] whether it draws the samples of frames (samples()): a line is
+ *           kept under it for the name of the frame, so that its height does not change
  */
 
 /**
@@ -202,7 +204,8 @@ export function timelineChart(data, onSelect, options = {}) {
     marked.setAttribute('visibility', 'visible');
   }
 
-  const frameLegend = h('div', {class: 'frame-legend', hidden: true});
+  // one line, kept whether a frame is shown or not: the page does not move
+  const frameLegend = options.frames ? h('div', {class: 'frame-legend'}) : null;
 
   /**
    * @param {string} [name] of the frame
@@ -211,7 +214,7 @@ export function timelineChart(data, onSelect, options = {}) {
   function samples(name, ms) {
     if (name === undefined || ms === undefined) {
       frameSamples.setAttribute('visibility', 'hidden');
-      frameLegend.hidden = true;
+      frameLegend?.classList.remove('shown');
       return;
     }
     const max = Math.max(...ms);
@@ -223,10 +226,12 @@ export function timelineChart(data, onSelect, options = {}) {
     d += ` V ${fy(0)} Z`;
     frameSamples.setAttribute('d', d);
     frameSamples.setAttribute('visibility', 'visible');
-    replace(frameLegend, h('span', {class: 'swatch frame-swatch'}),
-      h('span', {class: 'mono'}, name),
-      `: its samples, up to ${fmt.duration(max)} per ${fmt.duration(data.bucket)}, on a scale of their own`);
-    frameLegend.hidden = false;
+    if (frameLegend) {
+      replace(frameLegend, h('span', {class: 'swatch frame-swatch'}),
+        h('span', {class: 'mono'}, name),
+        `: its samples, up to ${fmt.duration(max)} per ${fmt.duration(data.bucket)}, on a scale of their own`);
+      frameLegend.classList.add('shown');
+    }
   }
 
   const tooltip = h('div', {class: 'tooltip', hidden: true});
