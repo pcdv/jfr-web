@@ -21,7 +21,6 @@ import flak.App;
 import flak.AppFactory;
 import flak.Flak;
 import flak.HttpException;
-import flak.ResourceOptions;
 import flak.annotations.OutputFormat;
 import flak.annotations.Post;
 import flak.annotations.Route;
@@ -87,10 +86,9 @@ public final class Standalone implements AutoCloseable {
     Standalone s = new Standalone(directory, factory, root);
     ProfilerApp.base(root, null);
     root.scan(s);
-    ResourceOptions resources = new ResourceOptions().classLoader(Standalone.class.getClassLoader());
     // the page of the JVMs uses the styles and modules of the profiler's
-    root.serveClasspath("/ui", "/jfrweb/ui", resources);
-    root.serveClasspath("/", "/jfrweb/standalone", resources);
+    ProfilerApp.serveResources(root, "/ui", "jfrweb/ui");
+    ProfilerApp.serveResources(root, "/", "jfrweb/standalone");
     root.start();
 
     try (DirectoryStream<Path> dirs = Files.newDirectoryStream(directory, Files::isDirectory)) {

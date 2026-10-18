@@ -246,7 +246,7 @@ public class TcpDemo {
       settings.put("jdk.SystemProcess#enabled", "false");
     }
     Profiler profiler = Profiler.builder()
-                                .port(Integer.getInteger("profiler.port", 0))
+                                .port(Integer.getInteger("profiler.port", 9091))
                                 .settings(settings)
                                 .history(history.getDirectory())
                                 .snapshots(snapshots)

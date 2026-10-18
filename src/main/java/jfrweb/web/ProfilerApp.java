@@ -42,9 +42,27 @@ public final class ProfilerApp {
       snapshots.addListener(s -> register(sessions, s));
     }
     app.scan(new SnapshotRoutes(snapshots, sessions));
-    app.serveClasspath("/", "/jfrweb/ui",
-                       new ResourceOptions().classLoader(ProfilerApp.class.getClassLoader()));
+    serveResources(app, "/", "jfrweb/ui");
   }
+
+  /**
+   * Serves a directory of the resources of jfr-web: from the classpath, or
+   * from the directory named by the system property {@value #RESOURCES}
+   * (e.g. src/main/resources), where an edit shows on the next reload.
+   *
+   * @param resource its path among the resources, e.g. "jfrweb/ui"
+   */
+  public static void serveResources(App app, String path, String resource) {
+    String dir = System.getProperty(RESOURCES);
+    if (dir != null)
+      app.serveDir(path, Path.of(dir, resource).toFile());
+    else
+      app.serveClasspath(path, "/" + resource,
+                         new ResourceOptions().classLoader(ProfilerApp.class.getClassLoader()));
+  }
+
+  /** The system property naming a directory to serve the pages from, in place of the classpath. */
+  public static final String RESOURCES = "jfrweb.resources";
 
   /**
    * What any app of the interface needs: its guard, the protection against

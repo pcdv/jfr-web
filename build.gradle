@@ -115,6 +115,10 @@ tasks.register('cliJar', Jar) {
   duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
+// the tasks below serve the pages from the sources, not the classpath: an edit
+// of the interface shows on the next reload of the browser
+def uiSources = file('src/main/resources').absolutePath
+
 // a flak app to profile, and the profiler: see Demo. Ports, the recording of a
 // first session, background traffic, and the directory of the endpoint history
 // (build/demo-history by default): -Pdemo.port=, -Pprofiler.port=,
@@ -124,6 +128,7 @@ tasks.register('demo', JavaExec) {
   description = 'Runs a flak app with the profiler, to try the web interface.'
   classpath = sourceSets.test.runtimeClasspath
   mainClass = 'jfrweb.Demo'
+  systemProperty 'jfrweb.resources', uiSources
   ['demo.port', 'profiler.port', 'demo.session', 'demo.load', 'demo.history'].each { name ->
     def value = providers.gradleProperty(name)
     if (value.present)
@@ -140,6 +145,7 @@ tasks.register('tcpDemo', JavaExec) {
   description = 'Runs an order server over TCP with the profiler, to try the web interface without HTTP.'
   classpath = sourceSets.test.runtimeClasspath
   mainClass = 'jfrweb.TcpDemo'
+  systemProperty 'jfrweb.resources', uiSources
   ['demo.port', 'profiler.port', 'demo.session', 'demo.load', 'demo.history', 'demo.export',
    'demo.export.seconds'].each { name ->
     def value = providers.gradleProperty(name)
@@ -156,6 +162,7 @@ tasks.register('standalone', JavaExec) {
   description = 'Runs jfr-web on its own, to profile the other JVMs of this machine.'
   classpath = sourceSets.main.runtimeClasspath
   mainClass = 'jfrweb.cli.Main'
+  systemProperty 'jfrweb.resources', uiSources
   args 'standalone'
   def port = providers.gradleProperty('port')
   if (port.present)

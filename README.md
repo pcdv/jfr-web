@@ -13,8 +13,12 @@ one operation or a single call.
 
 **[Try the demo](https://pcdv.github.io/jfr-web/)**: a static copy of the TCP demo described
 below, rebuilt on every push. Being static, it can't do everything (no interval selection, no
-live view); run `./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true` locally for the real
-thing.
+live view).
+
+To run the demo yourself:
+```
+./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true --console=plain
+```
 
 ## Ways to run it
 
