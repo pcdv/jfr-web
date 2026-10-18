@@ -6,8 +6,12 @@
  */
 import {h, replace} from '../lib/dom.js';
 import * as fmt from '../format.js';
+import {readSetting, writeSetting} from '../lib/settings.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
+
+/** Whether the help of the timelines is shown. */
+const HELP = 'jfrweb.timeline.help';
 
 /** Drawing size, in the units of the viewBox: the chart scales to its container. */
 const W = 1000;
@@ -34,6 +38,8 @@ const PLOT_H = H - TOP - BOTTOM;
  * @property {number} [startEpoch] the start in seconds since the epoch, so that ticks fall
  *           on round clock times
  * @property {string} [unit] after the values, e.g. " s"
+ * @property {HTMLElement} [controls] shown over the chart, in its top right corner, e.g. zoom
+ *           buttons
  */
 
 /**
@@ -328,10 +334,21 @@ export function timelineChart(data, onSelect, options = {}) {
   const drag = onSelect
     ? ' Drag to select an interval: the sections below show only it; click an operation to see it alone in that bucket, elsewhere to clear.'
     : '';
-  return Object.assign(h('div', null,
-    h('p', {class: 'hint'}, options.hint ? options.hint : operations
+  // what the chart shows and how to use it: folded behind a button, as last left
+  const help = h('p', {class: 'hint timeline-help', hidden: readSetting(HELP) !== 'true'},
+    options.hint ? options.hint : operations
       ? `Operations in flight, on average per ${fmt.duration(data.bucket)}, by name.${drag}`
-      : `No operation recorded: samples of Java code per ${fmt.duration(data.bucket)}.${drag}`),
+      : `No operation recorded: samples of Java code per ${fmt.duration(data.bucket)}.${drag}`);
+  const helpButton = h('button', {type: 'button', class: 'small', title: 'What the timeline shows, and how to use it',
+                                  'aria-expanded': String(!help.hidden),
+                                  onclick: () => {
+                                    help.hidden = !help.hidden;
+                                    helpButton.setAttribute('aria-expanded', String(!help.hidden));
+                                    writeSetting(HELP, String(!help.hidden));
+                                  }}, '?');
+  wrapper.append(h('div', {class: 'timeline-controls'}, options.controls ?? null, helpButton));
+  return Object.assign(h('div', null,
+    help,
     h('div', {class: 'legend'}, legendItems),
     wrapper,
     frameLegend), {mark, samples});

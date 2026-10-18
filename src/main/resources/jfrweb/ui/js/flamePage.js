@@ -6,6 +6,7 @@
  */
 import {decode} from './profile/profile.js';
 import {flamePanel} from './components/flame.js';
+import {section} from './components/section.js';
 
 /** @param {string} id */
 function json(id) {
@@ -14,4 +15,4 @@ function json(id) {
 
 const profile = Promise.resolve().then(() => decode(json('profile')));
 const panel = flamePanel(profile, new AbortController().signal, {filter: json('filter') ?? {}});
-document.getElementById('flame')?.append(panel.element);
+document.getElementById('flame')?.append(panel.element, section('hot', panel.hot.title, ...panel.hot.content));

@@ -24,7 +24,8 @@ import {timelineChart} from './timeline.js';
  *          of a frame of the flame graph were taken, or removes them
  */
 export function sessionTimeline(sessionId, whole, onInterval) {
-  const toolbar = h('div', {class: 'toolbar timeline-toolbar'});
+  // the zoom, over the chart
+  const toolbar = h('span', {class: 'timeline-zoom'});
   const chart = h('div');
 
   /** @type {api.Interval} the range shown, all of it when empty */
@@ -71,7 +72,9 @@ export function sessionTimeline(sessionId, whole, onInterval) {
         : {from: round(offset + from), to: round(offset + to)};
       drawToolbar();
       onInterval(selection ?? range, name);
-    }, {timeLabel: t => `${round(offset + t)} s`});
+    // a static export has the buckets of the whole session only: no zoom,
+    // but a selection, which the sections below follow from the profile
+    }, {timeLabel: t => `${round(offset + t)} s`, controls: api.isStatic() ? undefined : toolbar});
     replace(chart, drawn);
     applyMark();
     applyFrame(data);
@@ -81,23 +84,25 @@ export function sessionTimeline(sessionId, whole, onInterval) {
   function drawToolbar() {
     const shown = fmt.interval(range);
     replace(toolbar,
+      shown ? h('span', {class: 'timeline-range'}, shown) : null,
       h('button', {
+        type: 'button', class: 'small',
         disabled: !selection,
-        title: selection ? 'Redraw the timeline over the selection, in finer buckets'
-                         : 'Drag on the timeline first to select an interval',
+        title: selection ? 'Zoom in: redraw the timeline over the selection, in finer buckets'
+                         : 'Zoom in: drag on the timeline first to select an interval',
         onclick: () => {
           if (!selection)
             return;
           zooms.push(range);
           zoomTo(selection);
         },
-      }, 'Zoom in'),
-      ' ',
+      }, '+'),
       h('button', {
+        type: 'button', class: 'small',
         disabled: zooms.length === 0,
+        title: 'Zoom out: back to the range shown before',
         onclick: () => zoomTo(zooms.pop() ?? {}),
-      }, 'Zoom out'),
-      shown ? h('span', {class: 'hint'}, ` · showing ${shown}`) : null);
+      }, '−'));
   }
 
   /** @param {api.Interval} r */
@@ -115,9 +120,7 @@ export function sessionTimeline(sessionId, whole, onInterval) {
 
   draw(whole);
   return {
-    // a static export has the buckets of the whole session only: no zoom,
-    // but a selection, which the sections below follow from the profile
-    element: h('div', null, api.isStatic() ? null : toolbar, chart),
+    element: chart,
     showFrame(f) {
       frame = f;
       applyFrame(buckets);

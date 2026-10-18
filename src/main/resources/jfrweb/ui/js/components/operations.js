@@ -6,20 +6,20 @@ import * as api from '../api.js';
 import {h, replace} from '../lib/dom.js';
 import {errorBox} from './errorBox.js';
 import * as fmt from '../format.js';
-import {section} from './section.js';
 import {operationRows} from '../profile/operations.js';
 import {shareCell} from './share.js';
 
 /**
  * @typedef {object} OperationsPanel
- * @property {HTMLElement} element
+ * @property {HTMLElement} title its title, which tells the interval shown
+ * @property {HTMLElement[]} content
  * @property {(interval: api.Interval) => void} showInterval shows the operations in
  *           flight during an interval, or all of them
  */
 
 /**
- * The operations of a session, as a foldable section, over the whole session
- * or an interval.
+ * The operations of a session, over the whole session or an interval: its
+ * title and content, for a section or a tab.
  *
  * @param {api.OperationRow[]} rows those of the whole session
  * @param {Promise<import('../profile/profile.js').Profile>} profile the session's, which
@@ -46,7 +46,7 @@ export function operationsPanel(rows, profile, onSelect) {
     }
   }
 
-  return {element: section('operations', title, body), showInterval};
+  return {title, content: [body], showInterval};
 }
 
 /**

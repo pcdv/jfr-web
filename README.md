@@ -150,8 +150,8 @@ call of that operation, from any client.
 **Sessions.** Start one, use the application, stop it. The report tells you how the recording
 went (sampling rates, truncated stacks, the usual JFR biases), then shows a timeline of the
 operations in flight. Hover to bring one forward, drag to select an interval, click a bar to see
-that operation alone. Below it: the operations by total time, the slowest calls, and flame graphs
-by operation, thread, interval or single call. **Merged** puts every operation kept in one tree,
+that operation alone. Below it, flame graphs by operation, thread, interval or single call, then
+tabs of the operations by total time, the slowest calls and the hot methods. **Merged** puts every operation kept in one tree,
 instead of one per name, for what costs across all of them; **hot methods** turns the stacks upside
 down, the methods that were running at the root and their callers above; **Java only** leaves out
 the samples taken in native methods, for something closer to CPU time. All of it is computed in the

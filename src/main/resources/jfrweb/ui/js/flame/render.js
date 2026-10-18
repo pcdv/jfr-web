@@ -41,6 +41,8 @@ const TYPES = [
 /**
  * @typedef {object} FlameGraph
  * @property {HTMLElement} element
+ * @property {HTMLElement} toolbar its search field and zoom reset, in the element unless moved,
+ *           e.g. onto the row of a caption
  * @property {(root: Frame, inverted: boolean) => void} show draws a tree, staying zoomed on
  *           the same frame if the tree still has it
  * @property {(name: string) => void} find searches the frames of a method, by its exact name
@@ -349,6 +351,7 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
 
   return {
     element: h('div', {class: 'flame-graph'}, toolbar, wrapper),
+    toolbar,
     find(name) {
       search.value = `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
       searchChanged();

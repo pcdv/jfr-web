@@ -11,6 +11,7 @@ import * as fmt from '../format.js';
 import {flamePanel} from '../components/flame.js';
 import {operationsPanel} from '../components/operations.js';
 import {section} from '../components/section.js';
+import {tabbedSection} from '../components/tabs.js';
 import {renameButton} from '../components/sessionName.js';
 import {sessionTimeline} from '../components/sessionTimeline.js';
 import {slowestPanel} from '../components/slowest.js';
@@ -122,9 +123,14 @@ export function renderSession(root, params, signal) {
           summary(report),
           recording(report),
           section('timeline', 'Timeline', timelinePanel.element),
-          operations.element,
-          slowest.element,
-          section('flame', 'Flame graph', flame.element));
+          // right under the timeline, which shows when the frame hovered
+          // was sampled: both on one screen
+          section('flame', 'Flame graph', flame.element),
+          tabbedSection('tables', [
+            {key: 'operations', title: operations.title, content: operations.content},
+            {key: 'slowest', title: slowest.title, content: slowest.content},
+            {key: 'hot', title: flame.hot.title, content: flame.hot.content},
+          ]));
       },
       e => {
         if (!signal.aborted)

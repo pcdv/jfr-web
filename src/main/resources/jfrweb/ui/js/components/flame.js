@@ -14,6 +14,7 @@ import {tree, timeOf, hotMethods, methodTrees, compare} from '../profile/profile
 import {hotMethodsPanel} from './hotMethods.js';
 import {operationRows} from '../profile/operations.js';
 import {flameGraph} from '../flame/render.js';
+import {readSetting, writeSetting} from '../lib/settings.js';
 
 /** @typedef {import('../profile/profile.js').Profile} Profile */
 /** @typedef {import('../profile/profile.js').Filter} FlameFilter */
@@ -32,6 +33,8 @@ import {flameGraph} from '../flame/render.js';
 /**
  * @typedef {object} FlamePanel
  * @property {HTMLElement} element
+ * @property {{title: HTMLElement, content: HTMLElement[]}} hot the hot methods of the same
+ *           samples, for the page to place: under the graph, or in a tab
  * @property {(name: string) => void} showName selects the operations of a name
  * @property {(from: number | undefined, to: number | undefined, name?: string | null) => void}
  *           showInterval selects an interval, in seconds since the start, or the whole
@@ -112,12 +115,9 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
         }, 'Compare…'));
   }
   drawCompareBar();
-  // the methods where the time went, under the graph: summed while shown
+  // the methods where the time went, of the same samples: placed by the page
   const hot = hotMethodsPanel(name => graph.find(name), name => showMethod(name));
-  const hotSection = h('details', {class: 'hot-methods', open: true,
-                                   ontoggle: () => showHot()},
-    h('summary', null, 'Hot methods', h('span', {class: 'hint'}, ' · where the time went, whatever calls them')),
-    hot.element);
+  const hotTitle = h('span', null, 'Hot methods');
 
   // one method, picked: its callers above it, its callees below, merged
   // wherever it is called from
@@ -135,11 +135,15 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
     h('h4', null, 'What calls it, up to the operations'), callers.element,
     h('h4', null, 'What it calls'), callees.element);
 
-  const body = h('div', null, h('div', {class: 'flame-caption-bar'}, caption, compareBar), graph.element, methodSection,
-                 hotSection);
+  // the caption, the search and the comparison on one row: the graph right
+  // under the timeline
+  const captionTools = h('div', {class: 'flame-caption-tools'}, graph.toolbar, compareBar);
+  const body = h('div', {class: 'flame-main'},
+    h('div', {class: 'flame-caption-bar'}, caption, captionTools),
+    graph.element, methodSection);
 
   function showHot() {
-    if (hotSection.open && drawn)
+    if (drawn)
       hot.show(hotMethods(drawn.profile, drawn.filter));
   }
 
@@ -308,6 +312,26 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
                        + 'callers. Reflection, proxies, the plumbing of a framework'},
       'Hide frames ', hide));
 
+  // the filters, in a pane beside the graph, folded as last left
+  const PANE = 'jfrweb.flame.filters';
+  const pane = h('aside', {class: 'flame-pane'});
+  const paneToggle = h('button', {type: 'button', class: 'flame-pane-toggle',
+                                  onclick: () => foldPane(!pane.classList.contains('folded'))});
+  pane.append(form);
+
+  /** @param {boolean} folded the button that shows them then goes by the caption: the graph takes the width */
+  function foldPane(folded) {
+    pane.classList.toggle('folded', folded);
+    if (folded)
+      captionTools.append(paneToggle);
+    else
+      pane.prepend(paneToggle);
+    paneToggle.textContent = folded ? '‹ Filters' : 'Filters ›';
+    paneToggle.title = folded ? 'Show the filters' : 'Fold the filters: the caption above the graph tells them';
+    writeSetting(PANE, String(folded));
+  }
+  foldPane(readSetting(PANE) === 'true');
+
   function clearInstance() {
     if (instance === undefined)
       return;
@@ -325,7 +349,9 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
 
   update();
   return {
-    element: h('div', null, form, body),
+    element: h('div', {class: 'flame-layout'}, body, pane),
+    hot: {title: hotTitle, content: [h('p', {class: 'hint'}, 'Where the time went, whatever calls them, '
+                                                            + 'of the samples of the flame graph.'), hot.element]},
     showName(n) {
       clearInstance();
       selectName(n);

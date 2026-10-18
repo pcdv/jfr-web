@@ -9,7 +9,6 @@ import {h, replace} from '../lib/dom.js';
 import {errorBox} from './errorBox.js';
 import * as fmt from '../format.js';
 import {outcomeCell} from './operations.js';
-import {section} from './section.js';
 import {instanceRows} from '../profile/operations.js';
 
 const LIMIT = 20;
@@ -19,7 +18,8 @@ const FEW_SAMPLES = 10;
 
 /**
  * @typedef {object} SlowestPanel
- * @property {HTMLElement} element
+ * @property {HTMLElement} title its title, which tells the name and interval shown
+ * @property {HTMLElement[]} content
  * @property {(name: string | undefined) => void} showName lists the slowest
  *           operations of a name, or of all
  * @property {(interval: api.Interval, name?: string | null) => void} showInterval keeps
@@ -78,7 +78,8 @@ export function slowestPanel(sessionId, profile, onPick) {
 
   refresh();
   return {
-    element: section('slowest', title, list, detail),
+    title,
+    content: [list, detail],
     showName(n) {
       name = n;
       refresh();

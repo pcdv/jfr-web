@@ -447,6 +447,36 @@ details.section > summary::marker {
   color: var(--muted);
 }
 
+/* a section of several panels: its titles are tabs */
+details.tabbed > summary h2 {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+
+details.tabbed .tab {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0 0 2px;
+  cursor: pointer;
+}
+
+details.tabbed .tab:hover {
+  color: var(--fg);
+}
+
+details.tabbed .tab.selected {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+
+details.tabbed [role=tabpanel][hidden] {
+  display: none;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -505,6 +535,37 @@ details.section > summary::marker {
 
 .timeline-wrapper {
   position: relative;
+}
+
+/* over the chart, in its top right corner: zoom, help */
+.timeline-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  font-size: 12px;
+}
+
+.timeline-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.timeline-controls button.small {
+  min-width: 22px;
+  padding: 0 6px;
+  line-height: 18px;
+}
+
+.timeline-range {
+  color: var(--accent);
+  margin-right: 2px;
 }
 
 svg.timeline {
@@ -705,21 +766,7 @@ svg.timeline .frame-samples {
   font-weight: 600;
 }
 
-/* the hot methods, under the flame graph */
-details.hot-methods {
-  margin-top: 16px;
-}
-
-details.hot-methods > summary {
-  cursor: pointer;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-details.hot-methods > summary .hint {
-  font-weight: normal;
-}
-
+/* sortable columns, e.g. of the hot methods */
 .grid th.sortable {
   cursor: pointer;
   user-select: none;
@@ -733,13 +780,99 @@ details.hot-methods > summary .hint {
   content: " ▾";
 }
 
+/* the flame graph and, beside it, its filters in a pane that folds */
+.flame-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.flame-main {
+  min-width: 0;
+}
+
+.flame-pane {
+  width: 15em;
+  position: sticky;
+  top: 48px;
+  font-size: 13px;
+}
+
+.flame-layout:has(.flame-pane.folded) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.flame-pane.folded {
+  display: none;
+}
+
+.flame-pane-toggle {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 8px;
+  margin: 8px 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.flame-pane-toggle:hover {
+  color: var(--fg);
+}
+
+.flame-pane .filters {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.flame-pane .filters label:has(select),
+.flame-pane .filters label:has(input[type=text]) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.flame-pane .filters select,
+.flame-pane .filters input[type=text] {
+  width: 100%;
+}
+
+@media (max-width: 800px) {
+  .flame-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flame-pane {
+    order: -1;
+    width: auto;
+    position: static;
+  }
+}
+
 .flame-caption-bar {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
   margin: 8px 0;
   font-size: 13px;
+}
+
+.flame-caption-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.flame-caption-tools .flame-toolbar,
+.flame-caption-tools .flame-pane-toggle {
+  margin: 0;
 }
 
 .flame-caption {
