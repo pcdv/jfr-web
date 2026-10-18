@@ -446,6 +446,9 @@ let staticFiles = null;
 /** @type {{from: string, to: string} | null} the period of the history exported */
 let staticHistory = null;
 
+/** @type {string | null} the title a static export was given, for its top bar */
+let staticTitle = null;
+
 /**
  * Resolves once it is known whether the page is a static export, which a
  * static.json next to it tells. Views wait for it.
@@ -456,6 +459,7 @@ export const ready = fetch('static.json')
     if (m) {
       staticFiles = m.files;
       staticHistory = m.history;
+      staticTitle = m.title ?? null;
     }
   })
   .catch(() => undefined)
@@ -475,6 +479,11 @@ export function isStatic() {
 /** @returns {{from: string, to: string} | null} the period of the history exported, if any */
 export function getStaticHistory() {
   return staticHistory;
+}
+
+/** @returns {string | null} the title a static export was given, if any */
+export function getStaticTitle() {
+  return staticTitle;
 }
 
 /**

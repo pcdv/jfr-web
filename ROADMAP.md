@@ -151,10 +151,11 @@ already wired must follow.
 
 - [x] `jfr-web export`: the interface and recordings as a static site, the responses computed
   beforehand for what can be reached by clicking
-- [x] The TCP demo exports itself (`-Pdemo.export=dir`), without the environment of the JVM
+- [x] The demos export themselves (`-Pdemo.export=dir`), without the environment of the JVM
 - [x] Published on GitHub Pages, rebuilt by a workflow
-- [ ] A link to the repository from the static site
-- [ ] Two demos on the site: the flak app and the TCP server
+- [x] A link to the repository from the static site: "Powered by jfr-web" under each page, and
+  `--title` to name an export in its top bar
+- [x] Two demos on the site: the flak app and the TCP server, under a page that links both
 
 ## Next
 

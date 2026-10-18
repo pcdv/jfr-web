@@ -54,15 +54,21 @@ function staticMode() {
     return;
   const note = document.createElement('p');
   note.className = 'static-note';
-  note.textContent = 'Static export, limited compared to a live run: no interval to select or zoom in on, ' +
-                     'one flame graph filter at a time, no live statistics, auto mode or snapshots. ' +
-                     'Run jfr-web on the recordings for everything.';
+  note.textContent = 'Static export: recordings only, with the details of the slowest operations of each name. ' +
+                     'Run jfr-web on the recordings for those of the others.';
   document.querySelector('header')?.after(note);
+  // its own title, in place of jfr-web's: the footer still names it
+  const title = api.getStaticTitle();
+  const brand = document.querySelector('header .brand');
+  if (title && brand) {
+    brand.textContent = title;
+    appName = title;
+  }
 }
 
 api.ready.then(() => {
-  staticMode();
   appName = api.getAbout()?.app ?? appName;
+  staticMode();
   const header = document.querySelector('header');
   if (header)
     showTarget(header);

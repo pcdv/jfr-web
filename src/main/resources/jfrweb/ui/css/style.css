@@ -248,6 +248,17 @@ h1.crumbs .sep {
   font-weight: normal;
 }
 
+footer.powered {
+  padding: 8px 24px 16px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+footer.powered a {
+  color: inherit;
+}
+
 .title-action {
   font-size: 14px;
   font-weight: normal;

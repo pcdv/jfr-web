@@ -11,13 +11,16 @@ staring at a flame graph of the whole JVM. You get the most expensive operations
 what was running when, the slowest calls with their exceptions and slow I/O, and flame graphs for
 one operation or a single call.
 
-**[Try the demo](https://pcdv.github.io/jfr-web/)**: a static copy of the TCP demo described
-below, rebuilt on every push. Being static, it can't do everything (no live view), but intervals,
-timeline zoom and flame graph filters work as they do against a running profiler.
+**[Try the demos](https://pcdv.github.io/jfr-web/)**: static copies of the two demos described
+below, a flak HTTP app and a TCP server, rebuilt on every push. The static version supports all
+the features of a recording (intervals, timeline zoom, flame graph filters, comparisons) except
+what needs a running application: live operations, recording new sessions, and the threads,
+exceptions and slow I/O of calls other than the slowest of each operation.
 
-To run the demo yourself:
+To run the demos yourself, with a first session recorded and some traffic:
 ```
-./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true --console=plain
+./gradlew demo -Pdemo.session=true -Pdemo.load=true --console=plain      # the flak HTTP app
+./gradlew tcpDemo -Pdemo.session=true -Pdemo.load=true --console=plain   # the TCP server
 ```
 
 ## Ways to run it
@@ -392,6 +395,7 @@ with no Java behind it. Handy to share a report, and it's how the demo site is b
 
 ```sh
 jfr-web export app.jfr other.jfr -o site/ --history logs/operations
+jfr-web export app.jfr -o site/ --title "Checkout service"   # its name in the top bar
 ./gradlew tcpDemo -Pdemo.export=site/       # the TCP demo: one session, 3 minutes of history
 ```
 

@@ -50,9 +50,10 @@ public final class Main {
     "      the operations and slowest operations of a period of an operation history,",
     "      the last hour by default; times like 2026-10-13T10:00 (local time) or",
     "      2026-10-13T08:00:00Z",
-    "  jfr-web export <file.jfr>... -o <dir> [--history <dir>] [--no-recordings]",
+    "  jfr-web export <file.jfr>... -o <dir> [--history <dir>] [--no-recordings] [--title <text>]",
     "      the web interface and the recordings as a static site, with the responses",
-    "      computed beforehand: served by any web server, with no Java behind it.",
+    "      computed beforehand: served by any web server, with no Java behind it;",
+    "      --title shows in its top bar in place of jfr-web.",
     "      A recording holds the environment variables and system properties of the",
     "      JVM unless turned off: --no-recordings leaves the .jfr files out",
     "  jfr-web open <file.jfr | dir>... [--history <dir>] [--port <port>] [--no-browser]",
@@ -239,6 +240,7 @@ public final class Main {
   private static int export(Path first, List<String> options) throws IOException {
     Path out;
     Path history;
+    String title;
     try {
       String v = takeValue(options, "-o");
       if (v == null)
@@ -246,6 +248,7 @@ public final class Main {
       out = Path.of(v);
       v = takeValue(options, "--history");
       history = v == null ? null : Path.of(v);
+      title = takeValue(options, "--title");
     }
     catch (IllegalArgumentException e) {
       System.err.println(e.getMessage());
@@ -261,7 +264,7 @@ public final class Main {
       }
     if (!checkNoneLeft(options))
       return 2;
-    StaticExport.export(recordings, history, out, withRecordings);
+    StaticExport.export(recordings, history, out, withRecordings, title);
     System.err.println("Wrote " + out + ": serve it with any web server");
     return 0;
   }

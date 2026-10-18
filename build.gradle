@@ -111,14 +111,16 @@ def uiSources = file('src/main/resources').absolutePath
 // a flak app to profile, and the profiler: see Demo. Ports, the recording of a
 // first session, background traffic, and the directory of the endpoint history
 // (build/demo-history by default): -Pdemo.port=, -Pprofiler.port=,
-// -Pdemo.session=true, -Pdemo.load=true, -Pdemo.history=
+// -Pdemo.session=true, -Pdemo.load=true, -Pdemo.history=, and
+// -Pdemo.export=<dir> to write a static site of a session and its history
 tasks.register('demo', JavaExec) {
   group = 'application'
   description = 'Runs a flak app with the profiler, to try the web interface.'
   classpath = sourceSets.test.runtimeClasspath
   mainClass = 'jfrweb.Demo'
   systemProperty 'jfrweb.resources', uiSources
-  ['demo.port', 'profiler.port', 'demo.session', 'demo.load', 'demo.history'].each { name ->
+  ['demo.port', 'profiler.port', 'demo.session', 'demo.load', 'demo.history', 'demo.export',
+   'demo.export.seconds'].each { name ->
     def value = providers.gradleProperty(name)
     if (value.present)
       systemProperty name, value.get()

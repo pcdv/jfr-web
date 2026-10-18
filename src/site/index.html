@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jfr-web demos</title>
+  <link rel="icon" href="data:,">
+  <!-- the root of the demo site: each demo is a static export of its own, see
+       .github/workflows/pages.yml -->
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f9;
+      --panel: #fff;
+      --fg: #1d2430;
+      --muted: #5b6575;
+      --border: #d9dee6;
+      --accent: #2f6fd6;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14171c;
+        --panel: #1c2027;
+        --fg: #e3e7ee;
+        --muted: #9aa4b2;
+        --border: #313844;
+        --accent: #6aa0ff;
+      }
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 32px 16px;
+    }
+    h1 {
+      font-size: 26px;
+      margin: 0 0 8px;
+    }
+    p {
+      color: var(--muted);
+    }
+    a {
+      color: var(--accent);
+    }
+    .demos {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin: 24px 0;
+    }
+    .demo {
+      display: block;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: inherit;
+      text-decoration: none;
+    }
+    .demo:hover {
+      border-color: var(--accent);
+    }
+    .demo h2 {
+      font-size: 17px;
+      margin: 0 0 6px;
+      color: var(--accent);
+    }
+    .demo p {
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>jfr-web</h1>
+    <p>A web interface for JFR recordings: a timeline, flame graphs and tables per operation of
+      the application (an HTTP request, a call of its own API), the history of its operations.
+      Each demo is a static export of an application run for a few minutes: a session recorded
+      for 10 seconds, and the history of the minutes after it.</p>
+    <div class="demos">
+      <a class="demo" href="http/">
+        <h2>An HTTP app</h2>
+        <p>A flak app, whose requests are operations by themselves: sorting, listing files,
+          writing and reading files.</p>
+      </a>
+      <a class="demo" href="tcp/">
+        <h2>A TCP server</h2>
+        <p>An order server with a line protocol, which tells its operations through the
+          jfrweb.ops API: synchronous quotes and reports, orders matched asynchronously by
+          another thread.</p>
+      </a>
+    </div>
+    <p>Source, documentation and releases: <a href="https://github.com/pcdv/jfr-web">github.com/pcdv/jfr-web</a></p>
+  </main>
+</body>
+</html>

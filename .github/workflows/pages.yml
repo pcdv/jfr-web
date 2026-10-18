@@ -1,7 +1,8 @@
 name: demo
 
-# the live demo on GitHub Pages: the TCP demo runs here for a few minutes, and
-# exports itself as a static site (see StaticExport)
+# the demos on GitHub Pages: the flak app and the TCP server each run here for a
+# few minutes, and export themselves as a static site (see StaticExport), under
+# a page that links both
 on:
   push:
     branches: [master]
@@ -19,7 +20,7 @@ concurrency:
 
 jobs:
   export:
-    name: Export the TCP demo
+    name: Export the demos
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -34,10 +35,16 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      # a session of 10 s, then 3 minutes of history; the recording leaves out
-      # the environment of the JVM
-      - name: Run and export the demo
-        run: ./gradlew tcpDemo -Pdemo.export=site
+      # each one: a session, then 3 minutes of history; the recording leaves
+      # out the environment of the JVM
+      - name: Run and export the HTTP demo
+        run: ./gradlew demo -Pdemo.export=$PWD/site/http
+
+      - name: Run and export the TCP demo
+        run: ./gradlew tcpDemo -Pdemo.export=$PWD/site/tcp
+
+      - name: Add the page that links them
+        run: cp src/site/index.html site/
 
       - name: Upload the site
         uses: actions/upload-pages-artifact@v5

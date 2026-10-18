@@ -272,7 +272,7 @@ public class TcpDemo {
       clients(port, 3, System.currentTimeMillis() + seconds * 1000L).join();
       // writes the interval in progress
       history.close();
-      StaticExport.export(List.of(recorded.getFile()), historyDir, Path.of(export), true);
+      StaticExport.export(List.of(recorded.getFile()), historyDir, Path.of(export), true, "Demo: a TCP server");
       System.out.println("Exported to " + Path.of(export).toAbsolutePath());
       System.exit(0);
     }

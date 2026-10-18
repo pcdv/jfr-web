@@ -70,14 +70,16 @@ public final class StaticExport {
 
   private final Path out;
   private final boolean withRecordings;
+  private final String title;
   private final HttpClient http = HttpClient.newHttpClient();
   private final Map<String, String> files = new TreeMap<>();
   private String base;
   private int count;
 
-  private StaticExport(Path out, boolean withRecordings) {
+  private StaticExport(Path out, boolean withRecordings, String title) {
     this.out = out;
     this.withRecordings = withRecordings;
+    this.title = title;
   }
 
   /**
@@ -85,10 +87,12 @@ public final class StaticExport {
    * @param history        the directory of an operation history, or null
    * @param out            where the site goes, created if needed
    * @param withRecordings whether the .jfr files can be downloaded from it
+   * @param title          what the top bar of its pages shows in place of
+   *                       jfr-web, or null
    */
-  public static void export(List<Path> recordings, Path history, Path out, boolean withRecordings)
+  public static void export(List<Path> recordings, Path history, Path out, boolean withRecordings, String title)
     throws IOException {
-    new StaticExport(out, withRecordings).run(recordings, history);
+    new StaticExport(out, withRecordings, title).run(recordings, history);
   }
 
   private void run(List<Path> recordings, Path history) throws IOException {
@@ -113,6 +117,7 @@ public final class StaticExport {
 
       Map<String, Object> manifest = new LinkedHashMap<>();
       manifest.put("exported", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+      manifest.put("title", title);
       manifest.put("history", history == null ? null : history(history));
       manifest.put("files", files);
       Files.writeString(out.resolve("static.json"), Json.write(manifest), StandardCharsets.UTF_8);

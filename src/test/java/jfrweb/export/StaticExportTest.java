@@ -62,7 +62,7 @@ public class StaticExportTest {
     }
 
     Path out = dir.resolve("site");
-    StaticExport.export(List.of(jfr), historyDir, out, false);
+    StaticExport.export(List.of(jfr), historyDir, out, false, "Export test");
 
     Assertions.assertTrue(Files.exists(out.resolve("index.html")));
     Assertions.assertTrue(Files.exists(out.resolve("js/api.js")));
@@ -70,6 +70,7 @@ public class StaticExportTest {
 
     Map<String, Object> manifest = (Map<String, Object>) Json.parse(Files.readString(out.resolve("static.json")));
     Map<String, Object> files = (Map<String, Object>) manifest.get("files");
+    Assertions.assertEquals("Export test", manifest.get("title"));
     for (String key : new String[]{"api/sessions", "api/sessions/1/report", "api/sessions/1/timeline",
                                    "api/sessions/1/profile"})
       Assertions.assertTrue(files.containsKey(key), key + " in " + files.keySet());
