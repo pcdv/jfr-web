@@ -181,3 +181,22 @@ test {
   if (keep.present)
     systemProperty 'jfrweb.keepRecording', keep.get()
 }
+
+// the tests of the interface's modules, with Node's own runner and no
+// dependency (Node 21 or later, for the glob); skipped where Node is missing
+tasks.register('jsTest', Exec) {
+  group = 'verification'
+  description = 'Runs the tests of the JS modules with Node.'
+  commandLine 'node', '--test', 'src/test/js/**/*.test.js'
+  inputs.dir('src/main/resources/jfrweb/ui/js')
+  inputs.dir('src/test/js')
+  onlyIf('Node is installed') {
+    System.getenv('PATH').split(File.pathSeparator).any { dir ->
+      new File(dir, 'node').isFile() || new File(dir, 'node.exe').isFile()
+    }
+  }
+}
+
+tasks.named('check') {
+  dependsOn 'jsTest'
+}

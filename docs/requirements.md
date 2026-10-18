@@ -248,3 +248,5 @@ operations, also their count and, in auto mode, its trigger.
 - **The web interface is plain JavaScript, with no build step**: ES modules served from the
   jar, one per view or component rather than one big page, type-checked from their JSDoc
   annotations (`jsconfig.json`, `// @ts-check`). Moving to TypeScript stays a mechanical step.
+  What runs without a browser is tested with Node's own runner (`src/test/js`, `./gradlew
+  jsTest`, part of `check` where Node is installed), with no dependency either.
