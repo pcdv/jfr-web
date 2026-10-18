@@ -4,6 +4,7 @@
  * come, and stop once they are over.
  */
 import * as api from '../api.js';
+import {tell} from '../lib/dialog.js';
 import {h, replace} from '../lib/dom.js';
 import {readSetting, writeSetting} from '../lib/settings.js';
 
@@ -124,7 +125,7 @@ async function act(action, refresh) {
     await action();
   }
   catch (e) {
-    alert(e instanceof Error ? e.message : String(e));
+    tell(e instanceof Error ? e.message : String(e));
   }
   refresh();
 }

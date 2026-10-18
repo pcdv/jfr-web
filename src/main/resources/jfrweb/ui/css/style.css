@@ -212,6 +212,40 @@ button.small {
   font-size: 12px;
 }
 
+/* in place of prompt() and alert(): see lib/dialog.js */
+dialog.dialog {
+  min-width: 24em;
+  max-width: 40em;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+dialog.dialog::backdrop {
+  background: rgb(0 0 0 / 0.3);
+}
+
+dialog.dialog p {
+  margin: 0;
+}
+
+dialog.dialog input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  font: inherit;
+}
+
+.dialog-buttons {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .armed-line {
   margin: 0 0 12px;
 }

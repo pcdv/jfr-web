@@ -3,19 +3,8 @@
  * The name the user gives a session, to find it again among the others.
  */
 import * as api from '../api.js';
+import {ask, tell} from '../lib/dialog.js';
 import {h} from '../lib/dom.js';
-
-/**
- * Asks for a name.
- *
- * @param {string} question
- * @param {string} [current]
- * @returns {string | null} the name, empty for none; null if cancelled
- */
-export function askName(question, current = '') {
-  const name = prompt(question, current);
-  return name === null ? null : name.trim();
-}
 
 /**
  * A button that renames a session.
@@ -28,14 +17,14 @@ export function renameButton(s, onRenamed) {
     class: 'link',
     title: 'Name this session, to find it again',
     onclick: async () => {
-      const name = askName(`Name of session ${s.id}, empty for none:`, s.name ?? '');
+      const name = await ask(`Name of session ${s.id}, empty for none:`, s.name ?? '');
       if (name === null)
         return;
       try {
-        onRenamed(await api.renameSession(s.id, name));
+        onRenamed(await api.renameSession(s.id, name.trim()));
       }
       catch (e) {
-        alert(e instanceof Error ? e.message : String(e));
+        tell(e instanceof Error ? e.message : String(e));
       }
     },
   }, s.name ? 'Rename' : 'Name');

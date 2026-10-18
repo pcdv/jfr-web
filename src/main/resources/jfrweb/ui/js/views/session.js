@@ -4,6 +4,7 @@
  * flame graph.
  */
 import * as api from '../api.js';
+import {tell} from '../lib/dialog.js';
 import {h, replace} from '../lib/dom.js';
 import {errorBox} from '../components/errorBox.js';
 import * as fmt from '../format.js';
@@ -139,7 +140,7 @@ function recordingNow(id, refresh) {
         await api.stopSession(id);
       }
       catch (e) {
-        alert(e instanceof Error ? e.message : String(e));
+        tell(e instanceof Error ? e.message : String(e));
         stop.disabled = false;
       }
       refresh();

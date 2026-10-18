@@ -4,6 +4,7 @@
  * whether a session records or not; a session can be armed on any of them.
  */
 import * as api from '../api.js';
+import {tell} from '../lib/dialog.js';
 import {h, replace} from '../lib/dom.js';
 import {errorBox} from '../components/errorBox.js';
 import {readArming} from '../components/auto.js';
@@ -74,7 +75,7 @@ export function renderLive(root, params, signal) {
       await action();
     }
     catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
+      tell(e instanceof Error ? e.message : String(e));
     }
     refresh();
   }

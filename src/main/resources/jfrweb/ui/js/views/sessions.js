@@ -3,6 +3,7 @@
  * The sessions: start one, stop the one recording, open a report.
  */
 import * as api from '../api.js';
+import {tell} from '../lib/dialog.js';
 import {h, replace} from '../lib/dom.js';
 import {errorBox} from '../components/errorBox.js';
 import * as fmt from '../format.js';
@@ -135,7 +136,7 @@ async function act(action, refresh) {
     await action();
   }
   catch (e) {
-    alert(e instanceof Error ? e.message : String(e));
+    tell(e instanceof Error ? e.message : String(e));
   }
   refresh();
 }

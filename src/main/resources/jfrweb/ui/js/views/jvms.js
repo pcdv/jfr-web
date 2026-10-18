@@ -5,6 +5,7 @@
  */
 import * as api from '../api.js';
 import * as fmt from '../format.js';
+import {tell} from '../lib/dialog.js';
 import {h, replace} from '../lib/dom.js';
 import {errorBox} from '../components/errorBox.js';
 
@@ -79,7 +80,7 @@ async function detach() {
     await api.detachJvm();
   }
   catch (err) {
-    alert(err instanceof Error ? err.message : String(err));
+    tell(err instanceof Error ? err.message : String(err));
   }
   refresh();
 }
@@ -101,7 +102,7 @@ async function attach(j, e) {
   catch (err) {
     button.disabled = false;
     button.textContent = 'Connect';
-    alert(err instanceof Error ? err.message : String(err));
+    tell(err instanceof Error ? err.message : String(err));
   }
 }
 

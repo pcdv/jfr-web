@@ -4,6 +4,7 @@
  * attached, or those to attach to.
  */
 import * as api from '../api.js';
+import {tell} from '../lib/dialog.js';
 import {h, replace} from '../lib/dom.js';
 
 /** How often the JVM attached is checked, in ms: it may end. */
@@ -42,7 +43,7 @@ export async function showTarget(after) {
         draw(t);
     }
     catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
+      tell(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -53,7 +54,7 @@ export async function showTarget(after) {
       location.reload();
     }
     catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
+      tell(e instanceof Error ? e.message : String(e));
     }
   }
 
