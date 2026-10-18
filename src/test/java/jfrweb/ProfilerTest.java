@@ -184,11 +184,12 @@ public class ProfilerTest {
     Assertions.assertTrue(index.body().contains("<script type=\"module\" src=\"js/main.js\">"));
 
     // browsers refuse a module served with another type
-    for (String module : new String[]{"main", "api", "dom", "format", "views/sessions", "views/session",
+    for (String module : new String[]{"main", "api", "format", "views/sessions", "views/session",
                                       "views/live", "components/operations", "components/flame",
                                       "components/timeline", "components/slowest", "components/auto",
                                       "components/section", "views/history",
-                                      "components/sessionTimeline", "settings"}) {
+                                      "components/sessionTimeline", "lib/dom", "lib/settings",
+                                      "lib/dialog", "lib/router"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assertions.assertEquals(200, js.statusCode(), module);
       Assertions.assertEquals("application/javascript", js.headers().firstValue("Content-Type").orElse(null), module);
