@@ -7,6 +7,7 @@ import {h, replace} from '../lib/dom.js';
 import {errorBox} from './errorBox.js';
 import * as fmt from '../format.js';
 import {section} from './section.js';
+import {operationRows} from '../profile/operations.js';
 
 /**
  * @typedef {object} OperationsPanel
@@ -21,10 +22,12 @@ import {section} from './section.js';
  *
  * @param {number} sessionId
  * @param {api.OperationRow[]} rows those of the whole session
+ * @param {Promise<import('../profile/profile.js').Profile> | null} profile the session's,
+ *        which gives the rows of an interval with no request; null in a static export
  * @param {(name: string) => void} onSelect called when a row is clicked
  * @returns {OperationsPanel}
  */
-export function operationsPanel(sessionId, rows, onSelect) {
+export function operationsPanel(sessionId, rows, profile, onSelect) {
   const title = h('span', null, 'Operations');
   const body = h('div', null, operationsTable(rows, onSelect));
 
@@ -34,7 +37,8 @@ export function operationsPanel(sessionId, rows, onSelect) {
     replace(title, 'Operations', label ? h('span', {class: 'interval'}, ` · ${label}`) : null);
     try {
       replace(body, label
-        ? operationsTable(await api.listOperations(sessionId, interval), onSelect, 'No operation in flight in this interval.')
+        ? operationsTable(profile ? operationRows(await profile, interval) : await api.listOperations(sessionId, interval),
+                          onSelect, 'No operation in flight in this interval.')
         : operationsTable(rows, onSelect));
     }
     catch (e) {

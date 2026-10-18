@@ -319,11 +319,30 @@ public class AnalysisTest {
     for (String column : List.of("stack", "thread", "operation", "kind"))
       Assertions.assertEquals(((List<?>) samples.get("time")).size(), ((List<?>) samples.get(column)).size(), column);
 
-    // an operation is known by its index in the analysis, as in the API
-    List<?> operations = (List<?>) p.get("operations");
-    Assertions.assertEquals(analysis.getOperations().size(), operations.size());
-    for (int i = 0; i < operations.size(); i++)
-      Assertions.assertEquals(analysis.getOperations().get(i).name(), strings.get((int) (long) (Long) operations.get(i)));
+    // an operation is known by its index in the analysis, as in the API; its
+    // times in ns since the start of the recording, each start as a difference
+    Map<?, ?> operations = (Map<?, ?>) p.get("operations");
+    List<RecordedOperation> ops = analysis.getOperations();
+    long recordingStart = Analysis.nanos(analysis.getInfo().getStart());
+    long start = 0;
+    for (int i = 0; i < ops.size(); i++) {
+      RecordedOperation op = ops.get(i);
+      Assertions.assertEquals(op.name(), strings.get(column(operations, "name", i)));
+      start += (Long) ((List<?>) operations.get("start")).get(i);
+      Assertions.assertEquals(op.startNanos() - recordingStart, start);
+      Assertions.assertEquals(op.durationNanos(), (Long) ((List<?>) operations.get("duration")).get(i));
+      Assertions.assertEquals(op.threadName(), strings.get(column(operations, "thread", i)));
+      Assertions.assertEquals(op.detail(), column(operations, "detail", i) < 0 ? null : strings.get(column(operations, "detail", i)));
+      Assertions.assertEquals(op.status(), column(operations, "status", i));
+      Assertions.assertEquals(op.failed() ? 1 : 0, column(operations, "failed", i));
+      Assertions.assertEquals(op.error(), column(operations, "error", i) < 0 ? null : strings.get(column(operations, "error", i)));
+      Assertions.assertEquals(op.bytesOut(), (Long) ((List<?>) operations.get("bytesOut")).get(i));
+    }
+    Assertions.assertTrue(ops.stream().anyMatch(RecordedOperation::failed), "a failure to compare");
+  }
+
+  private static int column(Map<?, ?> columns, String name, int i) {
+    return (int) (long) (Long) ((List<?>) columns.get(name)).get(i);
   }
 
   @SuppressWarnings("unchecked")
@@ -365,7 +384,7 @@ public class AnalysisTest {
     }
     List<?> weights = (List<?>) p.get("weights");
     List<?> threads = (List<?>) p.get("threads");
-    List<?> operations = (List<?>) p.get("operations");
+    List<?> operations = (List<?>) ((Map<?, ?>) p.get("operations")).get("name");
     Map<?, ?> samples = (Map<?, ?>) p.get("samples");
 
     Map<String, Long> collapsed = new TreeMap<>();

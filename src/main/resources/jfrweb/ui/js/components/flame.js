@@ -12,8 +12,10 @@ import * as fmt from '../format.js';
 import {h, replace} from '../lib/dom.js';
 import {errorBox} from './errorBox.js';
 import {label} from './slowest.js';
-import {decode, tree} from '../flame/profile.js';
+import {tree} from '../profile/profile.js';
 import {flameGraph} from '../flame/render.js';
+
+/** @typedef {import('../profile/profile.js').Profile} Profile */
 
 /**
  * @typedef {object} FlamePanel
@@ -28,12 +30,13 @@ import {flameGraph} from '../flame/render.js';
 
 /**
  * @param {api.Report} report
+ * @param {Promise<Profile> | null} profile the session's, null in a static export
  * @param {AbortSignal} signal the view's
  * @param {(op: api.InstanceRow | null) => void} [onInstance] told of the operation shown
  *        alone, and with null once the flame graph is back to the filters
  * @returns {FlamePanel}
  */
-export function flamePanel(report, signal, onInstance = () => {}) {
+export function flamePanel(report, profile, signal, onInstance = () => {}) {
   const id = report.session.id;
   const seconds = Math.ceil(report.session.duration / 1000);
 
@@ -61,14 +64,13 @@ export function flamePanel(report, signal, onInstance = () => {}) {
   const instanceChip = h('span', {class: 'chip', hidden: true});
 
   // a static export: the pages the server drew
-  const frame = api.isStatic() ? h('iframe', {class: 'flame', title: 'Flame graph'}) : null;
-  const graph = frame ? null : flameGraph(signal);
+  const frame = profile ? null : h('iframe', {class: 'flame', title: 'Flame graph'});
+  const graph = profile ? flameGraph(signal) : null;
   const caption = h('div', {class: 'flame-caption'}, 'Loading the samples…');
   const serverPage = h('a', {target: '_blank', rel: 'noopener',
                              title: "The same flame graph, drawn by the server with async-profiler's converter"},
                        'Drawn by the server');
   const body = h('div', null, frame ?? [h('div', {class: 'flame-caption-bar'}, caption, serverPage), graph?.element]);
-  const profile = frame ? null : api.getProfile(id).then(decode);
 
   /** @returns {api.FlameFilter} */
   function filter() {

@@ -206,7 +206,7 @@ Plan and format in [docs/flame-graphs.md](docs/flame-graphs.md).
 - [x] Profile format and endpoint
 - [x] Renderer at parity with async-profiler's page (zoom, search, tooltips, colors), in the
   interface's look
-- [ ] Operations table and slowest list of an interval computed by the page, from the operations
+- [x] Operations table and slowest list of an interval computed by the page, from the operations
   added to the profile
 - [ ] Static export, `jfr-web flame` and `--collapsed` on it; `jfr-converter` removed
 - [ ] Timeline and flame graph linked; hot methods; method view; frames hidden by pattern; diff

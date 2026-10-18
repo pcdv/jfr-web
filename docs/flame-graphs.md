@@ -49,7 +49,9 @@ counts from 0.
  "samples": {"time": [12, 0, 5, "..."], "stack": [3, 7, -1, "..."], "thread": [0, 0, 1, "..."],
              "operation": [4, 4, -1, "..."], "kind": [0, 1, 0, "..."]},
  "threads": [[12, 31], "..."],
- "operations": [1, 1, "..."]}
+ "operations": {"name": [1, 1, "..."], "start": [5000000, 1200000, "..."], "duration": [20000000, "..."],
+                "thread": [12, "..."], "detail": [2, "..."], "status": [200, "..."], "failed": [0, "..."],
+                "error": [-1, "..."], "async": [0, "..."], "bytesIn": [0, "..."], "bytesOut": [512, "..."]}}
 ```
 
 | Field | Content |
@@ -60,7 +62,7 @@ counts from 0.
 | `stacks` | the tree of stacks, their common beginnings shared, written depth first as pairs `depth, frame`: a node's parent is the last node written one level up, and a root has depth 0. A frame is `string << 3 \| type` |
 | `samples` | columns of equal length, one entry per sample, sorted by time: `time` in ms since the start of the recording, each the difference with the previous one; `stack`, the node of the top frame, -1 when JFR kept no stack; `thread`, an index in `threads`; `operation`, an index in `operations`, -1 outside any; `kind`, 0 for Java, 1 for native |
 | `threads` | `[name, thread id]` for each thread sampled, the name an index in `strings` |
-| `operations` | the name of each operation, an index in `strings`; in the order of `Analysis.getOperations()`, so that an operation's index is the id the API already gives it |
+| `operations` | columns of equal length, one entry per operation, in the order of `Analysis.getOperations()` so that an operation's index is the id the API already gives it: `name`, an index in `strings`; `start` in ns since the start of the recording, each the difference with the previous one (negative when an operation started before the previous one); `duration` in ns; `thread`, the name of the thread that ran it or ended an asynchronous one, an index in `strings`; `detail` and `error`, indexes in `strings`, -1 for none; `status`, the HTTP status of a request, 0 otherwise; `failed` and `async`, 0 or 1; `bytesIn` and `bytesOut`. Times in ns, as the server counts them: the page's totals and percentiles are the server's, to the hundredth of a millisecond |
 
 Frame types: 0 compiled, 1 inlined, 2 interpreted, 3 native method, 4 synthetic (`(truncated)`,
 the bottom of a stack JFR cut). Today's pages show native methods as compiled code; the format
@@ -88,12 +90,14 @@ today. Samples sorted by time make an interval two binary searches.
 
 ## Client
 
-Plain modules like the rest of the interface, in `js/flame/`:
+Plain modules like the rest of the interface:
 
-- `profile.js`: decodes a document (strings, node parents and depths) and builds the tree of a
-  filter: for each sample in the interval that the filter keeps, its weight added along its path,
-  from the root or, reversed, from the top frame. No DOM: testable on its own.
-- `render.js`: draws a tree on a canvas: layout, zoom on a click with the path back, tooltip
+- `profile/profile.js`: decodes a document (strings, node parents and depths, operations) and
+  builds the tree of a filter: for each sample in the interval that the filter keeps, its weight
+  added along its path, from the root or, reversed, from the top frame. No DOM: tested with Node.
+- `profile/operations.js` (phase 2b): the operations table and the slowest list of an interval
+  or a name, as the server computes them. No DOM either.
+- `flame/render.js`: draws a tree on a canvas: layout, zoom on a click with the path back, tooltip
   (name, total and self time in ms, share of the view and of the whole), search by regex with
   the share matched, colors by frame type from the CSS tokens, sharp on high-density screens,
   redrawn on resize.
@@ -169,6 +173,16 @@ Both checked against the server's answers on the same recordings, as the flame g
 zoomed timeline's finer buckets may follow from the same data; the details of one operation
 (exceptions, slow accesses, threads) stay a request, which a static export answers for the
 operations it exported.
+
+Built on 2026-10-18, in `js/profile/` with the decoding (`profile.js`, `operations.js`); the
+session view decodes the profile once for its three panels. On 11 recordings (two of the TCP
+demo, seven sessions and two snapshots of an application server), 923 answers of
+`/operations` and `/instances` compared with the page's, over intervals across each session
+(bounds on an operation's own start and end included), with and without a name, the slowest
+lists whole (up to 14,078 operations): none differs. A timeline selection makes no request
+any more. The operations weigh about 48 bytes each in JSON, more than the samples' 14: the
+demo's busiest session, 14,078 short operations, goes from 148 KB to 295 KB gzipped; an
+application server's sessions take a few KB more.
 
 **3. Switch.** The static export writes one profile per session instead of its flame graph pages
 (total size compared before and after); `jfr-web flame` writes our page; `--collapsed` is our

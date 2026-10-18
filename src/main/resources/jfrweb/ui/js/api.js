@@ -400,7 +400,7 @@ export function getReport(id) {
 
 /**
  * @param {number} id
- * @returns {Promise<any>} the samples of the session, for flame/profile.js to decode
+ * @returns {Promise<any>} the samples of the session, for profile/profile.js to decode
  */
 export function getProfile(id) {
   return call(`api/sessions/${id}/profile`);

@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntToLongFunction;
 
 import jdk.jfr.consumer.RecordedFrame;
 import jdk.jfr.consumer.RecordedStackTrace;
@@ -57,8 +58,12 @@ public final class ProfileWriter {
   /** Name and id of each thread. */
   private final List<long[]> threadList = new ArrayList<>();
 
-  /** The name of each operation, in the order of the analysis. */
-  private int[] operationNames;
+  /** The operations, in the order of the analysis, and their strings: -1 for none. */
+  private List<RecordedOperation> ops;
+  private int[] operationNames, operationThreads, operationDetails, operationErrors;
+
+  /** The start of the recording, which times count from. */
+  private long start;
 
   private final long[] weights = new long[2];
 
@@ -75,14 +80,21 @@ public final class ProfileWriter {
 
   private void read(Analysis analysis) throws IOException {
     // an operation is known by its index, the id the API gives it
-    List<RecordedOperation> ops = analysis.getOperations();
+    ops = analysis.getOperations();
     Map<RecordedOperation, Integer> operations = new IdentityHashMap<>();
     operationNames = new int[ops.size()];
+    operationThreads = new int[ops.size()];
+    operationDetails = new int[ops.size()];
+    operationErrors = new int[ops.size()];
     for (int i = 0; i < ops.size(); i++) {
-      operations.put(ops.get(i), i);
-      operationNames[i] = name(ops.get(i).name());
+      RecordedOperation op = ops.get(i);
+      operations.put(op, i);
+      operationNames[i] = name(op.name());
+      operationThreads[i] = name(String.valueOf(op.threadName()));
+      operationDetails[i] = op.detail() == null ? -1 : name(op.detail());
+      operationErrors[i] = op.error() == null ? -1 : name(op.error());
     }
-    long start = Analysis.nanos(analysis.getInfo().getStart());
+    start = Analysis.nanos(analysis.getInfo().getStart());
     int truncated = frame(FlameGraphs.TRUNCATED, SYNTHETIC);
 
     analysis.visitSamples((sample, thread, operation, weight) -> {
@@ -253,12 +265,43 @@ public final class ProfileWriter {
       separate(out, i);
       out.write("[" + rank[(int) t[0]] + "," + t[1] + "]");
     }
-    out.write("],\"operations\":[");
-    for (int i = 0; i < operationNames.length; i++) {
-      separate(out, i);
-      out.write(Integer.toString(rank[operationNames[i]]));
+    // the operations: their times in ns, for the same durations and totals
+    // as the server's; each start as the difference with the previous one
+    int operations = ops.size();
+    long[] starts = new long[operations];
+    long previousStart = 0;
+    for (int i = 0; i < operations; i++) {
+      long t = ops.get(i).startNanos() - start;
+      starts[i] = t - previousStart;
+      previousStart = t;
     }
-    out.write("]}");
+    out.write("],\"operations\":{");
+    writeColumn(out, "name", operations, i -> rank[operationNames[i]], false);
+    writeColumn(out, "start", operations, i -> starts[i], true);
+    writeColumn(out, "duration", operations, i -> ops.get(i).durationNanos(), true);
+    writeColumn(out, "thread", operations, i -> rank[operationThreads[i]], true);
+    writeColumn(out, "detail", operations, i -> operationDetails[i] < 0 ? -1 : rank[operationDetails[i]], true);
+    writeColumn(out, "status", operations, i -> ops.get(i).status(), true);
+    writeColumn(out, "failed", operations, i -> ops.get(i).failed() ? 1 : 0, true);
+    writeColumn(out, "error", operations, i -> operationErrors[i] < 0 ? -1 : rank[operationErrors[i]], true);
+    writeColumn(out, "async", operations, i -> ops.get(i).async() ? 1 : 0, true);
+    writeColumn(out, "bytesIn", operations, i -> ops.get(i).bytesIn(), true);
+    writeColumn(out, "bytesOut", operations, i -> ops.get(i).bytesOut(), true);
+    out.write("]}}");
+  }
+
+  /**
+   * Writes {@code "name":[v0,v1...}, the values of 0 to n - 1.
+   *
+   * @param after whether a column comes before, closed here
+   */
+  private static void writeColumn(Writer out, String name, int n, IntToLongFunction value, boolean after)
+    throws IOException {
+    out.write((after ? "]," : "") + "\"" + name + "\":[");
+    for (int i = 0; i < n; i++) {
+      separate(out, i);
+      out.write(Long.toString(value.applyAsLong(i)));
+    }
   }
 
   /**

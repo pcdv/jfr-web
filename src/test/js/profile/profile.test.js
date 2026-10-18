@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {decode, tree, mainType, COMPILED, INTERPRETED, SYNTHETIC, NO_OPERATION}
-  from '../../../main/resources/jfrweb/ui/js/flame/profile.js';
+  from '../../../main/resources/jfrweb/ui/js/profile/profile.js';
 
 // strings, sorted: 0 "(truncated)", 1 "GET /a", 2 "GET /b", 3 "Main.run",
 // 4 "Main.work", 5 "main", 6 "pool-1", 7 "x.Sort.sort"
@@ -42,7 +42,9 @@ const doc = {
     kind: [0, 0, 0, 1, 0, 0],
   },
   threads: [[5, 1], [6, 22]],
-  operations: [1, 2],
+  // the columns operations.test.js looks at, of no interest here
+  operations: {name: [1, 2], start: [0, 0], duration: [0, 0], thread: [5, 6], detail: [-1, -1], status: [0, 0],
+               failed: [0, 0], error: [-1, -1], async: [0, 0], bytesIn: [0, 0], bytesOut: [0, 0]},
 };
 
 const p = decode(doc);

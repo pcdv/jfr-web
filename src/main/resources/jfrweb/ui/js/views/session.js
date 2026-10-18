@@ -14,6 +14,7 @@ import {section} from '../components/section.js';
 import {renameButton} from '../components/sessionName.js';
 import {sessionTimeline} from '../components/sessionTimeline.js';
 import {slowestPanel} from '../components/slowest.js';
+import {decode} from '../profile/profile.js';
 
 /** How often a session still recording is checked, in ms. */
 const POLL = 1000;
@@ -81,6 +82,11 @@ export function renderSession(root, params, signal) {
   signal.addEventListener('abort', () => clearTimeout(timer));
 
   function showReport() {
+    // the samples and operations, for the flame graph and the tables of an
+    // interval; a static export has the server's answers instead
+    const profile = api.isStatic() ? null : api.getProfile(id).then(decode);
+    // each panel tells its own failure
+    profile?.catch(() => {});
     Promise.all([api.getReport(id), api.getTimeline(id)]).then(
       ([report, timeline]) => {
         if (signal.aborted)
@@ -102,9 +108,9 @@ export function renderSession(root, params, signal) {
         const timelinePanel = sessionTimeline(id, timeline, showInterval);
         // the operation picked among the slowest is outlined on the timeline
         // while its flame graph shows
-        const flame = flamePanel(report, signal, op => timelinePanel.mark(op));
-        const slowest = slowestPanel(id, flame.showInstance);
-        const operations = operationsPanel(id, report.operations, n => {
+        const flame = flamePanel(report, profile, signal, op => timelinePanel.mark(op));
+        const slowest = slowestPanel(id, profile, flame.showInstance);
+        const operations = operationsPanel(id, report.operations, profile, n => {
           slowest.showName(n);
           flame.showName(n);
         });

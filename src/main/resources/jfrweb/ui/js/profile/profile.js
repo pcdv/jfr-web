@@ -1,9 +1,11 @@
 // @ts-check
 /**
  * A session's profile, as /api/sessions/:id/profile sends it (see
- * docs/flame-graphs.md): decoded once, then summed into the tree of any
- * filter, with no request. The filters are those of the server's flame
- * graphs (FlameGraphs.write), with the same results.
+ * docs/flame-graphs.md): its samples and its operations, decoded once. The
+ * samples are summed here into the flame graph of any filter, with no
+ * request; the filters are those of the server's flame graphs
+ * (FlameGraphs.write), with the same results. The operations are summed in
+ * operations.js.
  *
  * No DOM: tested with Node.
  */
@@ -26,7 +28,27 @@ export const NO_OPERATION = '(no operation)';
  * @property {Uint8Array} kind of each sample: 0 Java, 1 native
  * @property {number[]} weights the ms a Java and a native sample stand for
  * @property {{name: string, id: number}[]} threads
- * @property {Int32Array} operations the name of each, an index in strings
+ * @property {Operations} operations in the order of the recording: an operation's index is
+ *           the id the API gives it
+ */
+
+/**
+ * The operations of a profile, a column per field. Times in ns, as the server
+ * counts them; strings as indexes in the profile's strings, -1 for none.
+ *
+ * @typedef {object} Operations
+ * @property {number} count
+ * @property {Int32Array} name
+ * @property {Float64Array} start since the start of the recording
+ * @property {Float64Array} duration
+ * @property {Int32Array} thread that ran it, or that ended an asynchronous one
+ * @property {Int32Array} detail
+ * @property {Int32Array} status the HTTP status of a request, 0 for other operations
+ * @property {Uint8Array} failed
+ * @property {Int32Array} error
+ * @property {Uint8Array} async
+ * @property {Float64Array} bytesIn
+ * @property {Float64Array} bytesOut
  */
 
 /**
@@ -71,7 +93,32 @@ export function decode(doc) {
     kind: Uint8Array.from(s.kind),
     weights: doc.weights,
     threads: doc.threads.map((/** @type {number[]} */ [name, id]) => ({name: strings[name], id})),
-    operations: Int32Array.from(doc.operations),
+    operations: operations(doc.operations),
+  };
+}
+
+/**
+ * @param {any} o the operations of the document
+ * @returns {Operations}
+ */
+function operations(o) {
+  const start = new Float64Array(o.start.length);
+  let t = 0;
+  for (let i = 0; i < start.length; i++)
+    start[i] = t += o.start[i];
+  return {
+    count: start.length,
+    name: Int32Array.from(o.name),
+    start,
+    duration: Float64Array.from(o.duration),
+    thread: Int32Array.from(o.thread),
+    detail: Int32Array.from(o.detail),
+    status: Int32Array.from(o.status),
+    failed: Uint8Array.from(o.failed),
+    error: Int32Array.from(o.error),
+    async: Uint8Array.from(o.async),
+    bytesIn: Float64Array.from(o.bytesIn),
+    bytesOut: Float64Array.from(o.bytesOut),
   };
 }
 
@@ -118,7 +165,7 @@ export function tree(p, filter) {
     if (one !== undefined) {
       if (op !== one)
         continue;
-      path.push(p.strings[p.operations[op]]);
+      path.push(p.strings[p.operations.name[op]]);
     }
     else {
       if (filter.java && p.kind[i] !== 0)
@@ -126,7 +173,7 @@ export function tree(p, filter) {
       if (filter.thread && p.threads[p.thread[i]].name !== filter.thread)
         continue;
       if (op >= 0) {
-        const name = p.strings[p.operations[op]];
+        const name = p.strings[p.operations.name[op]];
         if (filter.name && name !== filter.name)
           continue;
         if (!filter.merged)

@@ -10,6 +10,7 @@ import {errorBox} from './errorBox.js';
 import * as fmt from '../format.js';
 import {outcomeCell} from './operations.js';
 import {section} from './section.js';
+import {instanceRows} from '../profile/operations.js';
 
 const LIMIT = 20;
 
@@ -28,10 +29,13 @@ const FEW_SAMPLES = 10;
 
 /**
  * @param {number} sessionId
+ * @param {Promise<import('../profile/profile.js').Profile> | null} profile the session's,
+ *        which gives the slowest of a name or an interval with no request; null in a
+ *        static export
  * @param {(op: api.InstanceRow) => void} onPick called when an operation is picked
  * @returns {SlowestPanel}
  */
-export function slowestPanel(sessionId, onPick) {
+export function slowestPanel(sessionId, profile, onPick) {
   const title = h('span');
   const list = h('div');
   const detail = h('div');
@@ -47,7 +51,9 @@ export function slowestPanel(sessionId, onPick) {
       label ? h('span', {class: 'interval'}, ` · ${label}`) : null);
     replace(detail);
     try {
-      const rows = await api.listInstances(sessionId, name, interval, LIMIT);
+      const rows = profile
+        ? instanceRows(await profile, name, interval, LIMIT)
+        : await api.listInstances(sessionId, name, interval, LIMIT);
       replace(list, table(rows, pick, label ? 'No operation in flight in this interval.' : 'No operation recorded.'));
     }
     catch (e) {

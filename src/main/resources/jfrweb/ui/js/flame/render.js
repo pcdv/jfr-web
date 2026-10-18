@@ -11,9 +11,9 @@
  */
 import {h, replace} from '../lib/dom.js';
 import * as fmt from '../format.js';
-import {mainType, COMPILED, INLINED, INTERPRETED, NATIVE, SYNTHETIC} from './profile.js';
+import {mainType, COMPILED, INLINED, INTERPRETED, NATIVE, SYNTHETIC} from '../profile/profile.js';
 
-/** @typedef {import('./profile.js').Frame} Frame */
+/** @typedef {import('../profile/profile.js').Frame} Frame */
 
 /** Height of a level, in CSS pixels. */
 const ROW = 18;
