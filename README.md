@@ -154,8 +154,14 @@ that operation alone. Below it: the operations by total time, the slowest calls,
 by operation, thread, interval or single call. **Merged** puts every operation kept in one tree,
 instead of one per name, for what costs across all of them; **hot methods** turns the stacks upside
 down, the methods that were running at the root and their callers above; **Java only** leaves out
-the samples taken in native methods, for something closer to CPU time. A single call also lists the exceptions it created
-and its slow file and socket accesses. You can name sessions, download the `.jfr` for JDK Mission
+the samples taken in native methods, for something closer to CPU time. All of it is computed in the
+page from the session's samples, so filters change and combine at once. Hovering or clicking a
+frame shows on the timeline when its samples were taken; a table of the methods by self or total
+time finds them in the graph; a right-click (or that table) shows one method's callers and callees,
+wherever it is called from; frames matching a pattern (reflection, proxies) can be hidden, their
+time given to their callers; and **Compare…** keeps a selection as a baseline, then colors the
+graph of another interval or operation by what took more or less of the time. A single call also
+lists the exceptions it created and its slow file and socket accesses. You can name sessions, download the `.jfr` for JDK Mission
 Control, and if you give the profiler a `directory(...)`, it lists them again after a restart.
 
 ![Report of a session: how it was recorded, timeline](docs/screenshots/report.png)

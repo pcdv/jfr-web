@@ -265,6 +265,7 @@ public class AnalysisTest {
     Assertions.assertFalse(Pattern.compile("^\\s*(import|export)\\b", Pattern.MULTILINE).matcher(script).find(), script);
     Assertions.assertTrue(script.indexOf("modules['js/lib/dom.js'] =") < script.indexOf("modules['js/components/flame.js'] ="));
     Assertions.assertTrue(script.contains("modules['js/flamePage.js'] ="));
+    Assertions.assertFalse(script.contains("modules['js/api.js']"), "nothing that asks a server, opened from the disk");
 
     // of the operations, those of the one kept only; the samples outside
     // operations stay, which the page can add

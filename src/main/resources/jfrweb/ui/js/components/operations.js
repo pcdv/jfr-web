@@ -8,6 +8,7 @@ import {errorBox} from './errorBox.js';
 import * as fmt from '../format.js';
 import {section} from './section.js';
 import {operationRows} from '../profile/operations.js';
+import {shareCell} from './share.js';
 
 /**
  * @typedef {object} OperationsPanel
@@ -86,23 +87,6 @@ export function operationsTable(rows, onSelect, empty = 'No operation recorded.'
       h('td', {class: 'num'}, fmt.bytes(r.bytesIn)),
       h('td', {class: 'num'}, fmt.bytes(r.bytesOut)),
       action ? h('td', {class: 'action'}, action(r)) : null))));
-}
-
-/**
- * The share of the time of all operations taken by those of one name: a bar
- * scaled to the busiest name, so that the longest bar spans the cell, and the
- * percentage of the sum.
- *
- * @param {number} total
- * @param {number} sum the total of all names
- * @param {number} max the total of the busiest name
- */
-function shareCell(total, sum, max) {
-  const share = sum > 0 ? fmt.percent(total / sum) : '';
-  return h('td', {class: 'share', title: sum > 0 ? `${share} of the time spent in all operations` : null},
-    h('span', {class: 'share-track'},
-      h('span', {class: 'share-bar', style: `width: ${max > 0 ? total / max * 100 : 0}%`})),
-    h('span', {class: 'share-label'}, share));
 }
 
 /**

@@ -140,6 +140,9 @@ function operations(o) {
  * @property {boolean} [merged] merges the operations into one tree, instead of rooting them by name
  * @property {boolean} [reversed] the methods running at the root, their callers above
  * @property {boolean} [java] keeps the samples of Java code only, without native methods
+ * @property {string} [hide] a regular expression: the frames whose name it finds are left out of
+ *           the stacks, their time given to their callers (reflection, proxies, plumbing); an
+ *           invalid one hides nothing
  */
 
 /**
@@ -152,6 +155,7 @@ function operations(o) {
  * @property {number} self ms, running it
  * @property {number[]} types ms by frame type (COMPILED...)
  * @property {Frame[]} children sorted by name
+ * @property {number} [base] in a comparison, its total in the baseline: ms, 0 if it had none
  */
 
 /**
@@ -167,7 +171,156 @@ export function tree(p, filter) {
   /** @type {MutableFrame} */
   const root = mutable('all', SYNTHETIC);
   let samples = 0;
+  eachPath(p, filter, (i, path) => {
+    const w = p.weights[p.kind[i]];
+    let f = root;
+    f.total += w;
+    for (const key of path) {
+      f = typeof key === 'string' ? child(f, key, key, SYNTHETIC) : child(f, key >>> 3, p.strings[key >>> 3], key & 7);
+      f.total += w;
+      f.types[f.type] += w;
+    }
+    f.self += w;
+    samples++;
+  });
+  root.types[SYNTHETIC] = root.total;
+  return {root: freeze(root), samples};
+}
+
+/**
+ * When the samples of a frame of a flame graph were taken: their weight per
+ * time bucket, e.g. to show on a timeline whether a method's time is spread
+ * over the session or comes in bursts.
+ *
+ * @param {Profile} p
+ * @param {Filter} filter that of the flame graph
+ * @param {string[]} path the names of the frame and of those under it, from the root's
+ *        children up, as tree() gives them; empty for all the samples kept
+ * @param {number} start of the first bucket, in ms since the start of the recording
+ * @param {number} bucket its duration, in ms
+ * @param {number} count the number of buckets
+ * @returns {Float64Array} ms of samples per bucket
+ */
+export function timeOf(p, filter, path, start, bucket, count) {
+  const ms = new Float64Array(count);
+  eachPath(p, filter, (i, keys) => {
+    if (keys.length < path.length)
+      return;
+    for (let j = 0; j < path.length; j++) {
+      const key = keys[j];
+      if ((typeof key === 'string' ? key : p.strings[key >>> 3]) !== path[j])
+        return;
+    }
+    const b = Math.floor((p.time[i] - start) / bucket);
+    if (b >= 0 && b < count)
+      ms[b] += p.weights[p.kind[i]];
+  });
+  return ms;
+}
+
+/**
+ * One method and what is around it, wherever it is called from: the samples
+ * it was in, as two trees rooted at it, its callers and its callees, each
+ * merged by name. A sample counts once, at the method's outermost frame: its
+ * recursion stays among its callees.
+ *
+ * @param {Profile} p
+ * @param {Filter} filter that of the flame graph, whose reversal does not apply
+ * @param {string} name of the method
+ * @returns {{callers: Frame, callees: Frame, samples: number}} the callers tree, whose children
+ *          are the method's callers and so on down to the operations, and the callees tree
+ */
+export function methodTrees(p, filter, name) {
+  const callers = mutable(name, COMPILED), callees = mutable(name, COMPILED);
+  let samples = 0;
+  eachPath(p, {...filter, reversed: false}, (i, path) => {
+    let at = 0;
+    while (at < path.length && (typeof path[at] === 'string' || p.strings[/** @type {number} */ (path[at]) >>> 3] !== name))
+      at++;
+    if (at === path.length)
+      return;
+    const w = p.weights[p.kind[i]];
+    samples++;
+    /** @param {MutableFrame} root @param {number} from @param {number} step */
+    const add = (root, from, step) => {
+      let f = root;
+      f.total += w;
+      f.types[/** @type {number} */ (path[at]) & 7] += w;
+      for (let j = from; j >= 0 && j < path.length; j += step) {
+        const key = path[j];
+        f = typeof key === 'string' ? child(f, key, key, SYNTHETIC) : child(f, key >>> 3, p.strings[key >>> 3], key & 7);
+        f.total += w;
+        f.types[f.type] += w;
+      }
+      f.self += w;
+    };
+    add(callees, at + 1, 1);
+    add(callers, at - 1, -1);
+  });
+  return {callers: freeze(callers), callees: freeze(callees), samples};
+}
+
+/**
+ * A method, and the time of the samples a filter keeps that it was in.
+ *
+ * @typedef {object} HotMethod
+ * @property {string} name
+ * @property {number} self ms of the samples taken while it ran: it was at the top of the stack
+ * @property {number} total ms of the samples it was in, each once however deep its recursion
+ */
+
+/**
+ * The methods where the time went, whatever calls them: of the samples a
+ * filter keeps, those each method ran in, at the top of the stack, and those
+ * it was anywhere in.
+ *
+ * @param {Profile} p
+ * @param {Filter} filter that of the flame graph
+ * @returns {{methods: HotMethod[], total: number}} the methods, the most self time first, and
+ *          the ms of all the samples kept
+ */
+export function hotMethods(p, filter) {
+  /** @type {Map<number, HotMethod>} by the index of the name */
+  const methods = new Map();
+  /** @param {number} name */
+  const method = name => {
+    let m = methods.get(name);
+    if (!m)
+      methods.set(name, m = {name: p.strings[name], self: 0, total: 0});
+    return m;
+  };
+  /** @type {Set<number>} the methods of a stack, once each */
+  const seen = new Set();
+  let total = 0;
+  // from the root to the top, whatever the graph shows
+  eachPath(p, {...filter, reversed: false}, (i, path) => {
+    const w = p.weights[p.kind[i]];
+    total += w;
+    const top = path[path.length - 1];
+    if (typeof top === 'number' && (top & 7) !== SYNTHETIC)
+      method(top >>> 3).self += w;
+    seen.clear();
+    for (const key of path)
+      if (typeof key === 'number' && (key & 7) !== SYNTHETIC)
+        seen.add(key >>> 3);
+    for (const name of seen)
+      method(name).total += w;
+  });
+  return {methods: [...methods.values()].sort((a, b) => b.self - a.self || b.total - a.total), total};
+}
+
+/**
+ * The samples a filter keeps, each with its path in the flame graph: the
+ * keys of its frames from the root, a string for the operation and thread
+ * roots, the frame (string << 3 | type) for methods.
+ *
+ * @param {Profile} p
+ * @param {Filter} filter
+ * @param {(sample: number, path: (string | number)[]) => void} visit given a path it may not keep
+ */
+function eachPath(p, filter, visit) {
   const one = filter.instance;
+  const hidden = hiddenNames(p, filter.hide);
 
   // one operation: the other filters do not apply
   let start = 0, end = p.time.length;
@@ -177,7 +330,7 @@ export function tree(p, filter) {
     if (filter.to !== undefined)
       end = firstAtOrAfter(p.time, filter.to * 1000);
   }
-  /** @type {(string | number)[]} the keys of a sample's path: names of roots, or frames */
+  /** @type {(string | number)[]} */
   const path = [];
   for (let i = start; i < end; i++) {
     const op = p.operation[i];
@@ -208,25 +361,74 @@ export function tree(p, filter) {
     }
     const roots = path.length;
     for (let node = p.stack[i]; node >= 0; node = p.parent[node])
-      path.push(p.frame[node]);
+      if (!hidden || !hidden[p.frame[node] >>> 3])
+        path.push(p.frame[node]);
     // the frames came from the top of the stack: callers first
     reverse(path, roots, path.length);
     if (filter.reversed && one === undefined)
       reverse(path, 0, path.length);
-
-    const w = p.weights[p.kind[i]];
-    let f = root;
-    f.total += w;
-    for (const key of path) {
-      f = typeof key === 'string' ? child(f, key, key, SYNTHETIC) : child(f, key >>> 3, p.strings[key >>> 3], key & 7);
-      f.total += w;
-      f.types[f.type] += w;
-    }
-    f.self += w;
-    samples++;
+    visit(i, path);
   }
-  root.types[SYNTHETIC] = root.total;
-  return {root: freeze(root), samples};
+}
+
+/**
+ * A flame graph compared with a baseline, e.g. an interval with another one:
+ * the frames of the graph, each with its total in the baseline, found by the
+ * same path of names. The frames only the baseline has are not in it.
+ *
+ * @param {Frame} base the baseline's root
+ * @param {Frame} now the root of the graph compared
+ * @param {boolean} [across] whether the roots under the root (the operations)
+ *        differ on purpose, e.g. one operation compared with another: each is
+ *        then compared with all of the baseline's, merged
+ * @returns {Frame} a copy of now, each frame with its base
+ */
+export function compare(base, now, across = false) {
+  if (across) {
+    /** @type {Frame} */
+    const none = {name: '', total: 0, self: 0, types: base.types.map(() => 0), children: []};
+    const all = base.children.reduce(merge, none);
+    return {...now, base: base.total, children: now.children.map(c => compare({...all, name: c.name}, c))};
+  }
+  /** @type {Map<string, Frame>} */
+  const before = new Map(base.children.map(c => [c.name, c]));
+  return {
+    ...now,
+    base: base.total,
+    children: now.children.map(c => {
+      const b = before.get(c.name);
+      return b ? compare(b, c) : withBase0(c);
+    }),
+  };
+}
+
+/**
+ * @param {Frame} a
+ * @param {Frame} b
+ * @returns {Frame} the children of both, merged by name, under a's name
+ */
+function merge(a, b) {
+  /** @type {Map<string, Frame>} */
+  const children = new Map(a.children.map(c => [c.name, c]));
+  for (const c of b.children) {
+    const same = children.get(c.name);
+    children.set(c.name, same ? merge(same, c) : c);
+  }
+  return {
+    name: a.name,
+    total: a.total + b.total,
+    self: a.self + b.self,
+    types: a.types.map((t, i) => t + b.types[i]),
+    children: [...children.values()],
+  };
+}
+
+/**
+ * @param {Frame} f
+ * @returns {Frame} a copy, none of its frames in the baseline
+ */
+function withBase0(f) {
+  return {...f, base: 0, children: f.children.map(withBase0)};
 }
 
 /**
@@ -283,6 +485,26 @@ function reverse(a, from, to) {
     a[i] = a[j];
     a[j] = x;
   }
+}
+
+/**
+ * @param {Profile} p
+ * @param {string | undefined} hide a regular expression
+ * @returns {Uint8Array | null} 1 for each string it finds, null if it hides nothing
+ */
+function hiddenNames(p, hide) {
+  if (!hide)
+    return null;
+  let pattern;
+  try {
+    pattern = new RegExp(hide);
+  }
+  catch (e) {
+    return null;
+  }
+  const hidden = new Uint8Array(p.strings.length);
+  p.strings.forEach((s, i) => hidden[i] = pattern.test(s) ? 1 : 0);
+  return hidden;
 }
 
 /**

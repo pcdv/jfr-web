@@ -216,6 +216,25 @@ and a static export served by a plain file server, an interval dragged with no r
 
 **4. Features**, in the order above, each on its own.
 
+Done on 2026-10-18, each computed in `profile/profile.js` from the same paths as the flame graph
+(`eachPath`: the filters, the operation roots, hidden frames), and tested there:
+
+1. `timeOf`: the frame hovered, else the one zoomed on, drawn on the session's timeline as a line
+   on its own scale, its peak in a caption; zooming the timeline redraws it in finer buckets.
+2. `hotMethods`: under the graph, the methods by self time (the top of the stack) or total time
+   (each sample once, however deep its recursion); a click finds the method in the graph.
+3. `methodTrees`: a method picked by a right-click on a frame, or from the hot methods: its callers
+   above it, up to the operations, its callees below, each merged by name; a sample counts once,
+   at the method's outermost frame.
+4. `hide`, a filter: the frames whose name a pattern finds are left out of the paths, their time
+   given to their callers, in the graph, the timeline line, the hot methods and the method view.
+5. `compare`: **Compare…** keeps the selection (operation, thread, interval, one operation) as a
+   baseline; the graph of the next selection, with the same display options, is colored by the
+   change of each frame's share of the time, red for more and blue for less. Two different
+   operations are compared by the paths under them, each against the baseline's operations
+   merged. The frames only the baseline has are not drawn, as in the differential flame graphs
+   this follows.
+
 ## Tests
 
 - Java: the writer and the endpoint (phase 1), the collapsed output (phase 3), as above.

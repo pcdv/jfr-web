@@ -10,14 +10,18 @@ import {errorBox} from './errorBox.js';
 import * as fmt from '../format.js';
 import {timelineChart} from './timeline.js';
 
+/** @typedef {import('./flame.js').ShownFrame} ShownFrame */
+
 /**
  * @param {number} sessionId
  * @param {api.TimelineData} whole the timeline of the whole session
  * @param {(interval: api.Interval, name?: string) => void} onInterval called with what the
  *        sections below should show: the selection, else the range zoomed in on, else all;
  *        and the operation clicked, when a click picked one in a bucket
- * @returns {{element: HTMLElement, mark: (op: api.InstanceRow | null) => void}} the timeline,
- *          and what outlines the span of one operation on it, or removes the outline
+ * @returns {{element: HTMLElement, mark: (op: api.InstanceRow | null) => void,
+ *            showFrame: (frame: ShownFrame | null) => void}} the timeline, what outlines the
+ *          span of one operation on it, or removes the outline, and what draws when the samples
+ *          of a frame of the flame graph were taken, or removes them
  */
 export function sessionTimeline(sessionId, whole, onInterval) {
   const toolbar = h('div', {class: 'toolbar timeline-toolbar'});
@@ -31,8 +35,21 @@ export function sessionTimeline(sessionId, whole, onInterval) {
   let selection = null;
   /** @type {api.InstanceRow | null} the operation outlined */
   let marked = null;
+  /** @type {ShownFrame | null} the frame whose samples are drawn */
+  let frame = null;
   /** @type {ReturnType<typeof timelineChart> | null} */
   let drawn = null;
+
+  /** @param {api.TimelineData} data the buckets drawn */
+  function applyFrame(data) {
+    if (frame)
+      drawn?.samples(frame.name, frame.times((range.from ?? 0) * 1000, data.bucket, data.buckets));
+    else
+      drawn?.samples();
+  }
+
+  /** @type {api.TimelineData} the buckets drawn */
+  let buckets = whole;
 
   function applyMark() {
     if (!drawn)
@@ -46,6 +63,7 @@ export function sessionTimeline(sessionId, whole, onInterval) {
 
   /** @param {api.TimelineData} data */
   function draw(data) {
+    buckets = data;
     const offset = range.from ?? 0;
     drawn = timelineChart(data, (from, to, name) => {
       selection = from === undefined || to === undefined
@@ -56,6 +74,7 @@ export function sessionTimeline(sessionId, whole, onInterval) {
     }, {timeLabel: t => `${round(offset + t)} s`});
     replace(chart, drawn);
     applyMark();
+    applyFrame(data);
     drawToolbar();
   }
 
@@ -99,6 +118,10 @@ export function sessionTimeline(sessionId, whole, onInterval) {
     // a static export has the buckets of the whole session only: no zoom,
     // but a selection, which the sections below follow from the profile
     element: h('div', null, api.isStatic() ? null : toolbar, chart),
+    showFrame(f) {
+      frame = f;
+      applyFrame(buckets);
+    },
     mark(op) {
       marked = op;
       applyMark();

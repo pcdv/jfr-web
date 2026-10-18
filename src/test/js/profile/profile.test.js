@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {decode, tree, mainType, COMPILED, INTERPRETED, SYNTHETIC, NO_OPERATION}
+import {decode, tree, timeOf, hotMethods, methodTrees, compare, mainType, COMPILED, INTERPRETED, SYNTHETIC, NO_OPERATION}
   from '../../../main/resources/jfrweb/ui/js/profile/profile.js';
 
 // strings, sorted: 0 "(truncated)", 1 "GET /a", 2 "GET /b", 3 "Main.run",
@@ -136,4 +136,98 @@ test('one operation alone: the other filters do not apply', () => {
   assert.equal(samples, 2);
   assert.equal(root.children[0].name, 'GET /b');
   assert.equal(root.children[0].children[0].name, 'Main.run');
+});
+
+test('when the samples of a frame were taken, per bucket, its frames merged by name', () => {
+  // GET /a > Main.run > Main.work > x.Sort.sort: at 0 and 1000 ms
+  assert.deepEqual([...timeOf(p, {}, ['GET /a', 'Main.run', 'Main.work', 'x.Sort.sort'], 0, 1000, 4)], [20, 20, 0, 0]);
+  // Main.work of GET /b: interpreted at 1500, compiled and native at 2000
+  assert.deepEqual([...timeOf(p, {}, ['GET /b', 'Main.run', 'Main.work'], 0, 1000, 4)], [0, 20, 5, 0]);
+  assert.deepEqual([...timeOf(p, {}, [], 0, 1000, 4)], [20, 40, 5, 20], 'all the samples kept, one with no stack');
+  assert.deepEqual([...timeOf(p, {merged: true}, ['Main.run'], 0, 1000, 4)], [20, 40, 5, 0], 'the filter of the graph');
+  assert.deepEqual([...timeOf(p, {}, [], 1000, 500, 2)], [20, 20], 'buckets of a zoomed timeline');
+  assert.deepEqual([...timeOf(p, {}, ['GET /c'], 0, 1000, 4)], [0, 0, 0, 0]);
+});
+
+test('hot methods: the time each ran in, at the top, and was in, whatever calls it', () => {
+  const {methods, total} = hotMethods(p, {});
+  assert.equal(total, 85);
+  assert.deepEqual(methods, [
+    {name: 'x.Sort.sort', self: 40, total: 40},
+    {name: 'Main.work', self: 25, total: 65},
+    {name: 'Main.run', self: 0, total: 65},
+  ]);
+  // outside operations too: x.Sort.sort called by Main.run directly
+  assert.deepEqual(hotMethods(p, {all: true}).methods[0], {name: 'x.Sort.sort', self: 60, total: 60});
+  assert.deepEqual(hotMethods(p, {name: 'GET /b'}).methods.map(m => m.name), ['Main.work', 'Main.run']);
+});
+
+test('a method: its callers and callees, wherever it is called from', () => {
+  const {callers, callees, samples} = methodTrees(p, {all: true}, 'x.Sort.sort');
+  assert.equal(samples, 3);
+  // called by Main.work in GET /a, by Main.run directly outside operations
+  assert.deepEqual(lines(callers), [
+    'x.Sort.sort 60 0',
+    `x.Sort.sort;Main.run 20 0`,
+    `x.Sort.sort;Main.run;[main tid=1] 20 0`,
+    `x.Sort.sort;Main.run;[main tid=1];${NO_OPERATION} 20 20`,
+    'x.Sort.sort;Main.work 40 0',
+    'x.Sort.sort;Main.work;Main.run 40 0',
+    'x.Sort.sort;Main.work;Main.run;GET /a 40 40',
+  ]);
+  assert.deepEqual(lines(callees), ['x.Sort.sort 60 60'], 'it calls nothing');
+
+  const work = methodTrees(p, {reversed: true}, 'Main.work');
+  assert.deepEqual(lines(work.callees), ['Main.work 65 25', 'Main.work;x.Sort.sort 40 40'], 'not reversed');
+  assert.equal(work.callees.types[INTERPRETED], 20);
+  assert.equal(methodTrees(p, {}, 'nothing').samples, 0);
+});
+
+test('frames hidden by a pattern: out of the stacks, their time to their callers', () => {
+  assert.deepEqual(lines(tree(p, {name: 'GET /b', hide: 'work'}).root), [
+    'all 25 0',
+    'all;GET /b 25 0',
+    'all;GET /b;Main.run 25 25',
+  ]);
+  const {methods} = hotMethods(p, {hide: 'Sort'});
+  assert.deepEqual(methods.find(m => m.name === 'Main.work'), {name: 'Main.work', self: 65, total: 65});
+  assert.equal(methods.some(m => m.name === 'x.Sort.sort'), false);
+  assert.deepEqual([...timeOf(p, {hide: 'work'}, ['GET /a', 'Main.run', 'x.Sort.sort'], 0, 1000, 4)], [20, 20, 0, 0]);
+  assert.deepEqual(lines(tree(p, {hide: '('}).root), lines(tree(p, {}).root), 'an invalid pattern hides nothing');
+  assert.deepEqual(lines(tree(p, {hide: 'GET'}).root), lines(tree(p, {}).root), 'operations are not frames');
+});
+
+test('a graph compared with a baseline: each frame with its total there, by path', () => {
+  // GET /b's samples now, those before 2 s as the baseline
+  const c = compare(tree(p, {to: 2}).root, tree(p, {}).root);
+  /** @param {any} f @param {string} [path] @returns {string[]} */
+  const bases = (f, path = '') => {
+    const at = path ? `${path};${f.name}` : f.name;
+    return [`${at} ${f.total}/${f.base}`, ...f.children.flatMap(/** @param {any} x */ x => bases(x, at))];
+  };
+  assert.deepEqual(bases(c), [
+    'all 85/60',
+    'all;GET /a 60/40',
+    'all;GET /a;Main.run 40/40',
+    'all;GET /a;Main.run;Main.work 40/40',
+    'all;GET /a;Main.run;Main.work;x.Sort.sort 40/40',
+    // the native sample at 2000 ms is not in the baseline
+    'all;GET /b 25/20',
+    'all;GET /b;Main.run 25/20',
+    'all;GET /b;Main.run;Main.work 25/20',
+  ]);
+  assert.equal(compare(tree(p, {from: 9}).root, tree(p, {}).root).children[0].base, 0, 'none in the baseline');
+});
+
+test('one operation compared with another: by the paths under them', () => {
+  const c = compare(tree(p, {name: 'GET /b'}).root, tree(p, {name: 'GET /a'}).root, true);
+  const a = c.children[0];
+  assert.equal(a.name, 'GET /a');
+  assert.equal(a.base, 25, 'all of GET /b');
+  assert.equal(a.children[0].name, 'Main.run');
+  assert.equal(a.children[0].base, 25);
+  assert.equal(a.children[0].children[0].base, 25, 'Main.work, in both');
+  assert.equal(a.children[0].children[0].children[0].base, 0, 'x.Sort.sort, in GET /a only');
+  assert.equal(compare(tree(p, {name: 'GET /b'}).root, tree(p, {name: 'GET /a'}).root).children[0].base, 0,
+               'without: GET /a is not in the baseline');
 });

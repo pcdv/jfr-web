@@ -43,17 +43,34 @@ const TYPES = [
  * @property {HTMLElement} element
  * @property {(root: Frame, inverted: boolean) => void} show draws a tree, staying zoomed on
  *           the same frame if the tree still has it
+ * @property {(name: string) => void} find searches the frames of a method, by its exact name
+ */
+
+/**
+ * A frame shown elsewhere, e.g. where its samples fall on a timeline.
+ *
+ * @typedef {object} FramePath
+ * @property {string} name
+ * @property {string[]} path the names of the frame and of those under it, from the root's
+ *           children up; empty for the root
  */
 
 /**
  * @param {AbortSignal} signal stops following the width of the page
+ * @param {object} [options]
+ * @param {(frame: FramePath | null) => void} [options.onFrame] told of the frame hovered,
+ *        else of the one zoomed on, else of none
+ * @param {(name: string) => void} [options.onMethod] called with the method of a frame
+ *        right-clicked: to show its callers and callees
+ * @param {boolean} [options.search] whether it has a search field, true by default
  * @returns {FlameGraph}
  */
-export function flameGraph(signal) {
+export function flameGraph(signal, {onFrame = () => {}, onMethod, search: searchable = true} = {}) {
   const canvas = h('canvas', {class: 'flame-canvas', tabindex: 0});
   const tooltip = h('div', {class: 'tooltip', hidden: true});
   const wrapper = h('div', {class: 'flame-wrapper'}, canvas, tooltip);
-  const search = h('input', {type: 'search', placeholder: 'Search, e.g. HashMap|parse', 'aria-label': 'Search frames'});
+  const search = h('input', {type: 'search', placeholder: 'Search, e.g. HashMap|parse', 'aria-label': 'Search frames',
+                             hidden: !searchable});
   const matched = h('span', {class: 'flame-matched'});
   const reset = h('button', {type: 'button', class: 'small', hidden: true, onclick: () => zoomOn(null)}, 'Reset zoom');
   const toolbar = h('div', {class: 'flame-toolbar'}, search, matched, reset);
@@ -99,6 +116,16 @@ export function flameGraph(signal) {
     return z ? {x0: z.left, span: z.frame.total || 1} : {x0: 0, span: 1};
   }
 
+  /**
+   * @param {Frame} f
+   * @returns {number} in a comparison, its share of the time minus its share in the baseline
+   */
+  function change(f) {
+    const now = root ? f.total / (root.frame.total || 1) : 0;
+    const before = root?.frame.base ? (f.base ?? 0) / root.frame.base : 0;
+    return now - before;
+  }
+
   /** @param {number} level */
   function top(level) {
     return inverted ? level * ROW : (levels.length - 1 - level) * ROW;
@@ -124,6 +151,16 @@ export function flameGraph(signal) {
     const match = style.getPropertyValue('--flame-match').trim();
     const text = style.getPropertyValue('--flame-text').trim();
     const outline = style.getPropertyValue('--fg').trim();
+    // compared with a baseline: colored by the change of their share of the time
+    const diff = root.frame.base !== undefined;
+    const more = hex(style.getPropertyValue('--flame-more'));
+    const less = hex(style.getPropertyValue('--flame-less'));
+    const same = hex(style.getPropertyValue('--flame-synthetic'));
+    let widest = 0.02;
+    if (diff)
+      for (const level of levels)
+        for (const b of level)
+          widest = Math.max(widest, Math.abs(change(b.frame)));
 
     const {x0, span} = range();
     const scale = width / span;
@@ -139,7 +176,9 @@ export function flameGraph(signal) {
         const y = top(b.level);
         // the frames under the one zoomed on, which zoom back out
         ctx.globalAlpha = b.level < zoomLevel ? 0.5 : 1;
-        ctx.fillStyle = pattern && pattern.test(b.frame.name) ? match : shade(colors[mainType(b.frame)], b.frame.name);
+        ctx.fillStyle = pattern && pattern.test(b.frame.name) ? match
+          : diff ? mix(same, change(b.frame) > 0 ? more : less, Math.abs(change(b.frame)) / widest)
+          : shade(colors[mainType(b.frame)], b.frame.name);
         ctx.fillRect(left, y, Math.max(right - left - 1, 0.5), ROW - 1);
         const chars = Math.floor((right - left - 6) / charWidth);
         if (chars >= 3) {
@@ -182,6 +221,26 @@ export function flameGraph(signal) {
     zoomed = box && box !== root ? box : null;
     reset.hidden = !zoomed;
     draw();
+    tell();
+  }
+
+  /** @type {Box | null | undefined} the frame told of last, undefined before any */
+  let told;
+
+  /** Tells of the frame hovered, else of the one zoomed on, when it changes. */
+  function tell() {
+    const b = hovered ?? zoomed;
+    if (b === told)
+      return;
+    told = b;
+    if (!b) {
+      onFrame(null);
+      return;
+    }
+    const path = [];
+    for (let x = b; x.parent; x = x.parent)
+      path.unshift(x.frame.name);
+    onFrame({name: b.frame.name, path});
   }
 
   /**
@@ -198,6 +257,10 @@ export function flameGraph(signal) {
       h('div', {class: 'tooltip-title flame-tooltip-name'}, f.name),
       row(null, 'Total', share(f.total)),
       row(null, 'Self', share(f.self)),
+      f.base !== undefined && root?.frame.base
+        ? [row(null, 'In the baseline', `${fmt.duration(f.base)} · ${percent(f.base / root.frame.base)}`),
+           row(null, 'Change', `${change(f) >= 0 ? '+' : '−'}${(Math.abs(change(f)) * 100).toFixed(1)} points`)]
+        : null,
       zoomed && b.level >= zoomed.level && zoomed !== b
         ? row(null, 'Of the zoomed frame', percent(f.total / zoomed.frame.total))
         : null,
@@ -205,7 +268,10 @@ export function flameGraph(signal) {
         ? types.map(t => row(style.getPropertyValue(t.color), t.name, percent(f.types[t.type] / f.total)))
         : null,
       h('div', {class: 'flame-tooltip-hint'},
-        zoomed && b.level < zoomed.level ? 'Click to zoom out' : b === zoomed || b === root ? '' : 'Click to zoom in'));
+        zoomed && b.level < zoomed.level ? 'Click to zoom out' : b === zoomed || b === root ? '' : 'Click to zoom in'),
+      onMethod && mainType(f) !== SYNTHETIC
+        ? h('div', {class: 'flame-tooltip-hint'}, 'Right-click for its callers and callees')
+        : null);
     tooltip.hidden = false;
     const r = wrapper.getBoundingClientRect();
     const left = e.clientX - r.left;
@@ -219,6 +285,7 @@ export function flameGraph(signal) {
     if (b !== hovered) {
       hovered = b;
       draw();
+      tell();
     }
     if (b)
       showTooltip(b, e);
@@ -229,18 +296,28 @@ export function flameGraph(signal) {
     hovered = null;
     tooltip.hidden = true;
     draw();
+    tell();
   });
   canvas.addEventListener('click', e => {
     const b = boxAt(e);
     if (b)
       zoomOn(b);
   });
+  canvas.addEventListener('contextmenu', e => {
+    const b = boxAt(e);
+    if (!onMethod || !b || mainType(b.frame) === SYNTHETIC)
+      return;
+    e.preventDefault();
+    onMethod(b.frame.name);
+  });
   canvas.addEventListener('keydown', e => {
     if (e.key === 'Escape')
       zoomOn(null);
   });
 
-  search.addEventListener('input', () => {
+  search.addEventListener('input', searchChanged);
+
+  function searchChanged() {
     try {
       pattern = search.value ? new RegExp(search.value) : null;
       search.classList.remove('invalid');
@@ -251,7 +328,7 @@ export function flameGraph(signal) {
     }
     showMatched();
     draw();
-  });
+  }
 
   /** The share of the time in frames matching, each counted once: not again under a match. */
   function showMatched() {
@@ -272,6 +349,11 @@ export function flameGraph(signal) {
 
   return {
     element: h('div', {class: 'flame-graph'}, toolbar, wrapper),
+    find(name) {
+      search.value = `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
+      searchChanged();
+      wrapper.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    },
     show(frame, inv) {
       // the path of the frame zoomed on, by name, to zoom on it again
       const path = [];
@@ -280,6 +362,8 @@ export function flameGraph(signal) {
       inverted = inv;
       const r = root = layout(frame);
       hovered = null;
+      // a new tree: told of anew, even of none
+      told = undefined;
       tooltip.hidden = true;
       /** @type {Box} */
       let z = r;
@@ -321,6 +405,16 @@ function percent(ratio) {
 function hex(color) {
   const c = color.trim();
   return [1, 3, 5].map(i => parseInt(c.substring(i, i + 2), 16) || 0);
+}
+
+/**
+ * @param {number[]} from
+ * @param {number[]} to
+ * @param {number} k between 0 for from and 1 for to
+ */
+function mix(from, to, k) {
+  const t = Math.min(1, k);
+  return `rgb(${from.map((c, i) => Math.round(c + (to[i] - c) * t)).join(', ')})`;
 }
 
 /**

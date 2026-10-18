@@ -10,13 +10,24 @@
 import * as fmt from '../format.js';
 import {h, replace} from '../lib/dom.js';
 import {errorBox} from './errorBox.js';
-import {tree} from '../profile/profile.js';
+import {tree, timeOf, hotMethods, methodTrees, compare} from '../profile/profile.js';
+import {hotMethodsPanel} from './hotMethods.js';
 import {operationRows} from '../profile/operations.js';
 import {flameGraph} from '../flame/render.js';
 
 /** @typedef {import('../profile/profile.js').Profile} Profile */
 /** @typedef {import('../profile/profile.js').Filter} FlameFilter */
 /** @typedef {import('../api.js').InstanceRow} InstanceRow */
+
+/**
+ * A frame of the flame graph, and when its samples were taken.
+ *
+ * @typedef {object} ShownFrame
+ * @property {string} name
+ * @property {(start: number, bucket: number, count: number) => Float64Array} times its ms of
+ *           samples per bucket: from start, in ms since the start of the recording, count
+ *           buckets of bucket ms
+ */
 
 /**
  * @typedef {object} FlamePanel
@@ -36,9 +47,11 @@ import {flameGraph} from '../flame/render.js';
  * @param {(op: InstanceRow | null) => void} [options.onInstance] told of the operation shown
  *        alone, and with null once the flame graph is back to the filters
  * @param {FlameFilter} [options.filter] the filters it opens with
+ * @param {(frame: ShownFrame | null) => void} [options.onFrame] told of the frame hovered, else
+ *        of the one zoomed on, else of none: to show when its samples were taken
  * @returns {FlamePanel}
  */
-export function flamePanel(profile, signal, {onInstance = () => {}, filter: initial = {}} = {}) {
+export function flamePanel(profile, signal, {onInstance = () => {}, filter: initial = {}, onFrame = () => {}} = {}) {
   const name = h('select', {name: 'name'}, h('option', {value: ''}, 'All operations'));
   const thread = h('select', {name: 'thread'}, h('option', {value: ''}, 'Any thread'));
   const from = h('input', {type: 'number', name: 'from', min: 0, step: 'any', placeholder: '0',
@@ -49,6 +62,8 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
   const merged = h('input', {type: 'checkbox', name: 'merged', checked: !!initial.merged});
   const reversed = h('input', {type: 'checkbox', name: 'reversed', checked: !!initial.reversed});
   const java = h('input', {type: 'checkbox', name: 'java', checked: !!initial.java});
+  const hide = h('input', {type: 'text', name: 'hide', class: 'mono', placeholder: 'e.g. reflect|\\$Proxy',
+                           value: initial.hide ?? ''});
 
   /** @type {number | undefined} one operation shown, instead of the filters */
   let instance;
@@ -56,9 +71,95 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
   let instanceLabel = '';
   const instanceChip = h('span', {class: 'chip', hidden: true});
 
-  const graph = flameGraph(signal);
+  /** @type {{profile: Profile, filter: FlameFilter} | null} what the graph was drawn from */
+  let drawn = null;
+  const graph = flameGraph(signal, {
+    onFrame: f => {
+      const d = drawn;
+      onFrame(f && d ? {name: f.name, times: (start, bucket, count) => timeOf(d.profile, d.filter, f.path, start, bucket, count)}
+                     : null);
+    },
+    onMethod: name => showMethod(name),
+  });
   const caption = h('div', {class: 'flame-caption'}, 'Loading the samples…');
-  const body = h('div', null, h('div', {class: 'flame-caption-bar'}, caption), graph.element);
+
+  // a comparison: what was selected (operation, thread, interval, one
+  // operation) kept as a baseline, the display options those of the graph
+  /** @type {{selection: FlameFilter, label: string} | null} */
+  let baseline = null;
+  /** @type {{selection: FlameFilter, label: string}} what the graph shows */
+  let current = {selection: {}, label: ''};
+  const compareBar = h('span', {class: 'flame-compare'});
+
+  function drawCompareBar() {
+    replace(compareBar, baseline
+      ? h('span', {class: 'chip'},
+          'Compared with ', h('b', null, baseline.label), ' ',
+          h('button', {type: 'button', title: 'Stop comparing', onclick: () => {
+            baseline = null;
+            drawCompareBar();
+            update();
+          }}, '×'))
+      : h('button', {
+          type: 'button', class: 'small',
+          title: 'Keep this selection as a baseline, then select another interval, operation or thread: '
+                 + 'the flame graph shows the change, red where more of the time went, blue where less',
+          onclick: () => {
+            baseline = current;
+            drawCompareBar();
+            update();
+          },
+        }, 'Compare…'));
+  }
+  drawCompareBar();
+  // the methods where the time went, under the graph: summed while shown
+  const hot = hotMethodsPanel(name => graph.find(name), name => showMethod(name));
+  const hotSection = h('details', {class: 'hot-methods', open: true,
+                                   ontoggle: () => showHot()},
+    h('summary', null, 'Hot methods', h('span', {class: 'hint'}, ' · where the time went, whatever calls them')),
+    hot.element);
+
+  // one method, picked: its callers above it, its callees below, merged
+  // wherever it is called from
+  /** @type {string | null} */
+  let method = null;
+  const callers = flameGraph(signal, {onMethod: name => showMethod(name), search: false});
+  const callees = flameGraph(signal, {onMethod: name => showMethod(name), search: false});
+  const methodTitle = h('span', {class: 'mono'});
+  const methodCaption = h('div', {class: 'flame-caption'});
+  const methodSection = h('section', {class: 'method-view', hidden: true},
+    h('div', {class: 'method-view-title'},
+      h('h3', null, 'Callers and callees of ', methodTitle),
+      h('button', {type: 'button', class: 'small', title: 'Close', onclick: () => showMethod(null)}, '×')),
+    methodCaption,
+    h('h4', null, 'What calls it, up to the operations'), callers.element,
+    h('h4', null, 'What it calls'), callees.element);
+
+  const body = h('div', null, h('div', {class: 'flame-caption-bar'}, caption, compareBar), graph.element, methodSection,
+                 hotSection);
+
+  function showHot() {
+    if (hotSection.open && drawn)
+      hot.show(hotMethods(drawn.profile, drawn.filter));
+  }
+
+  /** @param {string | null} [name] the method to show, the one shown if undefined, none if null */
+  function showMethod(name) {
+    if (name !== undefined)
+      method = name;
+    methodSection.hidden = method === null;
+    if (method === null || !drawn)
+      return;
+    const t = methodTrees(drawn.profile, drawn.filter, method);
+    replace(methodTitle, method);
+    replace(methodCaption, `${fmt.duration(t.callees.total)} in ${t.samples} samples of these filters`,
+            t.samples ? null : ': none');
+    // the method at the bottom of its callers, and at the top of its callees
+    callers.show(t.callers, false);
+    callees.show(t.callees, true);
+    if (name)
+      methodSection.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
 
   // the operations by total time, the busiest threads first, as the profile
   // has them; a name asked for before, selected once there
@@ -94,7 +195,18 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
 
   /** @returns {FlameFilter} */
   function filter() {
-    return instance !== undefined ? {instance} : {
+    // an invalid pattern hides nothing, and says so
+    let pattern = hide.value || undefined;
+    try {
+      new RegExp(pattern ?? '');
+      hide.classList.remove('invalid');
+    }
+    catch (e) {
+      hide.classList.add('invalid');
+      pattern = undefined;
+    }
+    return instance !== undefined ? {instance, hide: pattern} : {
+      hide: pattern,
       name: name.value || undefined,
       thread: thread.value || undefined,
       from: from.value === '' ? undefined : Number(from.value),
@@ -114,6 +226,11 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
       // read once the lists are in
       const f = filter();
       const {root, samples} = tree(p, f);
+      drawn = {profile: p, filter: f};
+      // the baseline's selection, with the display options of now
+      // different operations: each compared with the baseline's, by the paths under them
+      const across = !!baseline && !f.merged && operation(baseline.selection) !== operation(selection(f));
+      const base = baseline && compare(tree(p, {...display(f), ...baseline.selection}).root, root, across);
       const what = [f.java ? 'Java code' : 'Wall clock'];
       if (f.instance !== undefined)
         what.push(instanceLabel);
@@ -125,13 +242,46 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
         if (f.from !== undefined || f.to !== undefined)
           what.push(fmt.interval(f));
       }
+      if (f.hide)
+        what.push(`frames matching ${f.hide} hidden`);
+      current = {selection: selection(f), label: what.slice(1).join(' · ') || 'the whole session'};
       replace(caption, `${what.join(' · ')}: ${fmt.duration(root.total)} in ${samples} samples`,
-              samples ? null : ', none for these filters');
-      graph.show(root, !!f.reversed && f.instance === undefined);
+              samples ? null : ', none for these filters',
+              base ? h('span', {class: 'flame-compare-legend'},
+                ' · ', h('span', {class: 'more'}, 'more'), ' or ', h('span', {class: 'less'}, 'less'),
+                ' of the time than in the baseline') : null);
+      graph.show(base ?? root, !!f.reversed && f.instance === undefined);
+      showHot();
+      showMethod();
     }).catch(e => {
       if (!signal.aborted)
         replace(body, errorBox(e));
     });
+  }
+
+  /**
+   * @param {FlameFilter} f
+   * @returns {FlameFilter} what it selects: a baseline keeps it
+   */
+  function selection(f) {
+    return f.instance !== undefined ? {instance: f.instance}
+      : {name: f.name, thread: f.thread, from: f.from, to: f.to};
+  }
+
+  /**
+   * @param {FlameFilter} s a selection
+   * @returns {string} the operations it selects, by name or one by its id
+   */
+  function operation(s) {
+    return s.instance !== undefined ? `#${s.instance}` : s.name ?? '';
+  }
+
+  /**
+   * @param {FlameFilter} f
+   * @returns {FlameFilter} how it shows them: a baseline takes them
+   */
+  function display(f) {
+    return {all: f.all, merged: f.merged, reversed: f.reversed, java: f.java, hide: f.hide};
   }
 
   /** Back to the filters, as soon as one of them changes. */
@@ -153,7 +303,10 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
     h('label', {title: 'The methods that were running at the root, their callers above: the costliest, whatever calls them'},
       reversed, ' hot methods'),
     h('label', {title: 'Only the samples of threads running Java code, without native methods: closer to CPU time'},
-      java, ' Java only'));
+      java, ' Java only'),
+    h('label', {title: 'A regular expression: the frames whose name it finds are left out, their time given to their '
+                       + 'callers. Reflection, proxies, the plumbing of a framework'},
+      'Hide frames ', hide));
 
   function clearInstance() {
     if (instance === undefined)

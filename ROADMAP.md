@@ -123,7 +123,7 @@ thread of periodic events uses 0.09 s of CPU per minute, about 0.15% of a core. 
   pauses, CPU saturated) watched from the rolling recording itself
 - [ ] Snapshots marked on the History page's timeline
 - [x] Manual and automatic sessions kept across restarts too (M9)
-- [ ] Diff of two flame graphs
+- [x] Diff of two flame graphs (M10: two intervals or operations of a session)
 
 ## M7: any application, operations
 
@@ -209,7 +209,7 @@ Plan and format in [docs/flame-graphs.md](docs/flame-graphs.md).
 - [x] Operations table and slowest list of an interval computed by the page, from the operations
   added to the profile
 - [x] Static export, `jfr-web flame` and `--collapsed` on it; `jfr-converter` removed
-- [ ] Timeline and flame graph linked; hot methods; method view; frames hidden by pattern; diff
+- [x] Timeline and flame graph linked; hot methods; method view; frames hidden by pattern; diff
 
 ## Later
 

@@ -43,8 +43,11 @@ const PLOT_H = H - TOP - BOTTOM;
  *        and the operation clicked when a click picks one bucket of it; null when nothing can be
  *        selected
  * @param {TimelineOptions} [options]
- * @returns {HTMLDivElement & {mark: (from?: number, to?: number) => void}} the chart, whose
- *          mark() outlines a span, in seconds since the start, or removes it when undefined
+ * @returns {HTMLDivElement & {mark: (from?: number, to?: number) => void,
+ *                             samples: (name?: string, ms?: Float64Array) => void}} the chart,
+ *          whose mark() outlines a span, in seconds since the start, or removes it when
+ *          undefined; and samples() draws the ms of samples of a frame per bucket, on a scale
+ *          of their own, or removes them when undefined
  */
 export function timelineChart(data, onSelect, options = {}) {
   const label = options.timeLabel ?? (t => `${t} s`);
@@ -110,7 +113,9 @@ export function timelineChart(data, onSelect, options = {}) {
   const outline = svgEl('rect', {class: 'outline', visibility: 'hidden'});
   // catches the pointer over the whole plot, above the marks
   const capture = svgEl('rect', {x: LEFT, y: TOP, width: PLOT_W, height: PLOT_H, fill: 'transparent'});
-  svg.append(hover, selection, marked, outline, capture);
+  // the samples of a frame of the flame graph, over the bars, under the pointer
+  const frameSamples = svgEl('path', {class: 'frame-samples', visibility: 'hidden'});
+  svg.append(hover, selection, marked, outline, frameSamples, capture);
 
   /** @type {number} the series in focus, -1 for none */
   let focused = -1;
@@ -189,6 +194,33 @@ export function timelineChart(data, onSelect, options = {}) {
     marked.setAttribute('x', String(Math.min(a, LEFT + PLOT_W - 3)));
     marked.setAttribute('width', String(Math.max(b - a, 3)));
     marked.setAttribute('visibility', 'visible');
+  }
+
+  const frameLegend = h('div', {class: 'frame-legend', hidden: true});
+
+  /**
+   * @param {string} [name] of the frame
+   * @param {Float64Array} [ms] of samples per bucket
+   */
+  function samples(name, ms) {
+    if (name === undefined || ms === undefined) {
+      frameSamples.setAttribute('visibility', 'hidden');
+      frameLegend.hidden = true;
+      return;
+    }
+    const max = Math.max(...ms);
+    const fy = (/** @type {number} */ v) => TOP + PLOT_H - (max ? v / max : 0) * PLOT_H;
+    // steps, one per bucket, closed along the axis
+    let d = `M ${x(0)} ${fy(0)}`;
+    for (let i = 0; i < n; i++)
+      d += ` V ${fy(ms[i])} H ${x(i + 1)}`;
+    d += ` V ${fy(0)} Z`;
+    frameSamples.setAttribute('d', d);
+    frameSamples.setAttribute('visibility', 'visible');
+    replace(frameLegend, h('span', {class: 'swatch frame-swatch'}),
+      h('span', {class: 'mono'}, name),
+      `: its samples, up to ${fmt.duration(max)} per ${fmt.duration(data.bucket)}, on a scale of their own`);
+    frameLegend.hidden = false;
   }
 
   const tooltip = h('div', {class: 'tooltip', hidden: true});
@@ -301,7 +333,8 @@ export function timelineChart(data, onSelect, options = {}) {
       ? `Operations in flight, on average per ${fmt.duration(data.bucket)}, by name.${drag}`
       : `No operation recorded: samples of Java code per ${fmt.duration(data.bucket)}.${drag}`),
     h('div', {class: 'legend'}, legendItems),
-    wrapper), {mark});
+    wrapper,
+    frameLegend), {mark, samples});
 }
 
 /**

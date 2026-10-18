@@ -26,6 +26,9 @@
   --flame-synthetic: #c9ccd1;
   --flame-match: #d462d4;
   --flame-text: #1f2328;
+  /* compared with a baseline: more of the time, less */
+  --flame-more: #e5534b;
+  --flame-less: #4a8fe0;
   color-scheme: light dark;
 }
 
@@ -56,6 +59,8 @@
     --flame-synthetic: #3a3f47;
     --flame-match: #9a3d9a;
     --flame-text: #e6edf3;
+    --flame-more: #b8423b;
+    --flame-less: #2f6bb3;
   }
 }
 
@@ -646,6 +651,88 @@ svg.timeline .outline {
   padding-top: 2px;
 }
 
+/* the samples of the frame hovered or zoomed on in the flame graph, on the timeline */
+svg.timeline .frame-samples {
+  fill: var(--flame-match);
+  fill-opacity: 0.18;
+  stroke: var(--flame-match);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.frame-legend {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.frame-legend[hidden] {
+  display: none;
+}
+
+.frame-swatch {
+  background: var(--flame-match);
+  margin-right: 6px;
+}
+
+/* one method's callers and callees, under the flame graph */
+.method-view {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.method-view[hidden] {
+  display: none;
+}
+
+.method-view-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.method-view h3 {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.method-view h4 {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* the hot methods, under the flame graph */
+details.hot-methods {
+  margin-top: 16px;
+}
+
+details.hot-methods > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+details.hot-methods > summary .hint {
+  font-weight: normal;
+}
+
+.grid th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.grid th.sortable:hover {
+  color: var(--fg);
+}
+
+.grid th.sorted::after {
+  content: " ▾";
+}
+
 .flame-caption-bar {
   display: flex;
   flex-wrap: wrap;
@@ -657,6 +744,19 @@ svg.timeline .outline {
 
 .flame-caption {
   color: var(--muted);
+}
+
+.flame-compare-legend .more,
+.flame-compare-legend .less {
+  font-weight: 600;
+}
+
+.flame-compare-legend .more {
+  color: var(--flame-more);
+}
+
+.flame-compare-legend .less {
+  color: var(--flame-less);
 }
 
 .flame-toolbar {
@@ -673,6 +773,11 @@ svg.timeline .outline {
   font: inherit;
 }
 
+.filters input[name=hide] {
+  width: 14em;
+}
+
+.filters input.invalid,
 .flame-toolbar input.invalid {
   border-color: var(--bad);
   outline-color: var(--bad);

@@ -108,7 +108,11 @@ export function renderSession(root, params, signal) {
         const timelinePanel = sessionTimeline(id, timeline, showInterval);
         // the operation picked among the slowest is outlined on the timeline
         // while its flame graph shows
-        const flame = flamePanel(profile, signal, {onInstance: op => timelinePanel.mark(op)});
+        const flame = flamePanel(profile, signal, {
+          onInstance: op => timelinePanel.mark(op),
+          // the frame hovered or zoomed on in the flame graph: when its samples were taken
+          onFrame: f => timelinePanel.showFrame(f),
+        });
         const slowest = slowestPanel(id, profile, flame.showInstance);
         const operations = operationsPanel(report.operations, profile, n => {
           slowest.showName(n);
