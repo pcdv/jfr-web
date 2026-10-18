@@ -4,12 +4,13 @@
  * history writes, even when nothing was recorded with JFR.
  */
 import * as api from '../api.js';
-import {h, replace, errorBox} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
+import {errorBox} from '../components/errorBox.js';
 import * as fmt from '../format.js';
 import {operationsTable, outcomeCell} from '../components/operations.js';
 import {timelineChart} from '../components/timeline.js';
 import {section} from '../components/section.js';
-import {readSetting, writeSetting} from '../settings.js';
+import {readSetting, writeSetting} from '../lib/settings.js';
 
 /** The periods offered, in hours. */
 const PRESETS = [1, 6, 24, 24 * 7];
@@ -24,7 +25,9 @@ const MEASURE_KEY = 'jfrweb.history.measure';
  */
 
 /**
- * @param {HTMLElement} root
+ * Nothing to stop: it only loads when asked.
+ *
+ * @type {import('../lib/router.js').View}
  */
 export function renderHistory(root) {
   const toolbar = h('div', {class: 'toolbar history-toolbar'});

@@ -3,7 +3,7 @@
  * The name the user gives a session, to find it again among the others.
  */
 import * as api from '../api.js';
-import {h} from '../dom.js';
+import {h} from '../lib/dom.js';
 
 /**
  * Asks for a name.

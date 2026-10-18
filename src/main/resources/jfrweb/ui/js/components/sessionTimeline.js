@@ -5,7 +5,8 @@
  * finer buckets, and select more precisely.
  */
 import * as api from '../api.js';
-import {h, replace, errorBox} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
+import {errorBox} from './errorBox.js';
 import * as fmt from '../format.js';
 import {timelineChart} from './timeline.js';
 

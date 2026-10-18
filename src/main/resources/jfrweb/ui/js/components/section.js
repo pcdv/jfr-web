@@ -3,13 +3,13 @@
  * A foldable section of a page, whose title stays visible when folded. Each
  * section is left open or folded as the browser last left it.
  */
-import {h} from '../dom.js';
-import {readSetting, writeSetting} from '../settings.js';
+import {h} from '../lib/dom.js';
+import {readSetting, writeSetting} from '../lib/settings.js';
 
 /**
  * @param {string} id names the section, to remember its state
- * @param {import('../dom.js').Child} title
- * @param {...(import('../dom.js').Child | import('../dom.js').Child[])} content
+ * @param {import('../lib/dom.js').Child} title
+ * @param {...(import('../lib/dom.js').Child | import('../lib/dom.js').Child[])} content
  */
 export function section(id, title, ...content) {
   const key = `jfrweb.section.${id}`;

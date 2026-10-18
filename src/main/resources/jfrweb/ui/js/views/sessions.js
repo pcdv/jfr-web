@@ -3,7 +3,8 @@
  * The sessions: start one, stop the one recording, open a report.
  */
 import * as api from '../api.js';
-import {h, replace, errorBox} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
+import {errorBox} from '../components/errorBox.js';
 import * as fmt from '../format.js';
 import {autoPanel} from '../components/auto.js';
 import {renameButton} from '../components/sessionName.js';
@@ -12,17 +13,15 @@ import {renameButton} from '../components/sessionName.js';
 const POLL = 1000;
 
 /**
- * @param {HTMLElement} root
- * @returns {() => void}
+ * @type {import('../lib/router.js').View}
  */
-export function renderSessions(root) {
+export function renderSessions(root, params, signal) {
   const auto = h('div');
   const content = h('div');
   root.append(h('h1', null, 'Profiling sessions'), auto, content);
 
   /** @type {number | undefined} */
   let timer;
-  let stopped = false;
   /** The latest refresh: an earlier one answering after it is ignored. */
   let latest = 0;
   /** The auto mode shown, redrawn only when it changes: its form may be in use. */
@@ -33,7 +32,7 @@ export function renderSessions(root) {
     const mine = ++latest;
     try {
       const [sessions, autoState, snapshots] = await Promise.all([api.listSessions(), api.getAuto(), api.getSnapshots()]);
-      if (stopped || mine !== latest)
+      if (signal.aborted || mine !== latest)
         return;
       const autoJson = JSON.stringify(autoState);
       // a static export only shows what was recorded
@@ -53,10 +52,7 @@ export function renderSessions(root) {
   }
 
   refresh();
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-  };
+  signal.addEventListener('abort', () => clearTimeout(timer));
 }
 
 /**

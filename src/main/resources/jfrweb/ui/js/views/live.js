@@ -4,10 +4,11 @@
  * whether a session records or not; a session can be armed on any of them.
  */
 import * as api from '../api.js';
-import {h, replace, errorBox} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
+import {errorBox} from '../components/errorBox.js';
 import {readArming} from '../components/auto.js';
 import {operationsTable} from '../components/operations.js';
-import {readSetting, writeSetting} from '../settings.js';
+import {readSetting, writeSetting} from '../lib/settings.js';
 
 /** How often the statistics refresh, in ms. */
 const POLL = 2000;
@@ -16,10 +17,9 @@ const POLL = 2000;
 const WINDOW_KEY = 'jfrweb.live.window';
 
 /**
- * @param {HTMLElement} root
- * @returns {() => void}
+ * @type {import('../lib/router.js').View}
  */
-export function renderLive(root) {
+export function renderLive(root, params, signal) {
   let window_ = Number(readSetting(WINDOW_KEY) || 5);
   const toolbar = h('div', {class: 'toolbar'});
   const armedLine = h('div');
@@ -28,7 +28,6 @@ export function renderLive(root) {
 
   /** @type {number | undefined} */
   let timer;
-  let stopped = false;
   /** The latest refresh: an earlier one answering after it is ignored. */
   let latest = 0;
   /** @type {number | null} the session the auto mode records, last seen */
@@ -86,7 +85,7 @@ export function renderLive(root) {
     try {
       const [live, auto] = await Promise.all([api.getLive(window_), api.getAuto()]);
       // e.g. a poll for the window shown before another one was picked
-      if (stopped || mine !== latest)
+      if (signal.aborted || mine !== latest)
         return;
       showAuto(auto);
       replace(toolbar, windowPicker(live, w => {
@@ -112,10 +111,7 @@ export function renderLive(root) {
   }
 
   refresh();
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-  };
+  signal.addEventListener('abort', () => clearTimeout(timer));
 }
 
 /**

@@ -4,7 +4,8 @@
  * flame graph.
  */
 import * as api from '../api.js';
-import {h, replace, errorBox} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
+import {errorBox} from '../components/errorBox.js';
 import * as fmt from '../format.js';
 import {flamePanel} from '../components/flame.js';
 import {operationsPanel} from '../components/operations.js';
@@ -17,11 +18,11 @@ import {slowestPanel} from '../components/slowest.js';
 const POLL = 1000;
 
 /**
- * @param {HTMLElement} root
- * @param {string[]} params the id of the session
- * @returns {() => void}
+ * The params are the id of the session.
+ *
+ * @type {import('../lib/router.js').View}
  */
-export function renderSession(root, params) {
+export function renderSession(root, params, signal) {
   const id = Number(params[0]);
   const content = h('div', null, h('p', {class: 'empty'}, 'Reading the recording…'));
   const title = h('h1', null, `Session ${id}`);
@@ -31,7 +32,6 @@ export function renderSession(root, params) {
 
   /** @type {number | undefined} */
   let timer;
-  let left = false;
 
   /** @param {api.Session} s */
   const showTitle = s => replace(title, `Session ${id}`, s.name ? ` · ${s.name}` : null, ' ',
@@ -48,7 +48,7 @@ export function renderSession(root, params) {
     clearTimeout(timer);
     try {
       const s = await api.getSession(id);
-      if (left || reported)
+      if (signal.aborted || reported)
         return;
       if (s.state === 'STOPPED') {
         reported = true;
@@ -67,7 +67,7 @@ export function renderSession(root, params) {
       timer = window.setTimeout(waitForStop, POLL);
     }
     catch (e) {
-      if (!left)
+      if (!signal.aborted)
         replace(content, errorBox(e));
     }
   }
@@ -77,15 +77,12 @@ export function renderSession(root, params) {
     showReport();
   else
     waitForStop();
-  return () => {
-    left = true;
-    clearTimeout(timer);
-  };
+  signal.addEventListener('abort', () => clearTimeout(timer));
 
   function showReport() {
     Promise.all([api.getReport(id), api.getTimeline(id)]).then(
       ([report, timeline]) => {
-        if (left)
+        if (signal.aborted)
           return;
         showTitle(report.session);
         /** @type {string | undefined} the operation clicked on the timeline, whose filters it set */
@@ -119,7 +116,7 @@ export function renderSession(root, params) {
           section('flame', 'Flame graph', flame.element));
       },
       e => {
-        if (!left)
+        if (!signal.aborted)
           replace(content, errorBox(e));
       });
   }

@@ -13,45 +13,19 @@ import {renderSession} from './views/session.js';
 import {renderLive} from './views/live.js';
 import {renderHistory} from './views/history.js';
 import {showTarget} from './components/target.js';
+import {$} from './lib/dom.js';
+import {startRouter} from './lib/router.js';
 
-/**
- * A view renders itself into the root, and may return a function that stops
- * whatever it keeps running (e.g. polling) when another view replaces it.
- *
- * @typedef {(root: HTMLElement, params: string[]) => (void | (() => void))} View
- */
-
-/** @type {[RegExp, View, (params: string[]) => string][]} */
+/** @type {(import('./lib/router.js').Route & {title: (params: string[]) => string})[]} */
 const routes = [
-  [/^#\/sessions\/(\d+)$/, renderSession, p => `Session ${p[0]}`],
-  [/^#\/live$/, renderLive, () => 'Live operations'],
-  [/^#\/history$/, renderHistory, () => 'History of operations'],
-  [/^(#\/?)?$/, renderSessions, () => 'Profiling'],
+  {hash: /^#\/sessions\/(\d+)$/, view: renderSession, title: p => `Session ${p[0]}`},
+  {hash: /^#\/live$/, view: renderLive, title: () => 'Live operations'},
+  {hash: /^#\/history$/, view: renderHistory, title: () => 'History of operations'},
+  {hash: /^(?:#\/?)?$/, view: renderSessions, title: () => 'Profiling'},
 ];
 
 /** The application profiled, in the title of the page: tabs tell them apart. */
 let appName = 'jfr-web';
-
-/** @type {void | (() => void)} */
-let stopCurrent;
-
-function route() {
-  if (stopCurrent)
-    stopCurrent();
-
-  const root = /** @type {HTMLElement} */ (document.getElementById('app'));
-  root.replaceChildren();
-  for (const [pattern, view, title] of routes) {
-    const m = location.hash.match(pattern);
-    if (m) {
-      document.title = `${title(m.slice(1))} · ${appName}`;
-      markActive();
-      stopCurrent = view(root, m.slice(1));
-      return;
-    }
-  }
-  location.hash = '#/';
-}
 
 /**
  * Outlines the link of the page shown in the top bar: a session's report is
@@ -92,6 +66,11 @@ api.ready.then(() => {
   const header = document.querySelector('header');
   if (header)
     showTarget(header);
-  window.addEventListener('hashchange', route);
-  route();
+  startRouter($('app', HTMLElement), routes, {
+    fallback: '#/',
+    onRoute: (r, params) => {
+      document.title = `${r.title(params)} · ${appName}`;
+      markActive();
+    },
+  });
 });

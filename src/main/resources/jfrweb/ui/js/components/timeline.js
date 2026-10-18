@@ -4,7 +4,7 @@
  * name, or the samples of Java code when no operation was recorded. Hovering
  * a bucket details it; dragging selects an interval.
  */
-import {h, replace} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
 import * as fmt from '../format.js';
 
 const SVG = 'http://www.w3.org/2000/svg';

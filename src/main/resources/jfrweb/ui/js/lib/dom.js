@@ -1,13 +1,31 @@
 // @ts-check
 /**
  * A few helpers to build the DOM, in place of a framework.
+ *
+ * Part of a small lib kept as identical copies in jfr-web and jfr-soundscape:
+ * change both.
  */
 
 /** @typedef {Node | string | number | null | undefined | false} Child */
 
 /**
- * Creates an element. Attributes named "on..." take a listener; "class" a
- * class name; true and false add or omit a boolean attribute.
+ * The element of the page with this id, which must be of a type.
+ *
+ * @template {HTMLElement} T
+ * @param {string} id
+ * @param {{new (): T, prototype: T}} type e.g. HTMLInputElement
+ * @returns {T}
+ */
+export function $(id, type) {
+  const el = document.getElementById(id);
+  if (!(el instanceof type))
+    throw new Error(`#${id} is not a ${type.name}`);
+  return el;
+}
+
+/**
+ * Creates an element. Attributes named "on..." take a listener; true and
+ * false add or omit a boolean attribute.
  *
  * @template {keyof HTMLElementTagNameMap} K
  * @param {K} tag
@@ -53,13 +71,4 @@ function append(parent, children) {
 export function replace(el, ...children) {
   el.replaceChildren();
   append(el, children);
-}
-
-/**
- * An error message, in place of a view that could not load.
- *
- * @param {unknown} e
- */
-export function errorBox(e) {
-  return h('div', {class: 'error'}, e instanceof Error ? e.message : String(e));
 }

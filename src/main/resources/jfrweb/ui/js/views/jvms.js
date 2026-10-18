@@ -5,7 +5,8 @@
  */
 import * as api from '../api.js';
 import * as fmt from '../format.js';
-import {h, replace, errorBox} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
+import {errorBox} from '../components/errorBox.js';
 
 /** JVMs come and go: listed again that often, in ms. */
 const POLL = 3000;

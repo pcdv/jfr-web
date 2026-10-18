@@ -4,7 +4,7 @@
  * interval, and the samples taken outside operations.
  */
 import * as api from '../api.js';
-import {h, replace} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
 import {label} from './slowest.js';
 
 /**

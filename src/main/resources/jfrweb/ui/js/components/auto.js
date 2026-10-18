@@ -4,8 +4,8 @@
  * come, and stop once they are over.
  */
 import * as api from '../api.js';
-import {h, replace} from '../dom.js';
-import {readSetting, writeSetting} from '../settings.js';
+import {h, replace} from '../lib/dom.js';
+import {readSetting, writeSetting} from '../lib/settings.js';
 
 /** Last arming, kept per browser to arm again in one click. */
 const ARMING_KEY = 'jfrweb.auto.arming';

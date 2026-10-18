@@ -4,7 +4,7 @@
  * attached, or those to attach to.
  */
 import * as api from '../api.js';
-import {h, replace} from '../dom.js';
+import {h, replace} from '../lib/dom.js';
 
 /** How often the JVM attached is checked, in ms: it may end. */
 const POLL = 5000;
