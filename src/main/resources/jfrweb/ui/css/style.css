@@ -222,6 +222,32 @@ td.action {
   text-align: right;
 }
 
+/* a session's title, with the way back to the sessions */
+h1.crumbs {
+  margin: 8px 0 4px;
+}
+
+/* right under it */
+h1.crumbs + div > p.summary:first-child {
+  margin: 0 0 4px;
+}
+
+h1.crumbs a {
+  color: var(--muted);
+  font-weight: normal;
+  text-decoration: none;
+}
+
+h1.crumbs a:hover {
+  color: var(--accent);
+}
+
+h1.crumbs .sep {
+  margin: 0 8px;
+  color: var(--muted);
+  font-weight: normal;
+}
+
 .title-action {
   font-size: 14px;
   font-weight: normal;
@@ -435,7 +461,7 @@ details.section > summary {
 
 details.section > summary h2 {
   display: inline-block;
-  margin: 24px 0 8px;
+  margin: 14px 0 4px;
 }
 
 details.section .interval {
@@ -865,7 +891,7 @@ svg.timeline .frame-samples {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin: 8px 0;
+  margin: 2px 0 8px;
   font-size: 13px;
 }
 

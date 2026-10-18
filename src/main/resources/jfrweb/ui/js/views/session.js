@@ -1,11 +1,12 @@
 // @ts-check
 /**
- * The report of a session: how it was recorded, its operations, and its
- * flame graph.
+ * The report of a session: its details (how it was recorded), timeline,
+ * flame graph and operations.
  */
 import * as api from '../api.js';
 import {tell} from '../lib/dialog.js';
 import {h, replace} from '../lib/dom.js';
+import {readSetting, writeSetting} from '../lib/settings.js';
 import {errorBox} from '../components/errorBox.js';
 import * as fmt from '../format.js';
 import {flamePanel} from '../components/flame.js';
@@ -28,16 +29,19 @@ const POLL = 1000;
 export function renderSession(root, params, signal) {
   const id = Number(params[0]);
   const content = h('div', null, h('p', {class: 'empty'}, 'Reading the recording…'));
-  const title = h('h1', null, `Session ${id}`);
-  root.append(h('p', null, h('a', {href: '#/'}, '← Sessions')),
-              title,
-              content);
+  // a breadcrumb: back to the sessions in the title itself, which says the
+  // rest is a session
+  const title = h('h1', {class: 'crumbs'});
+  /** @param {import('../lib/dom.js').Child[]} name */
+  const crumbs = (...name) => replace(title, h('a', {href: '#/'}, 'Sessions'), h('span', {class: 'sep'}, '›'), ...name);
+  crumbs(`#${id}`);
+  root.append(title, content);
 
   /** @type {number | undefined} */
   let timer;
 
   /** @param {api.Session} s */
-  const showTitle = s => replace(title, `Session ${id}`, s.name ? ` · ${s.name}` : null, ' ',
+  const showTitle = s => crumbs(`#${id}`, s.name ? ` · ${s.name}` : null, ' ',
     api.isStatic() ? null : h('span', {class: 'title-action'}, renameButton(s, showTitle)));
 
   /** @type {ReturnType<typeof recordingNow> | undefined} */
@@ -61,7 +65,7 @@ export function renderSession(root, params, signal) {
       }
       if (!progress) {
         // no rename button while it records: the report's title has one
-        replace(title, `Session ${id}`, s.name ? ` · ${s.name}` : null);
+        crumbs(`#${id}`, s.name ? ` · ${s.name}` : null);
         progress = recordingNow(id, waitForStop);
         replace(content, progress.element);
       }
@@ -119,9 +123,10 @@ export function renderSession(root, params, signal) {
           slowest.showName(n);
           flame.showName(n);
         });
+        const details = recording(report);
         replace(content,
-          summary(report),
-          recording(report),
+          summary(report, details),
+          details,
           section('timeline', 'Timeline', timelinePanel.element),
           // right under the timeline, which shows when the frame hovered
           // was sampled: both on one screen
@@ -172,14 +177,55 @@ function recordingNow(id, refresh) {
 }
 
 /**
+ * When it started, how long it lasted, its .jfr, and a button that shows how
+ * it was recorded, with what the sampling hides when it hides much.
+ *
  * @param {api.Report} r
+ * @param {HTMLElement} details shown or hidden by the button
  */
-function summary(r) {
+function summary(r, details) {
   const s = r.session;
+  const key = 'jfrweb.section.details';
+  let open = false;
+  const show = (/** @type {boolean} */ o) => {
+    open = o;
+    details.hidden = !open;
+    toggle.textContent = open ? 'Hide details' : 'Details';
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  const toggle = h('button', {
+    class: 'link',
+    title: 'How it was recorded: JVM, sampling, stacks, known biases',
+    onclick: () => {
+      show(!open);
+      writeSetting(key, String(open));
+    },
+  });
+  show(readSetting(key) === 'true');
   return h('p', {class: 'summary'},
     `Started ${fmt.time(s.start)}, ${fmt.duration(s.duration)}, ${r.sampling.operations} operations, `,
     h('a', {href: api.downloadUrl(s.id), download: true}, `download the .jfr (${fmt.bytes(s.size)})`),
-    ' to open it in JDK Mission Control.');
+    ' to open it in JDK Mission Control. ', toggle, warnings(r));
+}
+
+/**
+ * What the sampling hides, when it hides much: told next to the button that
+ * shows the details.
+ *
+ * @param {api.Report} r
+ */
+function warnings(r) {
+  const share = r.sampling.operationShareOfNative;
+  const samples = r.sampling.java.samples + r.sampling.native.samples;
+  const truncated = samples ? r.sampling.truncated / samples : 0;
+  return [
+    truncated >= 0.01
+      ? h('span', {class: 'hint warn'}, ` — ${fmt.percent(truncated)} of the stacks cut at ${r.sampling.stackDepth} frames`)
+      : null,
+    share !== null && share < 0.5
+      ? h('span', {class: 'hint'}, ` — native times are proportions: operations got ${fmt.percent(share)} of the native samples`)
+      : null,
+  ];
 }
 
 /**
@@ -191,15 +237,7 @@ function summary(r) {
 function recording(r) {
   const share = r.sampling.operationShareOfNative;
   const samples = r.sampling.java.samples + r.sampling.native.samples;
-  const truncated = samples ? r.sampling.truncated / samples : 0;
-  return h('details', {class: 'card'},
-    h('summary', null, 'How it was recorded',
-      truncated >= 0.01
-        ? h('span', {class: 'hint warn'}, ` — ${fmt.percent(truncated)} of the stacks cut at ${r.sampling.stackDepth} frames`)
-        : null,
-      share !== null && share < 0.5
-        ? h('span', {class: 'hint'}, ` — native times are proportions: operations got ${fmt.percent(share)} of the native samples`)
-        : null),
+  return h('div', {class: 'card details', hidden: true},
     h('dl', null,
       h('dt', null, 'JVM'), h('dd', null, r.recording.jvm),
       h('dt', null, 'JVM arguments'), h('dd', {class: 'mono'}, r.recording.jvmArguments || '(none)'),
