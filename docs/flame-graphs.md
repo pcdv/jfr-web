@@ -37,8 +37,7 @@ roadmap; the format should not prevent it), or a general purpose profile viewer.
 
 ## The profile format
 
-A JSON document per session, version 1. Sizes below assume the TCP demo's longest snapshot:
-665 s, 55,447 samples (23,886 Java, 31,561 native), 14,078 operations.
+A JSON document per session, version 1 (sizes measured in phase 0, below).
 
 | Field | Content |
 |---|---|
@@ -65,11 +64,11 @@ The format is documented in this file once phase 1 settles it, and changes only 
 - `ProfileWriter` in `jfrweb.analysis`: one pass of `visitSamples` with no filter, building the
   string table, the stack tree and the sample columns.
 - `GET /api/sessions/:id/profile`: the document of a stopped session. A session no longer changes
-  once stopped: the document is built once and kept, in memory beside the `Analysis` (soft
-  reference) or in a file next to the recording; phase 0 decides from its size and build time.
-- Compression: flak does not gzip. On loopback it does not matter; for a profiler reached over
-  the network, the document can be stored gzipped and sent with `Content-Encoding: gzip` when the
-  request accepts it. GitHub Pages gzips the static export by itself.
+  once stopped: the document is built on the first request and kept gzipped in memory, beside the
+  `Analysis` and like it behind a soft reference. No file on disk: building it costs about what
+  one flame graph costs today (phase 0).
+- Sent with `Content-Encoding: gzip` when the request accepts it (flak does not compress by
+  itself), plain otherwise. GitHub Pages gzips the static export by itself.
 
 ## Client
 
@@ -118,11 +117,8 @@ An icicle layout (roots at the top) is a toggle, if wanted.
 
 Each phase ends usable, like the milestones of the roadmap.
 
-**0. Measure.** A prototype of the writer, run on the demo's recordings and on a long session of
-a real application: samples, stack nodes, strings, size of the document plain and gzipped, time
-to build it; in the browser, time to decode it and to build a tree over every sample. Decides
-where the document is kept, whether it is gzipped, and whether a session too long needs a limit
-(above which the server would still sum the samples itself).
+**0. Measure.** Done on 2026-10-18, see "Measurements": the document is kept gzipped in memory,
+and sessions need no limit for now.
 
 **1. Format and endpoint.** `ProfileWriter`, `/api/sessions/:id/profile`, the format written down
 here. Tests on the recordings of the existing tests: per operation, the total weight equals the
@@ -152,5 +148,38 @@ names `jfr-converter`).
 ## Open questions
 
 - `/api/sessions/:id/flame` removed in phase 3, or kept, serving our page, for links people keep?
-- The document of a session kept in memory or on disk (phase 0 informs it).
-- A limit for long sessions, and what happens above it (phase 0 informs it).
+
+## Measurements
+
+Phase 0, 2026-10-18, with a prototype of the writer (`ProfileWriter`) and of the browser's
+decoding and tree building (Node 24, the V8 engine of Chrome and Edge). Recordings: the TCP demo,
+an application server (two manual sessions, two 5-minute snapshots), a Gradle daemon. Build time
+includes reading the samples from the file again, as each flame graph does today; tree time is a
+tree over every sample, rooted by operation, each sample's path walked (reversed: the same).
+
+| Recording | Duration | Samples | Stack nodes (depth) | Strings | Operations | JSON | gzip | Build | Decode | Tree |
+|---|---|---|---|---|---|---|---|---|---|---|
+| TCP demo | 665 s | 55,447 | 511 (25) | 159 | 14,078 | 913 KB | 148 KB | 275 ms | 3.2 ms | 12.5 ms |
+| TCP demo | | 33,215 | 411 (24) | 213 | 8,993 | 541 KB | 90 KB | 154 ms | 2.2 ms | 7.6 ms |
+| Server, snapshot | 5 min | 158,059 | 1,888 (105) | 1,011 | 119 | 2,151 KB | 117 KB | 339 ms | 6.3 ms | 21.8 ms |
+| Server, snapshot | 5 min | 7,177 | 5,652 (101) | 1,595 | 140 | 182 KB | 37 KB | 74 ms | 0.6 ms | 1.6 ms |
+| Server, session | | 5,521 | 3,496 (76) | 868 | 933 | 138 KB | 21 KB | 36 ms | 0.4 ms | 1.1 ms |
+| Server, session | | 1,691 | 2,969 (100) | 1,123 | 171 | 76 KB | 22 KB | 57 ms | 0.3 ms | 0.4 ms |
+| Gradle daemon | | 389 | 144 (68) | 123 | 0 | 9 KB | 2 KB | 4 ms | 0.0 ms | 0.1 ms |
+
+What it tells:
+
+- The samples make the size: 13 to 14 bytes each in JSON, all columns together, and below 3 once
+  gzipped (under 1 when the stacks repeat, as in the busiest snapshot). Strings and stacks stay
+  under 80 KB together even on the deep stacks of the server.
+- Rates reach about 530 samples a second (the busy snapshot). An hour at that rate would be about
+  1.9 million samples: some 26 MB of JSON, 1.5 to 5 MB gzipped, and about 0.35 s to decode and
+  build a tree over all of it, less for an interval. Hence no limit for now; to revisit if
+  sessions of hours become common.
+- The trees drawn stay small (up to about 6,000 frames), within what a canvas draws at once.
+- The prototype writes each operation's name in full: 113 KB of the demo's 913. Names go into
+  `strings` as planned, each operation then an index.
+- Building the document costs about one flame graph of today, once per session instead of once
+  per filter.
+
+Not measured yet: drawing, which waits for the renderer of phase 2.

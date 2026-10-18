@@ -201,7 +201,8 @@ A session's samples sent to the browser once, with their time, thread and operat
 by a renderer of our own: filters change and combine with no request, in the static export too.
 Plan and format in [docs/flame-graphs.md](docs/flame-graphs.md).
 
-- [ ] Measured: size of a session's profile, time to build and to draw it
+- [x] Measured: size of a session's profile, time to build and to sum it (drawing waits for the
+  renderer)
 - [ ] Profile format and endpoint
 - [ ] Renderer at parity with async-profiler's page (zoom, search, tooltips, colors), in the
   interface's look
