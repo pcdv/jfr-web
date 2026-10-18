@@ -2,6 +2,7 @@ package jfrweb.analysis;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -34,9 +35,10 @@ public final class ProfileWriter {
   /**
    * Raised with any change of the format: a page loaded before the server
    * changed refuses what it cannot read, instead of reading it wrong. 2 added
-   * the fields of the operations to their names.
+   * the fields of the operations to their names, 3 the start and end of the
+   * recording, for the page to draw its timeline in any buckets.
    */
-  public static final int VERSION = 2;
+  public static final int VERSION = 3;
 
   /** Types of frames. */
   public static final int COMPILED = 0, INLINED = 1, INTERPRETED = 2, NATIVE = 3, SYNTHETIC = 4;
@@ -68,8 +70,9 @@ public final class ProfileWriter {
   private List<RecordedOperation> ops;
   private int[] operationNames, operationThreads, operationDetails, operationErrors;
 
-  /** The start of the recording, which times count from. */
+  /** The start of the recording, which times count from, and its end; null if unknown. */
   private long start;
+  private Instant recordingStart, recordingEnd;
 
   private final long[] weights = new long[2];
 
@@ -111,6 +114,8 @@ public final class ProfileWriter {
       operationErrors[i] = op.error() == null ? -1 : name(op.error());
     }
     start = Analysis.nanos(analysis.getInfo().getStart());
+    recordingStart = analysis.getInfo().getStart();
+    recordingEnd = analysis.getInfo().getEnd();
     int truncated = frame(FlameGraphs.TRUNCATED, SYNTHETIC);
 
     analysis.visitSamples((sample, thread, operation, weight) -> {
@@ -237,6 +242,9 @@ public final class ProfileWriter {
 
     out.write("{\"version\":" + VERSION);
     out.write(",\"weights\":[" + weights[JAVA] + "," + weights[NATIVE_SAMPLE] + "]");
+    // the span of the recording: the end in ns since its start
+    out.write(",\"start\":" + Json.write(String.valueOf(recordingStart)));
+    out.write(",\"end\":" + (recordingEnd == null ? 0 : Analysis.nanos(recordingEnd) - start));
 
     out.write(",\"strings\":[");
     String previous = "";

@@ -171,7 +171,7 @@ public class ProfilerTest {
     Assertions.assertTrue(profile.headers().firstValue("Content-Encoding").isEmpty());
     Assertions.assertEquals(profile.body(), new String(new GZIPInputStream(new ByteArrayInputStream(gzipped.body()))
                                                          .readAllBytes(), StandardCharsets.UTF_8));
-    Assertions.assertTrue(profile.body().startsWith("{\"version\":2,"), profile.body().substring(0, 40));
+    Assertions.assertTrue(profile.body().startsWith("{\"version\":3,"), profile.body().substring(0, 40));
     Assertions.assertTrue(profile.body().contains("ProfilerTest$Handlers.busy"), "front-coded, but whole here");
     Assertions.assertEquals(404, get("api/sessions/9/profile").statusCode());
 
@@ -197,7 +197,7 @@ public class ProfilerTest {
                                       "components/timeline", "components/slowest", "components/auto",
                                       "components/section", "views/history",
                                       "components/sessionTimeline", "lib/dom", "lib/settings",
-                                      "lib/dialog", "lib/router", "profile/profile", "profile/operations", "flame/render",
+                                      "lib/dialog", "lib/router", "profile/profile", "profile/operations", "profile/timeline", "flame/render",
                                       "flamePage", "components/hotMethods", "components/share", "components/tabs"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assertions.assertEquals(200, js.statusCode(), module);

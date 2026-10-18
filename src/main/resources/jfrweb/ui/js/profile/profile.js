@@ -27,6 +27,8 @@ export const NO_OPERATION = '(no operation)';
  * @property {Int32Array} operation of each sample, an index in operations, -1 outside any
  * @property {Uint8Array} kind of each sample: 0 Java, 1 native
  * @property {number[]} weights the ms a Java and a native sample stand for
+ * @property {string} start of the recording, ISO-8601
+ * @property {number} end of the recording, in ns since its start
  * @property {{name: string, id: number}[]} threads
  * @property {Operations} operations in the order of the recording: an operation's index is
  *           the id the API gives it
@@ -52,7 +54,7 @@ export const NO_OPERATION = '(no operation)';
  */
 
 /** The version of the format this page reads: ProfileWriter.VERSION. */
-export const VERSION = 2;
+export const VERSION = 3;
 
 /**
  * @param {any} doc the JSON document
@@ -97,6 +99,8 @@ export function decode(doc) {
     operation: Int32Array.from(s.operation),
     kind: Uint8Array.from(s.kind),
     weights: doc.weights,
+    start: doc.start,
+    end: doc.end,
     threads: doc.threads.map((/** @type {number[]} */ [name, id]) => ({name: strings[name], id})),
     operations: operations(doc.operations),
   };

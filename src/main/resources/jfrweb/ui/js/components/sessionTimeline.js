@@ -9,12 +9,14 @@ import {h, replace} from '../lib/dom.js';
 import {errorBox} from './errorBox.js';
 import * as fmt from '../format.js';
 import {timelineChart} from './timeline.js';
+import {timeline} from '../profile/timeline.js';
 
 /** @typedef {import('./flame.js').ShownFrame} ShownFrame */
 
 /**
- * @param {number} sessionId
  * @param {api.TimelineData} whole the timeline of the whole session
+ * @param {Promise<import('../profile/profile.js').Profile>} profile the session's, from which a
+ *        part of the timeline is drawn in finer buckets, with no request
  * @param {(interval: api.Interval, name?: string) => void} onInterval called with what the
  *        sections below should show: the selection, else the range zoomed in on, else all;
  *        and the operation clicked, when a click picked one in a bucket
@@ -23,7 +25,7 @@ import {timelineChart} from './timeline.js';
  *          span of one operation on it, or removes the outline, and what draws when the samples
  *          of a frame of the flame graph were taken, or removes them
  */
-export function sessionTimeline(sessionId, whole, onInterval) {
+export function sessionTimeline(whole, profile, onInterval) {
   // the zoom, over the chart
   const toolbar = h('span', {class: 'timeline-zoom'});
   const chart = h('div');
@@ -72,9 +74,7 @@ export function sessionTimeline(sessionId, whole, onInterval) {
         : {from: round(offset + from), to: round(offset + to)};
       drawToolbar();
       onInterval(selection ?? range, name);
-    // a static export has the buckets of the whole session only: no zoom,
-    // but a selection, which the sections below follow from the profile
-    }, {timeLabel: t => `${round(offset + t)} s`, controls: api.isStatic() ? undefined : toolbar});
+    }, {timeLabel: t => `${round(offset + t)} s`, controls: toolbar});
     replace(chart, drawn);
     applyMark();
     applyFrame(data);
@@ -111,7 +111,7 @@ export function sessionTimeline(sessionId, whole, onInterval) {
     selection = null;
     onInterval(range);
     try {
-      draw(range.from === undefined && range.to === undefined ? whole : await api.getTimeline(sessionId, range));
+      draw(range.from === undefined && range.to === undefined ? whole : timeline(await profile, range));
     }
     catch (e) {
       replace(chart, errorBox(e));

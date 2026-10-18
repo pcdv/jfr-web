@@ -12,8 +12,8 @@ what was running when, the slowest calls with their exceptions and slow I/O, and
 one operation or a single call.
 
 **[Try the demo](https://pcdv.github.io/jfr-web/)**: a static copy of the TCP demo described
-below, rebuilt on every push. Being static, it can't do everything (no live view, no timeline zoom),
-but intervals and flame graph filters work as they do against a running profiler.
+below, rebuilt on every push. Being static, it can't do everything (no live view), but intervals,
+timeline zoom and flame graph filters work as they do against a running profiler.
 
 To run the demo yourself:
 ```
@@ -397,8 +397,8 @@ jfr-web export app.jfr other.jfr -o site/ --history logs/operations
 
 The API responses are computed up front, and each session's profile with them: its samples and
 operations, from which the page computes flame graphs, the operations table and the slowest calls of
-any interval and filter, as it does live. What it can't do: zoom the timeline into finer buckets,
-and show the threads, exceptions and slow accesses of calls other than the slowest of each
+any interval and filter, and the timeline zoomed in, as it does live. What it can't do: show the
+threads, exceptions and slow accesses of calls other than the slowest of each
 operation.
 
 Before you publish one, remember what a recording can contain: the JVM's environment variables,

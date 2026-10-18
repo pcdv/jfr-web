@@ -321,7 +321,7 @@ public class AnalysisTest {
   @Test
   public void testProfileFormat() throws IOException {
     Map<String, Object> p = profile();
-    Assertions.assertEquals(2L, p.get("version"));
+    Assertions.assertEquals(3L, p.get("version"));
 
     List<String> strings = strings(p);
     Assertions.assertEquals(new TreeSet<>(strings).stream().toList(), strings, "sorted, each once");

@@ -44,9 +44,9 @@ import jfrweb.session.Session;
  * any web server can serve (e.g. GitHub Pages), with no Java behind it: the
  * responses of the REST API are computed beforehand. Each session's profile
  * is one of them: from it, the page computes its flame graphs, operations and
- * slowest operations for any interval and filter. What is left out: the
- * timeline zoomed in, in finer buckets, and the details (threads, exceptions,
- * slow accesses) of operations other than the slowest of each name.
+ * slowest operations for any interval and filter, and its timeline zoomed in.
+ * What is left out: the details (threads, exceptions, slow accesses) of
+ * operations other than the slowest of each name.
  * <p>
  * It runs a profiler on the recordings, crawls its API, and writes each
  * response to a file. {@code static.json} maps each request to its file, as

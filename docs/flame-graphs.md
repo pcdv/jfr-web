@@ -37,7 +37,7 @@ roadmap; the format should not prevent it), or a general purpose profile viewer.
 
 ## The profile format
 
-A JSON document per session, version 2, from `GET /api/sessions/:id/profile` (sizes measured in
+A JSON document per session, version 3, from `GET /api/sessions/:id/profile` (sizes measured in
 phase 0, below). Written by `ProfileWriter`; every index below counts from 0.
 
 Any change of the format raises its version, however small, released or not: a page loaded
@@ -45,11 +45,12 @@ before the server changed (a tab left open across an upgrade, modules in the bro
 then refuses the document and asks to be reloaded, instead of reading it wrong. Version 1 had
 the operations' names only; phase 2b added their other fields in place, and a page of version 1
 read the new document without noticing: the flame graph of any operation came out empty. Version
-2 is that document.
+2 is that document; 3 added the span of the recording, for the page to draw its timeline zoomed in.
 
 ```json
 {"version": 2,
  "weights": [20, 5],
+ "start": "2026-10-18T08:00:07.177Z", "end": 920037000000,
  "strings": [" (truncated)", " GET /busy/:id", " java.lang.Thread.run", "%util.Arrays.sort", "..."],
  "stacks": [0, 18, 1, 26, 2, 41, "..."],
  "samples": {"time": [12, 0, 5, "..."], "stack": [3, 7, -1, "..."], "thread": [0, 0, 1, "..."],
@@ -64,6 +65,7 @@ read the new document without noticing: the flame graph of any operation came ou
 |---|---|
 | `version` | `1` |
 | `weights` | the milliseconds a sample stands for: `[Java, native]`, as `Analysis` computes them |
+| `start`, `end` | the span of the recording: its start as an ISO-8601 time, its end in ns since the start; for the timeline's buckets |
 | `strings` | every name (methods as `class.method`, operations, threads), each once, sorted and front-coded as in async-profiler's pages: the code of the first character minus 32 is the length of the prefix shared with the previous string (95 at most), the rest follows |
 | `stacks` | the tree of stacks, their common beginnings shared, written depth first as pairs `depth, frame`: a node's parent is the last node written one level up, and a root has depth 0. A frame is `string << 3 \| type` |
 | `samples` | columns of equal length, one entry per sample, sorted by time: `time` in ms since the start of the recording, each the difference with the previous one; `stack`, the node of the top frame, -1 when JFR kept no stack; `thread`, an index in `threads`; `operation`, an index in `operations`, -1 outside any; `kind`, 0 for Java, 1 for native |
@@ -206,8 +208,11 @@ names `jfr-converter`).
 
 Done on 2026-10-18. The page uses the profile everywhere, a static export included: there, an
 interval dragged on the timeline narrows the operations, the slowest and the flame graph as it
-does live, and the flame graph's filters combine; only the timeline's zoom (finer buckets) and the
-details of operations other than the slowest of each name are missing. The export writes the
+does live, and the flame graph's filters combine; only the details of operations other than the
+slowest of each name are missing. Since then (`profile/timeline.js`), the timeline zoomed in, in
+finer buckets, is drawn from the profile too, with no request, live and in a static export: its
+series equal the server's (`Timeline.of`) over 7 ranges of each of 15 recordings; the Java samples
+per bucket, kept in whole ms, may move to a neighbouring bucket (at most 23 counts of 35,127). The export writes the
 profile, report and timeline of each session and the details of its slowest operations: for the
 demo recording and an application server session, 453 files, 1.9 MB (the export before was not
 measured, its build being gone). The flame graph route is removed (no links to keep), and the

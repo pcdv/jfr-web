@@ -106,7 +106,7 @@ export function renderSession(root, params, signal) {
           flame.showInterval(i.from, i.to, names);
           clicked = name;
         };
-        const timelinePanel = sessionTimeline(id, timeline, showInterval);
+        const timelinePanel = sessionTimeline(timeline, profile, showInterval);
         // the operation picked among the slowest is outlined on the timeline
         // while its flame graph shows
         const flame = flamePanel(profile, signal, {
