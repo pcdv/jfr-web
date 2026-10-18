@@ -2,10 +2,18 @@
 /**
  * A flame graph of a session, with its filters: operation, thread, time
  * interval, and the samples taken outside operations.
+ *
+ * The session's samples are loaded once, and the flame graph of each filter
+ * built and drawn here. A static export still shows the flame graphs the
+ * server drew, one filter at a time.
  */
 import * as api from '../api.js';
+import * as fmt from '../format.js';
 import {h, replace} from '../lib/dom.js';
+import {errorBox} from './errorBox.js';
 import {label} from './slowest.js';
+import {decode, tree} from '../flame/profile.js';
+import {flameGraph} from '../flame/render.js';
 
 /**
  * @typedef {object} FlamePanel
@@ -20,11 +28,12 @@ import {label} from './slowest.js';
 
 /**
  * @param {api.Report} report
+ * @param {AbortSignal} signal the view's
  * @param {(op: api.InstanceRow | null) => void} [onInstance] told of the operation shown
  *        alone, and with null once the flame graph is back to the filters
  * @returns {FlamePanel}
  */
-export function flamePanel(report, onInstance = () => {}) {
+export function flamePanel(report, signal, onInstance = () => {}) {
   const id = report.session.id;
   const seconds = Math.ceil(report.session.duration / 1000);
 
@@ -44,15 +53,26 @@ export function flamePanel(report, onInstance = () => {}) {
   const merged = h('input', {type: 'checkbox', name: 'merged'});
   const reversed = h('input', {type: 'checkbox', name: 'reversed'});
   const java = h('input', {type: 'checkbox', name: 'java'});
-  const frame = h('iframe', {class: 'flame', title: 'Flame graph'});
 
   /** @type {number | undefined} one operation shown, instead of the filters */
   let instance;
+  /** @type {string} what it is, for the caption */
+  let instanceLabel = '';
   const instanceChip = h('span', {class: 'chip', hidden: true});
 
-  function update() {
-    instanceChip.hidden = instance === undefined;
-    frame.src = api.flameUrl(id, instance !== undefined ? {instance} : {
+  // a static export: the pages the server drew
+  const frame = api.isStatic() ? h('iframe', {class: 'flame', title: 'Flame graph'}) : null;
+  const graph = frame ? null : flameGraph(signal);
+  const caption = h('div', {class: 'flame-caption'}, 'Loading the samples…');
+  const serverPage = h('a', {target: '_blank', rel: 'noopener',
+                             title: "The same flame graph, drawn by the server with async-profiler's converter"},
+                       'Drawn by the server');
+  const body = h('div', null, frame ?? [h('div', {class: 'flame-caption-bar'}, caption, serverPage), graph?.element]);
+  const profile = frame ? null : api.getProfile(id).then(decode);
+
+  /** @returns {api.FlameFilter} */
+  function filter() {
+    return instance !== undefined ? {instance} : {
       name: name.value || undefined,
       thread: thread.value || undefined,
       from: from.value === '' ? undefined : Number(from.value),
@@ -61,6 +81,38 @@ export function flamePanel(report, onInstance = () => {}) {
       merged: merged.checked,
       reversed: reversed.checked,
       java: java.checked,
+    };
+  }
+
+  function update() {
+    instanceChip.hidden = instance === undefined;
+    const f = filter();
+    if (frame) {
+      frame.src = api.flameUrl(id, f);
+      return;
+    }
+    serverPage.href = api.flameUrl(id, f);
+    profile?.then(p => {
+      if (signal.aborted || !graph)
+        return;
+      const {root, samples} = tree(p, f);
+      const what = [f.java ? 'Java code' : 'Wall clock'];
+      if (f.instance !== undefined)
+        what.push(instanceLabel);
+      else {
+        if (f.name)
+          what.push(f.name);
+        if (f.thread)
+          what.push(`thread ${f.thread}`);
+        if (f.from !== undefined || f.to !== undefined)
+          what.push(fmt.interval(f));
+      }
+      replace(caption, `${what.join(' · ')}: ${fmt.duration(root.total)} in ${samples} samples`,
+              samples ? null : ', none for these filters');
+      graph.show(root, !!f.reversed && f.instance === undefined);
+    }).catch(e => {
+      if (!signal.aborted)
+        replace(body, errorBox(e));
     });
   }
 
@@ -118,15 +170,15 @@ export function flamePanel(report, onInstance = () => {}) {
 
   /** Asked for: shown even if its section was folded. */
   function reveal() {
-    const folded = frame.closest('details');
+    const folded = body.closest('details');
     if (folded)
       folded.open = true;
-    frame.scrollIntoView({behavior: 'smooth'});
+    body.scrollIntoView({behavior: 'smooth'});
   }
 
   update();
   return {
-    element: h('div', null, form, frame),
+    element: h('div', null, form, body),
     showName(n) {
       clearInstance();
       name.value = n;
@@ -144,6 +196,7 @@ export function flamePanel(report, onInstance = () => {}) {
     },
     showInstance(r) {
       instance = r.id;
+      instanceLabel = `${label(r)} at ${r.start.toFixed(3)} s`;
       replace(instanceChip,
         `${label(r)} at ${r.start.toFixed(3)} s `,
         h('button', {type: 'button', title: 'Back to the filters', onclick: () => onFilterChange()}, '×'));

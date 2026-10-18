@@ -399,6 +399,14 @@ export function getReport(id) {
 }
 
 /**
+ * @param {number} id
+ * @returns {Promise<any>} the samples of the session, for flame/profile.js to decode
+ */
+export function getProfile(id) {
+  return call(`api/sessions/${id}/profile`);
+}
+
+/**
  * @typedef {object} TimelineData
  * @property {string} start ISO-8601, the start of the recording
  * @property {number} bucket the duration of a bucket, in ms

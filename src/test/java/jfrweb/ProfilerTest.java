@@ -204,7 +204,7 @@ public class ProfilerTest {
                                       "components/timeline", "components/slowest", "components/auto",
                                       "components/section", "views/history",
                                       "components/sessionTimeline", "lib/dom", "lib/settings",
-                                      "lib/dialog", "lib/router"}) {
+                                      "lib/dialog", "lib/router", "flame/profile", "flame/render"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assertions.assertEquals(200, js.statusCode(), module);
       Assertions.assertEquals("application/javascript", js.headers().firstValue("Content-Type").orElse(null), module);

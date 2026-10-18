@@ -102,7 +102,7 @@ export function renderSession(root, params, signal) {
         const timelinePanel = sessionTimeline(id, timeline, showInterval);
         // the operation picked among the slowest is outlined on the timeline
         // while its flame graph shows
-        const flame = flamePanel(report, op => timelinePanel.mark(op));
+        const flame = flamePanel(report, signal, op => timelinePanel.mark(op));
         const slowest = slowestPanel(id, flame.showInstance);
         const operations = operationsPanel(id, report.operations, n => {
           slowest.showName(n);

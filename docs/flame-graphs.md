@@ -142,8 +142,33 @@ of today's collapsed output with its weight, frames compared by name; `ProfilerT
 endpoint, gzipped and plain.
 
 **2. Renderer at parity.** `profile.js`, `render.js`, the flame panel on them. The old page stays
-reachable (`?flame=classic` or a setting) until this phase is checked in Firefox, Edge, and VS
-Code's built-in browser: every filter and combination, zoom, search, tooltips, colors, dark mode.
+reachable, a link "Drawn by the server" beside the caption with the same filters, until this phase
+is checked in Firefox, Edge, and VS Code's built-in browser: every filter and combination, zoom,
+search, tooltips, colors, dark mode. A static export keeps the server's pages until phase 3.
+
+Built on 2026-10-18. `profile.js` gives the trees of the server, checked against `jfr-web flame
+--collapsed` on a recording of the TCP demo and on one of an application server: every stack
+with its weight, for each filter and combination (operation, thread, outside operations, merged,
+reversed, Java only), and the totals of intervals and of single operations against the server's
+pages. Checked in headless Edge: light and dark, zoom and back, search, hot methods, one
+operation picked among the slowest; Firefox and VS Code's browser remain.
+
+**2b. Operations in the browser.** An interval selected on the timeline narrows the operations
+table and the slowest list too, and those still ask the server (`/operations`, `/instances`), so
+the static export cannot select an interval at all. The profile gets the operations themselves,
+in columns like the samples: start and end, thread (the one that ended an asynchronous operation),
+detail, status, failed and its error, asynchronous or not, bytes in and out; details and errors
+go into `strings`. Version 1 is extended in place, since nothing released reads it yet. The page
+then computes, for an interval or a name:
+
+- the operations table (`OperationStats`): count, total, p50, p99, max, errors, bytes in and out,
+  over the operations in flight during the interval, each with its whole duration;
+- the slowest list, the slowest first.
+
+Both checked against the server's answers on the same recordings, as the flame graphs were. The
+zoomed timeline's finer buckets may follow from the same data; the details of one operation
+(exceptions, slow accesses, threads) stay a request, which a static export answers for the
+operations it exported.
 
 **3. Switch.** The static export writes one profile per session instead of its flame graph pages
 (total size compared before and after); `jfr-web flame` writes our page; `--collapsed` is our
