@@ -18,7 +18,7 @@ const POLL = 1000;
 export function renderSessions(root) {
   const auto = h('div');
   const content = h('div');
-  root.append(h('h1', null, 'Sessions'), auto, content);
+  root.append(h('h1', null, 'Profiling sessions'), auto, content);
 
   /** @type {number | undefined} */
   let timer;

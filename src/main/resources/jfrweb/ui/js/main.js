@@ -26,7 +26,7 @@ const routes = [
   [/^#\/sessions\/(\d+)$/, renderSession, p => `Session ${p[0]}`],
   [/^#\/live$/, renderLive, () => 'Live operations'],
   [/^#\/history$/, renderHistory, () => 'History of operations'],
-  [/^(#\/?)?$/, renderSessions, () => 'Sessions'],
+  [/^(#\/?)?$/, renderSessions, () => 'Profiling'],
 ];
 
 /** The application profiled, in the title of the page: tabs tell them apart. */

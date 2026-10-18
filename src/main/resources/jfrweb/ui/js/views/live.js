@@ -138,7 +138,8 @@ function autoLine(auto, recorded, onDisarm) {
   if (auto.armed)
     return h('p', {class: 'armed-line'}, h('span', {class: 'state recording'}, 'Armed: '),
       'the next ', what(auto), auto.browser ? ' from the armed browser' : '', ' records a session', named,
-      auto.repeat ? ', every time' : '', `, until ${auto.idle} s without one or ${auto.max} s at most. `,
+      auto.repeat ? ', and so does each one after it' : '',
+      `. A session stops after ${auto.idle} s with no matching operation, or ${auto.max} s in all. `,
       h('button', {class: 'small', onclick: onDisarm}, 'Disarm'));
   if (recorded !== null)
     return h('p', {class: 'armed-line'}, 'Recorded ',

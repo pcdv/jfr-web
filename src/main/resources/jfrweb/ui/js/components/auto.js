@@ -53,9 +53,11 @@ function armed(s, refresh) {
   const who = s.browser ? (s.thisBrowser ? ' from this browser' : ' from another browser') : '';
   return h('div', {class: 'form-grid'},
     h('span', {class: 'label'}, 'Starts a session on'),
-    h('span', null, ...what, who, s.repeat ? ', every time' : ', once'),
-    h('span', {class: 'label'}, 'Stops after'),
-    h('span', null, `${s.idle} s without one, or ${s.max} s at most`),
+    h('span', null, ...what, who),
+    h('span', {class: 'label'}, 'Repeat'),
+    h('span', null, s.repeat ? 'yes, a new session each time' : 'no, only the first session'),
+    h('span', {class: 'label'}, 'Stops when'),
+    h('span', null, `no matching operation for ${s.idle} seconds, or after ${s.max} s in all`),
     s.name ? [h('span', {class: 'label'}, 'Named'), h('span', null, s.name)] : null,
     h('span'),
     h('span', null, h('button', {onclick: () => act(api.disarmAuto, refresh)}, 'Disarm')));
@@ -95,18 +97,18 @@ function form(state, refresh) {
       h('div', {class: 'hint'}, 'Separated by commas; * matches anything; empty for any operation.',
         state.fed ? ' The JVM tells of an operation only once it ends: the session records from the moment it is ' +
                     'armed, until one has ended.' : null)),
-    h('span', {class: 'label'}, 'Sessions'),
+    state.flakApps
+      ? [h('span', {class: 'label'}, 'From'),
+         h('div', null, h('label', {title: 'A cookie marks this browser'},
+           browser, ' this browser only: requests from other clients are ignored'))]
+      : null,
+    h('span', {class: 'label'}, 'Repeat'),
+    h('div', null, h('label', null, repeat, ' start a new session every time the operation starts')),
+    h('span', {class: 'label'}, 'Stops when'),
     h('div', {class: 'inline'},
-      state.flakApps
-        ? h('label', {title: 'A cookie marks this browser: the requests of other clients do not count'},
-            browser, ' only requests from this browser')
-        : null,
-      h('label', null, repeat, ' a session every time, not once')),
-    h('span', {class: 'label'}, 'Stops after'),
-    h('div', {class: 'inline'},
-      h('label', {title: 'Once no matching operation has run for that long, which leaves time for asynchronous work'},
-        idle, ' s without one'),
-      h('label', null, max, ' s at most')),
+      h('label', {title: 'The wait leaves time for asynchronous work to end'},
+        'no matching operation for ', idle, ' seconds'),
+      h('label', null, 'or after ', max, ' seconds')),
     h('label', {class: 'label', for: 'auto-name'}, 'Name'),
     h('div', null, name),
     h('span'),
