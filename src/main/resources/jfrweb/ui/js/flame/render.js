@@ -285,7 +285,10 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
     const left = e.clientX - r.left;
     tooltip.style.left = left < r.width / 2 ? `${left + 16}px` : '';
     tooltip.style.right = left < r.width / 2 ? '' : `${r.width - left + 16}px`;
-    tooltip.style.top = `${e.clientY - r.top + 16}px`;
+    // above the pointer near the bottom: the graph's frame would cut it
+    const top = e.clientY - r.top;
+    const height = tooltip.offsetHeight;
+    tooltip.style.top = `${top + 16 + height <= r.height ? top + 16 : Math.max(0, top - 8 - height)}px`;
   }
 
   canvas.addEventListener('mousemove', e => {
