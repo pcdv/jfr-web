@@ -24,6 +24,7 @@
   --flame-interpreted: #e8c95a;
   --flame-native: #e8956a;
   --flame-synthetic: #c9ccd1;
+  --flame-allocated: #8fb3e8;
   --flame-match: #d462d4;
   --flame-text: #1f2328;
   /* compared with a baseline: more of the time, less */
@@ -57,6 +58,7 @@
     --flame-interpreted: #7a6520;
     --flame-native: #8a4a2a;
     --flame-synthetic: #3a3f47;
+    --flame-allocated: #34507a;
     --flame-match: #9a3d9a;
     --flame-text: #e6edf3;
     --flame-more: #b8423b;

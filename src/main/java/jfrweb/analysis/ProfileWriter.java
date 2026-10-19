@@ -36,12 +36,16 @@ public final class ProfileWriter {
    * Raised with any change of the format: a page loaded before the server
    * changed refuses what it cannot read, instead of reading it wrong. 2 added
    * the fields of the operations to their names, 3 the start and end of the
-   * recording, for the page to draw its timeline in any buckets.
+   * recording, for the page to draw its timeline in any buckets, 4 the unit
+   * of the weights, and the weight of each allocation sample.
    */
-  public static final int VERSION = 3;
+  public static final int VERSION = 4;
 
   /** Types of frames. */
   public static final int COMPILED = 0, INLINED = 1, INTERPRETED = 2, NATIVE = 3, SYNTHETIC = 4;
+
+  /** The type of the class an allocation sample allocated: the top of its stack. */
+  public static final int ALLOCATED = 5;
 
   /** Kinds of samples, and the index of their weight. */
   public static final int JAVA = 0, NATIVE_SAMPLE = 1;
@@ -61,6 +65,11 @@ public final class ProfileWriter {
   private final IntList sampleThread = new IntList();
   private final IntList sampleOperation = new IntList();
   private final IntList sampleKind = new IntList();
+  /** Of allocation samples only: the bytes each stands for. */
+  private final LongList sampleWeight = new LongList();
+
+  /** Allocation samples, weighing bytes, instead of Java and native ones, weighing ms. */
+  private final boolean allocations;
 
   private final Map<Long, Integer> threads = new HashMap<>();
   /** Name and id of each thread. */
@@ -76,7 +85,9 @@ public final class ProfileWriter {
 
   private final long[] weights = new long[2];
 
-  private ProfileWriter() {}
+  private ProfileWriter(boolean allocations) {
+    this.allocations = allocations;
+  }
 
   /**
    * @param out written to, not closed
@@ -92,7 +103,16 @@ public final class ProfileWriter {
    */
   public static void write(Analysis analysis, Writer out, BiPredicate<RecordedThread, RecordedOperation> keep)
     throws IOException {
-    ProfileWriter w = new ProfileWriter();
+    write(analysis, out, keep, false);
+  }
+
+  /**
+   * @param allocations the allocation samples, weighing the bytes they stand
+   *                    for, instead of the Java and native ones
+   */
+  public static void write(Analysis analysis, Writer out, BiPredicate<RecordedThread, RecordedOperation> keep,
+                           boolean allocations) throws IOException {
+    ProfileWriter w = new ProfileWriter(allocations);
     w.read(analysis, keep);
     w.writeJson(out);
   }
@@ -118,11 +138,15 @@ public final class ProfileWriter {
     recordingEnd = analysis.getInfo().getEnd();
     int truncated = frame(FlameGraphs.TRUNCATED, SYNTHETIC);
 
-    analysis.visitSamples((sample, thread, operation, weight) -> {
+    analysis.visitSamples(allocations, (sample, thread, operation, weight) -> {
       if (!keep.test(thread, operation))
         return;
-      int kind = sample.getEventType().getName().equals(RecordingInfo.EXECUTION_SAMPLE) ? JAVA : NATIVE_SAMPLE;
-      weights[kind] = weight;
+      int kind = allocations || sample.getEventType().getName().equals(RecordingInfo.EXECUTION_SAMPLE)
+                 ? JAVA : NATIVE_SAMPLE;
+      if (allocations)
+        sampleWeight.add(weight);
+      else
+        weights[kind] = weight;
 
       // none when JFR kept no stack: the sample still counts for its operation
       int node = -1;
@@ -137,6 +161,9 @@ public final class ProfileWriter {
           node = node(node, frame(f.getMethod().getType().getName() + "." + f.getMethod().getName(), type(f)));
         }
       }
+      // what was allocated, on top of where
+      if (allocations)
+        node = node(node, frame(Analysis.allocatedClass(sample), ALLOCATED));
 
       sampleTime.add((Analysis.nanos(sample.getStartTime()) - start) / 1_000_000);
       sampleStack.add(node);
@@ -241,6 +268,7 @@ public final class ProfileWriter {
       samples[i] = (int) (byTime[i] & Integer.MAX_VALUE);
 
     out.write("{\"version\":" + VERSION);
+    out.write(",\"unit\":" + (allocations ? "\"bytes\"" : "\"ms\""));
     out.write(",\"weights\":[" + weights[JAVA] + "," + weights[NATIVE_SAMPLE] + "]");
     // the span of the recording: the end in ns since its start
     out.write(",\"start\":" + Json.write(String.valueOf(recordingStart)));
@@ -284,6 +312,13 @@ public final class ProfileWriter {
     writeColumn(out, "thread", sampleThread, samples);
     writeColumn(out, "operation", sampleOperation, samples);
     writeColumn(out, "kind", sampleKind, samples);
+    if (allocations) {
+      out.write("],\"weight\":[");
+      for (int i = 0; i < s; i++) {
+        separate(out, i);
+        out.write(Long.toString(sampleWeight.get(samples[i])));
+      }
+    }
 
     out.write("]},\"threads\":[");
     for (int i = 0; i < threadList.size(); i++) {

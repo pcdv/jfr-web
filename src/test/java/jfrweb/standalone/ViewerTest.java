@@ -64,7 +64,7 @@ public class ViewerTest {
   public void testBrowsesRecordings() throws Exception {
     viewer = Viewer.start(List.of(dir), null, 0);
 
-    Assertions.assertEquals("{\"app\":\"app.jfr\",\"recordingsOnly\":true,\"history\":false}", get("api/about").body());
+    Assertions.assertEquals("{\"app\":\"app.jfr\",\"recordingsOnly\":true,\"samples\":\"wall\",\"history\":false}", get("api/about").body());
     String list = get("api/sessions").body();
     Assertions.assertTrue(list.startsWith("[{\"id\":1,\"state\":\"STOPPED\",\"name\":\"app\",\"trigger\":\"file: "), list);
     Assertions.assertEquals(1, list.split("\"id\":").length - 1, "one session");

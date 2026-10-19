@@ -375,6 +375,11 @@ operations, slowest calls, and flame graphs with any combination of filters. `--
 History of operations page. There's no JVM behind the files, so the live view, auto mode and
 starting sessions are left out.
 
+A flame graph shows either the wall clock or the allocations: the **Samples** choice in its filters
+switches to the recording's allocation samples (`jdk.ObjectAllocationSample`, on in JFR's default
+settings since JDK 16), each weighing the bytes it stands for, the class allocated on top of its
+stack. `--alloc` opens the flame graphs on the allocations.
+
 Operations only show up if the recording has their events. jfr-web's own sessions and snapshots
 always do. For a recording you make yourself, turn on flak's request event, jfr-web's operation
 events (`jfrweb.Operation` and `jfrweb.OperationSegment`), all off by default, or your own
@@ -426,9 +431,9 @@ jfr-web history logs/operations --from 2026-10-13T10:00 --to 2026-10-13T11:00
 `flame` writes one HTML file that works opened from the disk: the interface's flame graph, its
 filters still changeable. `--operation` and `--thread <regex>` keep the samples it holds; `--all`
 (samples taken outside operations), `--merged`, `--reversed` and `--java` (the merged, hot methods
-and Java only flame graphs) are the filters it opens with. `--collapsed` writes collapsed stacks
-instead, the input of other flame graph tools: one line per stack, frames by name, then the
-milliseconds.
+and Java only flame graphs) are the filters it opens with; `--alloc` takes the allocation samples
+instead, weighing bytes. `--collapsed` writes collapsed stacks instead, the input of other flame
+graph tools: one line per stack, frames by name, then the milliseconds (the bytes with `--alloc`).
 
 ## Trying it out
 

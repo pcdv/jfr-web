@@ -16,8 +16,9 @@ const strings = ['GET /a', 'GET /a/1', 'GET /a/2', 'boom', 'job', 'main', 'pool-
 // 4 GET /a   40-40.0049
 const start = [0, 5, 20, 30, 40].map(t => t * ms);
 const doc = {
-  version: 3,
+  version: 4,
   weights: [20, 5],
+  unit: 'ms',
   start: "2026-10-18T08:00:00Z",
   end: 60_000_000,
   strings: strings.map(s => ' ' + s),

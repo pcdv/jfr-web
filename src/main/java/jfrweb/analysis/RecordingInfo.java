@@ -17,6 +17,7 @@ public final class RecordingInfo {
 
   public static final String EXECUTION_SAMPLE = "jdk.ExecutionSample";
   public static final String NATIVE_SAMPLE = "jdk.NativeMethodSample";
+  public static final String ALLOCATION_SAMPLE = "jdk.ObjectAllocationSample";
   public static final String FLAK_REQUEST = "flak.Request";
   public static final String OPERATION = Operations.EVENT;
 
@@ -58,6 +59,9 @@ public final class RecordingInfo {
   Duration javaInterval;
   Duration nativeInterval;
 
+  /** The allocation samples of the recording. */
+  long allocationSamples;
+
   /** Settings of each event, by event name then setting name. */
   final Map<String, Map<String, String>> settings = new TreeMap<>();
 
@@ -87,6 +91,14 @@ public final class RecordingInfo {
 
   public Instant getEnd() {
     return end;
+  }
+
+  /**
+   * The number of allocation samples ({@link #ALLOCATION_SAMPLE}): none when
+   * the recording did not enable them, or the JVM is older than 16.
+   */
+  public long getAllocationSamples() {
+    return allocationSamples;
   }
 
   /**

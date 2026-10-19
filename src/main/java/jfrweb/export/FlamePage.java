@@ -35,7 +35,7 @@ public final class FlamePage {
   public static void write(Analysis analysis, FlameGraphs.Options o, String title, String source, Writer out)
     throws IOException {
     StringWriter profile = new StringWriter();
-    ProfileWriter.write(analysis, profile, o::keeps);
+    ProfileWriter.write(analysis, profile, o::keeps, o.allocations());
 
     Map<String, String> values = Map.of(
       "title", html(title),

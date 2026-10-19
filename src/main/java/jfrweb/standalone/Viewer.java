@@ -54,6 +54,14 @@ public final class Viewer implements AutoCloseable {
    * @throws IllegalArgumentException if there is no recording
    */
   public static Viewer start(List<Path> recordings, Path history, int port) throws IOException {
+    return start(recordings, history, port, false);
+  }
+
+  /**
+   * @param allocations whether flame graphs show the allocation samples first
+   */
+  public static Viewer start(List<Path> recordings, Path history, int port, boolean allocations)
+    throws IOException {
     List<Path> files = files(recordings);
     if (files.isEmpty())
       throw new IllegalArgumentException("No .jfr file in " + recordings);
@@ -83,7 +91,7 @@ public final class Viewer implements AutoCloseable {
     factory.setLocalAddress(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
     App app = factory.createApp();
     String title = files.size() == 1 ? files.get(0).getFileName().toString() : files.size() + " recordings";
-    ProfilerApp.install(app, null, new About(title, true), sessions, LiveStats.fed(), AutoMode.fed(sessions),
+    ProfilerApp.install(app, null, new About(title, true, allocations), sessions, LiveStats.fed(), AutoMode.fed(sessions),
                         history, null);
     app.start();
     Viewer v = new Viewer(app, sessions, empty);

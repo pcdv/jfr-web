@@ -14,11 +14,13 @@ import java.util.TreeMap;
 import java.util.function.Consumer;
 
 import jdk.jfr.EventType;
+import jdk.jfr.consumer.RecordedClass;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordedThread;
 import jdk.jfr.consumer.RecordingFile;
 import jfrweb.ops.FlakOperations;
 
+import static jfrweb.analysis.RecordingInfo.ALLOCATION_SAMPLE;
 import static jfrweb.analysis.RecordingInfo.EXECUTION_SAMPLE;
 import static jfrweb.analysis.RecordingInfo.FLAK_REQUEST;
 import static jfrweb.analysis.RecordingInfo.NATIVE_SAMPLE;
@@ -118,6 +120,9 @@ public final class Analysis {
             break;
           case NATIVE_SAMPLE:
             nativeSampleTimes.add(nanos(e.getStartTime()));
+            break;
+          case ALLOCATION_SAMPLE:
+            info.allocationSamples++;
             break;
           case "jdk.ActiveSetting":
             String event = eventNames.get(e.getLong("id"));
@@ -335,6 +340,68 @@ public final class Analysis {
         visitor.visit(e, t, op, java ? javaWeight : nativeWeight);
       }
     }
+  }
+
+  /**
+   * Reads the allocation samples of the recording instead: each weighs the
+   * bytes JFR estimates it stands for, allocated by its thread since the
+   * previous sample. Its stack is where the object was allocated.
+   */
+  public void visitAllocations(SampleVisitor visitor) throws IOException {
+    try (RecordingFile rf = new RecordingFile(file)) {
+      while (rf.hasMoreEvents()) {
+        RecordedEvent e = rf.readEvent();
+        if (!e.getEventType().getName().equals(ALLOCATION_SAMPLE))
+          continue;
+        RecordedThread t = e.getThread("eventThread");
+        if (t == null)
+          continue;
+        RecordedOperation op = index.find(t.getJavaThreadId(), nanos(e.getStartTime()));
+        visitor.visit(e, t, op, e.getLong("weight"));
+      }
+    }
+  }
+
+  /**
+   * @param allocations the allocation samples, else the Java and native ones
+   */
+  public void visitSamples(boolean allocations, SampleVisitor visitor) throws IOException {
+    if (allocations)
+      visitAllocations(visitor);
+    else
+      visitSamples(visitor);
+  }
+
+  /**
+   * The class of the object an allocation sample allocated, as Java writes
+   * it: byte[], not [B.
+   */
+  public static String allocatedClass(RecordedEvent e) {
+    RecordedClass c = e.getClass("objectClass");
+    return c == null ? "(unknown class)" : javaName(c.getName());
+  }
+
+  static String javaName(String name) {
+    int dims = 0;
+    while (dims < name.length() && name.charAt(dims) == '[')
+      dims++;
+    if (dims == 0)
+      return name;
+    String element = name.substring(dims);
+    switch (element) {
+      case "Z": element = "boolean"; break;
+      case "B": element = "byte"; break;
+      case "C": element = "char"; break;
+      case "S": element = "short"; break;
+      case "I": element = "int"; break;
+      case "J": element = "long"; break;
+      case "F": element = "float"; break;
+      case "D": element = "double"; break;
+      default:
+        if (element.startsWith("L") && element.endsWith(";"))
+          element = element.substring(1, element.length() - 1);
+    }
+    return element + "[]".repeat(dims);
   }
 
   /**

@@ -27,7 +27,8 @@ import {readSetting, writeSetting} from '../lib/settings.js';
  * @property {string} name
  * @property {(start: number, bucket: number, count: number) => Float64Array} times its ms of
  *           samples per bucket: from start, in ms since the start of the recording, count
- *           buckets of bucket ms
+ *           buckets of bucket ms; bytes for allocations
+ * @property {'ms' | 'bytes'} unit what times() counts
  */
 
 /**
@@ -52,9 +53,28 @@ import {readSetting, writeSetting} from '../lib/settings.js';
  * @param {FlameFilter} [options.filter] the filters it opens with
  * @param {(frame: ShownFrame | null) => void} [options.onFrame] told of the frame hovered, else
  *        of the one zoomed on, else of none: to show when its samples were taken
+ * @param {(() => Promise<Profile>) | null} [options.allocations] loads the profile of the
+ *        session's allocation samples, which a choice of samples then shows: null when it has
+ *        none, the choice disabled; none for no choice, e.g. on a page holding one profile
+ * @param {boolean} [options.showAllocations] whether it opens on the allocations
  * @returns {FlamePanel}
  */
-export function flamePanel(profile, signal, {onInstance = () => {}, filter: initial = {}, onFrame = () => {}} = {}) {
+export function flamePanel(profile, signal, {onInstance = () => {}, filter: initial = {}, onFrame = () => {},
+                                             allocations, showAllocations = false} = {}) {
+  // the samples drawn: the wall clock's, or the allocations', loaded once asked for
+  const samplesChoice = h('select', {name: 'samples'},
+    h('option', {value: 'wall'}, 'Wall clock'),
+    h('option', {value: 'alloc', disabled: !allocations}, 'Allocations'));
+  samplesChoice.value = allocations && showAllocations ? 'alloc' : 'wall';
+  /** @type {Promise<Profile> | null} */
+  let allocationProfile = null;
+  /** @returns {Promise<Profile>} the profile of the samples chosen */
+  function source() {
+    if (samplesChoice.value !== 'alloc' || !allocations)
+      return profile;
+    return allocationProfile ??= allocations();
+  }
+
   const name = h('select', {name: 'name'}, h('option', {value: ''}, 'All operations'));
   const thread = h('select', {name: 'thread'}, h('option', {value: ''}, 'Any thread'));
   const from = h('input', {type: 'number', name: 'from', min: 0, step: 'any', placeholder: '0',
@@ -79,7 +99,8 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
   const graph = flameGraph(signal, {
     onFrame: f => {
       const d = drawn;
-      onFrame(f && d ? {name: f.name, times: (start, bucket, count) => timeOf(d.profile, d.filter, f.path, start, bucket, count)}
+      onFrame(f && d ? {name: f.name, unit: d.profile.unit,
+                        times: (start, bucket, count) => timeOf(d.profile, d.filter, f.path, start, bucket, count)}
                      : null);
     },
     onMethod: name => showMethod(name),
@@ -144,7 +165,7 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
 
   function showHot() {
     if (drawn)
-      hot.show(hotMethods(drawn.profile, drawn.filter));
+      hot.show(hotMethods(drawn.profile, drawn.filter), drawn.profile.unit);
   }
 
   /** @param {string | null} [name] the method to show, the one shown if undefined, none if null */
@@ -156,11 +177,12 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
       return;
     const t = methodTrees(drawn.profile, drawn.filter, method);
     replace(methodTitle, method);
-    replace(methodCaption, `${fmt.duration(t.callees.total)} in ${t.samples} samples of these filters`,
+    const unit = drawn.profile.unit;
+    replace(methodCaption, `${fmt.amount(t.callees.total, unit)} in ${t.samples} samples of these filters`,
             t.samples ? null : ': none');
     // the method at the bottom of its callers, and at the top of its callees
-    callers.show(t.callers, false);
-    callees.show(t.callees, true);
+    callers.show(t.callers, false, unit);
+    callees.show(t.callees, true, unit);
     if (name)
       methodSection.scrollIntoView({behavior: 'smooth', block: 'start'});
   }
@@ -218,13 +240,15 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
       all: all.checked,
       merged: merged.checked,
       reversed: reversed.checked,
-      java: java.checked,
+      java: java.checked && samplesChoice.value !== 'alloc',
     };
   }
 
   function update() {
     instanceChip.hidden = instance === undefined;
-    profile.then(p => {
+    // allocations have no native samples to leave out
+    java.disabled = samplesChoice.value === 'alloc';
+    source().then(p => {
       if (signal.aborted)
         return;
       // read once the lists are in
@@ -235,7 +259,7 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
       // different operations: each compared with the baseline's, by the paths under them
       const across = !!baseline && !f.merged && operation(baseline.selection) !== operation(selection(f));
       const base = baseline && compare(tree(p, {...display(f), ...baseline.selection}).root, root, across);
-      const what = [f.java ? 'Java code' : 'Wall clock'];
+      const what = [p.unit === 'bytes' ? 'Allocations' : f.java ? 'Java code' : 'Wall clock'];
       if (f.instance !== undefined)
         what.push(instanceLabel);
       else {
@@ -249,12 +273,12 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
       if (f.hide)
         what.push(`frames matching ${f.hide} hidden`);
       current = {selection: selection(f), label: what.slice(1).join(' · ') || 'the whole session'};
-      replace(caption, `${what.join(' · ')}: ${fmt.duration(root.total)} in ${samples} samples`,
+      replace(caption, `${what.join(' · ')}: ${fmt.amount(root.total, p.unit)} in ${samples} samples`,
               samples ? null : ', none for these filters',
               base ? h('span', {class: 'flame-compare-legend'},
                 ' · ', h('span', {class: 'more'}, 'more'), ' or ', h('span', {class: 'less'}, 'less'),
-                ' of the time than in the baseline') : null);
-      graph.show(base ?? root, !!f.reversed && f.instance === undefined);
+                p.unit === 'bytes' ? ' allocated than in the baseline' : ' of the time than in the baseline') : null);
+      graph.show(base ?? root, !!f.reversed && f.instance === undefined, p.unit);
       showHot();
       showMethod();
     }).catch(e => {
@@ -296,6 +320,12 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
 
   const form = h('form', {class: 'filters', onchange: onFilterChange, onsubmit: (/** @type {Event} */ e) => e.preventDefault()},
     instanceChip,
+    allocations === undefined ? null : h('label', {
+      title: allocations
+        ? 'Wall clock: where the time went, from the Java and native samples. Allocations: where memory '
+          + 'was allocated, from the allocation samples, the class allocated on top of each stack'
+        : 'The recording has no allocation sample: jdk.ObjectAllocationSample was off, or the JVM older than 16',
+    }, 'Samples ', samplesChoice),
     h('label', null, 'Operation ', name),
     h('label', null, 'Thread ', thread),
     h('label', null, 'From ', from, ' s'),

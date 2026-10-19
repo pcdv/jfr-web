@@ -80,6 +80,7 @@ public class ProfilerRoutes {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("app", about.app());
     m.put("recordingsOnly", about.recordingsOnly());
+    m.put("samples", about.allocations() ? "alloc" : "wall");
     m.put("history", history);
     return m;
   }
@@ -285,6 +286,7 @@ public class ProfilerRoutes {
     Map<String, Object> sampling = new LinkedHashMap<>();
     sampling.put("java", sampling(info, EXECUTION_SAMPLE, summary.getJavaSamples(), summary.getJavaInOperations()));
     sampling.put("native", sampling(info, NATIVE_SAMPLE, summary.getNativeSamples(), summary.getNativeInOperations()));
+    sampling.put("allocations", info.getAllocationSamples());
     sampling.put("operationShareOfNative", summary.getOperationShareOfNative());
     sampling.put("operationEvents", info.hasOperationEvents());
     sampling.put("operations", a.getOperations().size());
@@ -505,11 +507,15 @@ public class ProfilerRoutes {
   /**
    * The samples of a session as a profile, from which the page draws flame
    * graphs by itself: see ProfileWriter. Kept gzipped, and sent so when the
-   * request accepts it.
+   * request accepts it. Query: {@code samples=alloc} for its allocation
+   * samples, weighing bytes, instead of its Java and native ones.
    */
   @Route("/api/sessions/:id/profile")
-  public InputStream profile(int id, Request req, Response resp) throws IOException {
-    byte[] gzipped = stopped(id).getProfile();
+  public InputStream profile(int id, Query q, Request req, Response resp) throws IOException {
+    String samples = q.get("samples");
+    if (samples != null && !samples.equals("alloc"))
+      throw new HttpException(400, "samples=alloc, or none for the Java and native ones");
+    byte[] gzipped = stopped(id).getProfile(samples != null);
     resp.addHeader("Content-Type", "application/json");
     resp.addHeader("Vary", "Accept-Encoding");
     String accepted = req.getHeader("Accept-Encoding");

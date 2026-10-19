@@ -13,8 +13,9 @@ function profile(operations, javaAt = [], end = 2000) {
   const names = [...new Set(operations.map(o => o[0]))].sort();
   let previous = 0;
   return decode({
-    version: 3,
+    version: 4,
     weights: [20, 5],
+    unit: 'ms',
     start: '2026-10-18T08:00:00.000Z',
     end: end * ms,
     strings: names.map(n => ' ' + n),

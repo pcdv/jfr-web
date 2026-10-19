@@ -25,8 +25,9 @@ const f = (string, type) => string << 3 | type;
 // Main.work > x.Sort.sort, 3 Main.run > Main.work (interpreted), 4 Main.run >
 // x.Sort.sort
 const doc = {
-  version: 3,
+  version: 4,
   weights: [20, 5],
+  unit: 'ms',
   start: "2026-10-18T08:00:00Z",
   end: 60_000_000,
   strings: frontCode(strings),
@@ -62,7 +63,7 @@ test('strings, stacks and samples decoded', () => {
   assert.deepEqual([...p.parent], [-1, 0, 1, 0, 0]);
   assert.deepEqual([...p.time], [0, 1000, 1500, 2000, 3000, 3000]);
   assert.deepEqual(p.threads, [{name: 'main', id: 1}, {name: 'pool-1', id: 22}]);
-  assert.throws(() => decode({...doc, version: 4}), /version 4.*reload the page/);
+  assert.throws(() => decode({...doc, version: 5}), /version 5.*reload the page/);
 });
 
 test('rooted by operation; samples outside left out; a sample with no stack counts for its operation', () => {
@@ -232,4 +233,14 @@ test('one operation compared with another: by the paths under them', () => {
   assert.equal(a.children[0].children[0].children[0].base, 0, 'x.Sort.sort, in GET /a only');
   assert.equal(compare(tree(p, {name: 'GET /b'}).root, tree(p, {name: 'GET /a'}).root).children[0].base, 0,
                'without: GET /a is not in the baseline');
+});
+
+test('allocation samples: each its own weight, in bytes', () => {
+  const alloc = decode({...doc, unit: 'bytes', samples: {...doc.samples, weight: [100, 200, 300, 400, 500, 600]}});
+  assert.equal(alloc.unit, 'bytes');
+  const {root, samples} = tree(alloc, {});
+  assert.equal(samples, 5);
+  // the sample outside operations left out
+  assert.equal(root.total, 100 + 200 + 300 + 400 + 600);
+  assert.equal(hotMethods(alloc, {}).total, root.total);
 });

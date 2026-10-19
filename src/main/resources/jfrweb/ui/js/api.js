@@ -44,7 +44,7 @@
  * @property {Session} session
  * @property {{start: string, end: string, jvm: string, jvmArguments: string,
  *            javaArguments: string, os: string, enabledEvents: number}} recording
- * @property {{java: Sampling, native: Sampling, operationShareOfNative: number | null,
+ * @property {{java: Sampling, native: Sampling, allocations: number, operationShareOfNative: number | null,
  *            operationEvents: boolean, operations: number, truncated: number, stackDepth: number,
  *            suggestedStackDepth: number}} sampling truncated: the samples whose stack JFR cut at
  *            stackDepth frames
@@ -274,6 +274,7 @@ export function detachJvm(root = '') {
  * @property {boolean} recordingsOnly whether there are only recordings, opened from files, with no JVM
  *           behind them: no live operations, auto mode or session to start
  * @property {boolean} history whether an operation history can be browsed
+ * @property {'wall' | 'alloc'} samples those flame graphs open on: jfr-web open --alloc
  */
 
 /** @type {About | null} */
@@ -362,10 +363,11 @@ export function getReport(id) {
 
 /**
  * @param {number} id
+ * @param {'alloc'} [samples] its allocation samples, instead of its Java and native ones
  * @returns {Promise<any>} the samples of the session, for profile/profile.js to decode
  */
-export function getProfile(id) {
-  return call(`api/sessions/${id}/profile`);
+export function getProfile(id, samples) {
+  return call(`api/sessions/${id}/profile${samples ? `?samples=${samples}` : ''}`);
 }
 
 /**

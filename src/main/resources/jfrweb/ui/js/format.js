@@ -18,9 +18,19 @@ export function duration(ms) {
  * @returns {string} e.g. "512 B", "1.5 KiB"
  */
 export function bytes(n) {
-  if (n < 1024) return `${n} B`;
+  if (n < 1024) return `${Math.round(n)} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MiB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MiB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(1)} GiB`;
+}
+
+/**
+ * @param {number} v
+ * @param {'ms' | 'bytes'} unit that of a profile
+ * @returns {string} a duration, or a size for allocations
+ */
+export function amount(v, unit) {
+  return unit === 'bytes' ? bytes(v) : duration(v);
 }
 
 /**

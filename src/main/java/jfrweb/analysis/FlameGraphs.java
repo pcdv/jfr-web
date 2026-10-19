@@ -44,6 +44,7 @@ public final class FlameGraphs {
     boolean merged;
     boolean reversed;
     boolean javaOnly;
+    boolean allocations;
 
     /**
      * Keeps the samples of the operations that match, e.g. those of a name.
@@ -100,6 +101,19 @@ public final class FlameGraphs {
     }
 
     /**
+     * Takes the allocation samples instead, each weighing the bytes it stands
+     * for, the class allocated on top of its stack.
+     */
+    public Options allocations(boolean allocations) {
+      this.allocations = allocations;
+      return this;
+    }
+
+    public boolean allocations() {
+      return allocations;
+    }
+
+    /**
      * Whether a sample passes the operation and thread filters, those a page
      * cannot change: its operation, null outside any, matches, and its thread.
      */
@@ -126,14 +140,14 @@ public final class FlameGraphs {
 
   /**
    * Writes the collapsed stacks, sorted, each weighing the interval at which
-   * its samples' events were taken.
+   * its samples' events were taken, or the bytes of its allocation samples.
    */
   public static void write(Analysis analysis, Options o, PrintStream out) throws IOException {
     Map<String, Long> stacks = new TreeMap<>();
     List<String> frames = new ArrayList<>();
 
-    analysis.visitSamples((sample, thread, operation, weight) -> {
-      if (o.javaOnly && !sample.getEventType().getName().equals(RecordingInfo.EXECUTION_SAMPLE))
+    analysis.visitSamples(o.allocations, (sample, thread, operation, weight) -> {
+      if (o.javaOnly && !o.allocations && !sample.getEventType().getName().equals(RecordingInfo.EXECUTION_SAMPLE))
         return;
       if (!o.keeps(thread, operation))
         return;
@@ -159,6 +173,8 @@ public final class FlameGraphs {
         for (int i = list.size() - 1; i >= 0; i--)
           frames.add(list.get(i).getMethod().getType().getName() + "." + list.get(i).getMethod().getName());
       }
+      if (o.allocations)
+        frames.add(Analysis.allocatedClass(sample));
       if (frames.isEmpty())
         return;
       if (o.reversed)

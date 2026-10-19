@@ -46,7 +46,7 @@ export function sessionTimeline(whole, profile, onInterval) {
   /** @param {api.TimelineData} data the buckets drawn */
   function applyFrame(data) {
     if (frame)
-      drawn?.samples(frame.name, frame.times((range.from ?? 0) * 1000, data.bucket, data.buckets));
+      drawn?.samples(frame.name, frame.times((range.from ?? 0) * 1000, data.bucket, data.buckets), frame.unit);
     else
       drawn?.samples();
   }

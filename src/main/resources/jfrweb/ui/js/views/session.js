@@ -89,7 +89,8 @@ export function renderSession(root, params, signal) {
   function showReport() {
     // the samples and operations, for the flame graph and the tables of an
     // interval: computed here, in a static export too
-    const profile = api.getProfile(id).then(decode);
+    const raw = api.getProfile(id);
+    const profile = raw.then(decode);
     // each panel tells its own failure
     profile.catch(() => {});
     Promise.all([api.getReport(id), api.getTimeline(id)]).then(
@@ -114,6 +115,9 @@ export function renderSession(root, params, signal) {
         // the operation picked among the slowest is outlined on the timeline
         // while its flame graph shows
         const flame = flamePanel(profile, signal, {
+          // a second profile, loaded once asked for
+          allocations: report.sampling.allocations > 0 ? () => api.getProfile(id, 'alloc').then(decode) : null,
+          showAllocations: api.getAbout()?.samples === 'alloc',
           onInstance: op => timelinePanel.mark(op),
           // the frame hovered or zoomed on in the flame graph: when its samples were taken
           onFrame: f => timelinePanel.showFrame(f),
@@ -125,7 +129,7 @@ export function renderSession(root, params, signal) {
         });
         const details = recording(report);
         replace(content,
-          summary(report, details),
+          summary(report, details, raw),
           details,
           section('timeline', 'Timeline', timelinePanel.element),
           // right under the timeline, which shows when the frame hovered
@@ -182,8 +186,10 @@ function recordingNow(id, refresh) {
  *
  * @param {api.Report} r
  * @param {HTMLElement} details shown or hidden by the button
+ * @param {Promise<any>} raw the profile as the server sends it, which
+ *     profile/profile.js decodes: saved as a .json by its own link
  */
-function summary(r, details) {
+function summary(r, details, raw) {
   const s = r.session;
   const key = 'jfrweb.section.details';
   let open = false;
@@ -205,7 +211,33 @@ function summary(r, details) {
   return h('p', {class: 'summary'},
     `Started ${fmt.time(s.start)}, ${fmt.duration(s.duration)}, ${r.sampling.operations} operations, `,
     h('a', {href: api.downloadUrl(s.id), download: true}, `download the .jfr (${fmt.bytes(s.size)})`),
-    ' to open it in JDK Mission Control. ', toggle, warnings(r));
+    ' to open it in JDK Mission Control, or ', profileLink(s.id, raw), '. ', toggle, warnings(r));
+}
+
+/**
+ * Saves the profile the page decoded, as is: the format profile/profile.js
+ * reads, and the tools that share it. Taken from the page, in a static export too.
+ *
+ * @param {number} id
+ * @param {Promise<any>} raw
+ */
+function profileLink(id, raw) {
+  return h('a', {
+    href: '#',
+    title: 'The samples and operations as this page reads them (JSON)',
+    onclick: async (/** @type {Event} */ e) => {
+      e.preventDefault();
+      try {
+        const blob = new Blob([JSON.stringify(await raw)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        h('a', {href: url, download: `session-${id}.profile.json`}).click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      catch (err) {
+        tell(err instanceof Error ? err.message : String(err));
+      }
+    },
+  }, 'the profile');
 }
 
 /**

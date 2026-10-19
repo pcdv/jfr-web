@@ -43,8 +43,9 @@ public final class Session {
   /** Loaded on demand, and dropped under memory pressure. */
   private SoftReference<Analysis> analysis = new SoftReference<>(null);
 
-  /** Its profile, gzipped: the same. */
+  /** Its profile, gzipped: the same; and that of its allocations. */
   private SoftReference<byte[]> profile = new SoftReference<>(null);
+  private SoftReference<byte[]> allocationProfile = new SoftReference<>(null);
 
   Session(int id, Instant start, String trigger, Path file) {
     this.id = id;
@@ -148,14 +149,24 @@ public final class Session {
    * @throws IllegalStateException while recording
    */
   public synchronized byte[] getProfile() throws IOException {
-    byte[] p = profile.get();
+    return getProfile(false);
+  }
+
+  /**
+   * @param allocations that of its allocation samples, weighing bytes
+   */
+  public synchronized byte[] getProfile(boolean allocations) throws IOException {
+    byte[] p = (allocations ? allocationProfile : profile).get();
     if (p == null) {
       ByteArrayOutputStream bytes = new ByteArrayOutputStream();
       try (Writer w = new OutputStreamWriter(new GZIPOutputStream(bytes), StandardCharsets.UTF_8)) {
-        ProfileWriter.write(getAnalysis(), w);
+        ProfileWriter.write(getAnalysis(), w, (thread, operation) -> true, allocations);
       }
       p = bytes.toByteArray();
-      profile = new SoftReference<>(p);
+      if (allocations)
+        allocationProfile = new SoftReference<>(p);
+      else
+        profile = new SoftReference<>(p);
     }
     return p;
   }

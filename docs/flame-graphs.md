@@ -37,7 +37,7 @@ roadmap; the format should not prevent it), or a general purpose profile viewer.
 
 ## The profile format
 
-A JSON document per session, version 3, from `GET /api/sessions/:id/profile` (sizes measured in
+A JSON document per session, version 4, from `GET /api/sessions/:id/profile` (sizes measured in
 phase 0, below). Written by `ProfileWriter`; every index below counts from 0.
 
 Any change of the format raises its version, however small, released or not: a page loaded
@@ -45,7 +45,8 @@ before the server changed (a tab left open across an upgrade, modules in the bro
 then refuses the document and asks to be reloaded, instead of reading it wrong. Version 1 had
 the operations' names only; phase 2b added their other fields in place, and a page of version 1
 read the new document without noticing: the flame graph of any operation came out empty. Version
-2 is that document; 3 added the span of the recording, for the page to draw its timeline zoomed in.
+2 is that document; 3 added the span of the recording, for the page to draw its timeline zoomed in;
+4 the `unit`, and the allocation samples (`?samples=alloc`), each with its own `weight`.
 
 ```json
 {"version": 2,
@@ -64,16 +65,17 @@ read the new document without noticing: the flame graph of any operation came ou
 | Field | Content |
 |---|---|
 | `version` | `1` |
-| `weights` | the milliseconds a sample stands for: `[Java, native]`, as `Analysis` computes them |
+| `unit` | what the weights count: `"ms"`, or `"bytes"` for allocation samples |
+| `weights` | the milliseconds a sample stands for: `[Java, native]`, as `Analysis` computes them; unused for allocation samples, which have their own |
 | `start`, `end` | the span of the recording: its start as an ISO-8601 time, its end in ns since the start; for the timeline's buckets |
 | `strings` | every name (methods as `class.method`, operations, threads), each once, sorted and front-coded as in async-profiler's pages: the code of the first character minus 32 is the length of the prefix shared with the previous string (95 at most), the rest follows |
 | `stacks` | the tree of stacks, their common beginnings shared, written depth first as pairs `depth, frame`: a node's parent is the last node written one level up, and a root has depth 0. A frame is `string << 3 \| type` |
-| `samples` | columns of equal length, one entry per sample, sorted by time: `time` in ms since the start of the recording, each the difference with the previous one; `stack`, the node of the top frame, -1 when JFR kept no stack; `thread`, an index in `threads`; `operation`, an index in `operations`, -1 outside any; `kind`, 0 for Java, 1 for native |
+| `samples` | columns of equal length, one entry per sample, sorted by time: `time` in ms since the start of the recording, each the difference with the previous one; `stack`, the node of the top frame, -1 when JFR kept no stack; `thread`, an index in `threads`; `operation`, an index in `operations`, -1 outside any; `kind`, 0 for Java, 1 for native (0 for an allocation sample); for allocation samples only, `weight`, the bytes each stands for |
 | `threads` | `[name, thread id]` for each thread sampled, the name an index in `strings` |
 | `operations` | columns of equal length, one entry per operation, in the order of `Analysis.getOperations()` so that an operation's index is the id the API already gives it: `name`, an index in `strings`; `start` in ns since the start of the recording, each the difference with the previous one (negative when an operation started before the previous one); `duration` in ns; `thread`, the name of the thread that ran it or ended an asynchronous one, an index in `strings`; `detail` and `error`, indexes in `strings`, -1 for none; `status`, the HTTP status of a request, 0 otherwise; `failed` and `async`, 0 or 1; `bytesIn` and `bytesOut`. Times in ns, as the server counts them: the page's totals and percentiles are the server's, to the hundredth of a millisecond |
 
 Frame types: 0 compiled, 1 inlined, 2 interpreted, 3 native method, 4 synthetic (`(truncated)`,
-the bottom of a stack JFR cut). Today's pages show native methods as compiled code; the format
+the bottom of a stack JFR cut), 5 the class an allocation sample allocated, on top of its stack. Today's pages show native methods as compiled code; the format
 keeps them apart and the renderer chooses.
 
 The type is part of a node: a method interpreted in one sample and compiled in the next makes two

@@ -52,7 +52,7 @@ const PLOT_H = H - TOP - BOTTOM;
  *        selected
  * @param {TimelineOptions} [options]
  * @returns {HTMLDivElement & {mark: (from?: number, to?: number) => void,
- *                             samples: (name?: string, ms?: Float64Array) => void}} the chart,
+ *                             samples: (name?: string, ms?: Float64Array, unit?: 'ms' | 'bytes') => void}} the chart,
  *          whose mark() outlines a span, in seconds since the start, or removes it when
  *          undefined; and samples() draws the ms of samples of a frame per bucket, on a scale
  *          of their own, or removes them when undefined
@@ -209,9 +209,10 @@ export function timelineChart(data, onSelect, options = {}) {
 
   /**
    * @param {string} [name] of the frame
-   * @param {Float64Array} [ms] of samples per bucket
+   * @param {Float64Array} [ms] of samples per bucket; bytes for allocations
+   * @param {'ms' | 'bytes'} [unit]
    */
-  function samples(name, ms) {
+  function samples(name, ms, unit = 'ms') {
     if (name === undefined || ms === undefined) {
       frameSamples.setAttribute('visibility', 'hidden');
       frameLegend?.classList.remove('shown');
@@ -229,7 +230,7 @@ export function timelineChart(data, onSelect, options = {}) {
     if (frameLegend) {
       replace(frameLegend, h('span', {class: 'swatch frame-swatch'}),
         h('span', {class: 'mono'}, name),
-        `: its samples, up to ${fmt.duration(max)} per ${fmt.duration(data.bucket)}, on a scale of their own`);
+        `: its samples, up to ${fmt.amount(max, unit)} per ${fmt.duration(data.bucket)}, on a scale of their own`);
       frameLegend.classList.add('shown');
     }
   }

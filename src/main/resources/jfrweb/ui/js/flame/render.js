@@ -11,7 +11,7 @@
  */
 import {h, replace} from '../lib/dom.js';
 import * as fmt from '../format.js';
-import {mainType, COMPILED, INLINED, INTERPRETED, NATIVE, SYNTHETIC} from '../profile/profile.js';
+import {mainType, COMPILED, INLINED, INTERPRETED, NATIVE, SYNTHETIC, ALLOCATED} from '../profile/profile.js';
 
 /** @typedef {import('../profile/profile.js').Frame} Frame */
 
@@ -26,6 +26,7 @@ const TYPES = [
   {type: INTERPRETED, name: 'interpreted', color: '--flame-interpreted'},
   {type: NATIVE, name: 'native', color: '--flame-native'},
   {type: SYNTHETIC, name: '', color: '--flame-synthetic'},
+  {type: ALLOCATED, name: 'allocated', color: '--flame-allocated'},
 ];
 
 /**
@@ -43,8 +44,9 @@ const TYPES = [
  * @property {HTMLElement} element
  * @property {HTMLElement} toolbar its search field and zoom reset, in the element unless moved,
  *           e.g. onto the row of a caption
- * @property {(root: Frame, inverted: boolean) => void} show draws a tree, staying zoomed on
- *           the same frame if the tree still has it
+ * @property {(root: Frame, inverted: boolean, unit?: 'ms' | 'bytes') => void} show draws a tree,
+ *           staying zoomed on the same frame if the tree still has it; its totals in ms, or in
+ *           bytes for allocations
  * @property {(name: string) => void} find searches the frames of a method, by its exact name
  */
 
@@ -86,6 +88,10 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
   /** @type {Box | null} */
   let hovered = null;
   let inverted = false;
+  /** @type {'ms' | 'bytes'} what the totals count */
+  let unit = 'ms';
+  /** @param {number} v */
+  const amount = v => fmt.amount(v, unit);
   /** @type {RegExp | null} */
   let pattern = null;
 
@@ -252,7 +258,7 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
   function showTooltip(b, e) {
     const f = b.frame;
     const all = root ? root.frame.total : f.total;
-    const share = (/** @type {number} */ ms) => `${fmt.duration(ms)} · ${percent(ms / all)}`;
+    const share = (/** @type {number} */ v) => `${amount(v)} · ${percent(v / all)}`;
     const types = TYPES.filter(t => t.name && f.types[t.type] > 0);
     const style = getComputedStyle(canvas);
     replace(tooltip,
@@ -260,7 +266,7 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
       row(null, 'Total', share(f.total)),
       row(null, 'Self', share(f.self)),
       f.base !== undefined && root?.frame.base
-        ? [row(null, 'In the baseline', `${fmt.duration(f.base)} · ${percent(f.base / root.frame.base)}`),
+        ? [row(null, 'In the baseline', `${amount(f.base)} · ${percent(f.base / root.frame.base)}`),
            row(null, 'Change', `${change(f) >= 0 ? '+' : '−'}${(Math.abs(change(f)) * 100).toFixed(1)} points`)]
         : null,
       zoomed && b.level >= zoomed.level && zoomed !== b
@@ -342,7 +348,7 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
     /** @type {(f: Frame) => number} */
     const sum = f => p.test(f.name) ? f.total : f.children.reduce((s, c) => s + sum(c), 0);
     const ms = sum(root.frame);
-    matched.textContent = `Matched: ${percent(ms / (root.frame.total || 1))}, ${fmt.duration(ms)}`;
+    matched.textContent = `Matched: ${percent(ms / (root.frame.total || 1))}, ${amount(ms)}`;
   }
 
   const resized = new ResizeObserver(() => draw());
@@ -357,7 +363,8 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
       searchChanged();
       wrapper.scrollIntoView({behavior: 'smooth', block: 'nearest'});
     },
-    show(frame, inv) {
+    show(frame, inv, u = 'ms') {
+      unit = u;
       // the path of the frame zoomed on, by name, to zoom on it again
       const path = [];
       for (let b = zoomed; b; b = b.parent)

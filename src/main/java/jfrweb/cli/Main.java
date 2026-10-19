@@ -39,11 +39,12 @@ public final class Main {
     "  jfr-web report <file.jfr> [--events]",
     "      how the file was recorded, and its operations sorted by total time",
     "  jfr-web flame <file.jfr> [-o <file.html>] [--operation <regex>] [--thread <regex>]",
-    "                           [--all] [--merged] [--reversed] [--java] [--collapsed]",
+    "                           [--all] [--merged] [--reversed] [--java] [--alloc] [--collapsed]",
     "      wall-clock flame graph of the samples taken in operations, rooted by",
     "      operation (e.g. \"GET /api/user/:id\"); --all adds the other samples,",
     "      --merged merges the operations into one tree, --reversed puts the methods",
-    "      running at the root, --java keeps the samples of Java code only. A page that",
+    "      running at the root, --java keeps the samples of Java code only, --alloc takes",
+    "      the allocation samples instead, weighing bytes, the class allocated on top. A page that",
     "      works opened from the disk, its filters changeable; --operation and --thread",
     "      keep the samples it holds. --collapsed: collapsed stacks instead, one line each",
     "  jfr-web history <dir> [--from <time>] [--to <time>] [--operation <name>]",
@@ -56,9 +57,10 @@ public final class Main {
     "      --title shows in its top bar in place of jfr-web.",
     "      A recording holds the environment variables and system properties of the",
     "      JVM unless turned off: --no-recordings leaves the .jfr files out",
-    "  jfr-web open <file.jfr | dir>... [--history <dir>] [--port <port>] [--no-browser]",
+    "  jfr-web open <file.jfr | dir>... [--history <dir>] [--port <port>] [--no-browser] [--alloc]",
     "      the web interface on recordings made elsewhere, each one as a session: report,",
-    "      timeline, operations, flame graphs; the .jfr files of a directory are taken",
+    "      timeline, operations, flame graphs; the .jfr files of a directory are taken.",
+    "      --alloc: flame graphs show the allocations first, instead of the wall clock",
     "  jfr-web standalone [--port <port>] [--dir <dir>] [--no-browser]",
     "      the profiler on its own: lists the JVMs of this machine, and profiles the",
     "      one picked as if it was embedded, with nothing to install in it. Sessions",
@@ -171,6 +173,7 @@ public final class Main {
       return 2;
     }
     boolean browser = !options.remove("--no-browser");
+    boolean allocations = options.remove("--alloc");
     List<Path> recordings = new ArrayList<>();
     for (String o : List.copyOf(options))
       if (!o.startsWith("-")) {
@@ -185,7 +188,7 @@ public final class Main {
     }
     Viewer v;
     try {
-      v = Viewer.start(recordings, history, port);
+      v = Viewer.start(recordings, history, port, allocations);
     }
     catch (IllegalArgumentException e) {
       System.err.println(e.getMessage());
@@ -333,7 +336,11 @@ public final class Main {
     o.outsideOperations(options.remove("--all"));
     o.merged(options.remove("--merged"));
     o.reversed(options.remove("--reversed"));
-    if (options.remove("--java")) {
+    if (options.remove("--alloc")) {
+      o.allocations(true);
+      title = title.replace("Wall clock", "Allocations");
+    }
+    else if (options.remove("--java")) {
       o.javaOnly(true);
       title = title.replace("Wall clock", "Java code");
     }

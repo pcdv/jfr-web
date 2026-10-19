@@ -321,7 +321,8 @@ public class AnalysisTest {
   @Test
   public void testProfileFormat() throws IOException {
     Map<String, Object> p = profile();
-    Assertions.assertEquals(3L, p.get("version"));
+    Assertions.assertEquals(4L, p.get("version"));
+    Assertions.assertEquals("ms", p.get("unit"));
 
     List<String> strings = strings(p);
     Assertions.assertEquals(new TreeSet<>(strings).stream().toList(), strings, "sorted, each once");
@@ -366,14 +367,55 @@ public class AnalysisTest {
     Assertions.assertTrue(ops.stream().anyMatch(RecordedOperation::failed), "a failure to compare");
   }
 
+  /**
+   * The busy handler allocates arrays of ints: its allocation samples weigh
+   * bytes, the class allocated on top of their stacks, as in the collapsed
+   * stacks of the same samples.
+   */
+  @Test
+  public void testAllocationProfile() throws IOException {
+    Assertions.assertTrue(analysis.getInfo().getAllocationSamples() > 0);
+    String collapsed = flame(new FlameGraphs.Options().allocations(true).outsideOperations(true));
+    Assertions.assertTrue(weight(collapsed, "GET /busy/:id;", ";int[]") > 1_000_000, collapsed);
+
+    Map<String, Object> profile = profile(true);
+    Assertions.assertEquals("bytes", profile.get("unit"));
+    Map<String, Long> expected = new TreeMap<>();
+    for (String line : collapsed.split("\n")) {
+      int space = line.lastIndexOf(' ');
+      expected.merge(line.substring(0, space), Long.parseLong(line.substring(space + 1)), Long::sum);
+    }
+    Assertions.assertEquals(expected, collapse(profile));
+
+    List<?> stacks = (List<?>) profile.get("stacks");
+    List<String> strings = strings(profile);
+    boolean allocated = false;
+    for (int i = 1; i < stacks.size(); i += 2) {
+      long f = (Long) stacks.get(i);
+      allocated |= (f & 7) == ProfileWriter.ALLOCATED && strings.get((int) (f >>> 3)).equals("int[]");
+    }
+    Assertions.assertTrue(allocated, "int[] as an allocated frame");
+  }
+
+  @Test
+  public void testJavaNames() {
+    Assertions.assertEquals("byte[]", Analysis.javaName("[B"));
+    Assertions.assertEquals("java.lang.String[][]", Analysis.javaName("[[Ljava.lang.String;"));
+    Assertions.assertEquals("java.lang.String", Analysis.javaName("java.lang.String"));
+  }
+
   private static int column(Map<?, ?> columns, String name, int i) {
     return (int) (long) (Long) ((List<?>) columns.get(name)).get(i);
   }
 
-  @SuppressWarnings("unchecked")
   private static Map<String, Object> profile() throws IOException {
+    return profile(false);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> profile(boolean allocations) throws IOException {
     StringWriter out = new StringWriter();
-    ProfileWriter.write(analysis, out);
+    ProfileWriter.write(analysis, out, (thread, operation) -> true, allocations);
     return (Map<String, Object>) Json.parse(out.toString());
   }
 
@@ -427,7 +469,10 @@ public class AnalysisTest {
       StringBuilder path = new StringBuilder();
       for (int node = (int) (long) (Long) ((List<?>) samples.get("stack")).get(i); node >= 0; node = parent[node])
         path.insert(0, ";" + frame[node]);
-      long weight = (Long) weights.get((int) (long) (Long) ((List<?>) samples.get("kind")).get(i));
+      // allocation samples have their own
+      long weight = samples.containsKey("weight")
+                    ? (Long) ((List<?>) samples.get("weight")).get(i)
+                    : (Long) weights.get((int) (long) (Long) ((List<?>) samples.get("kind")).get(i));
       collapsed.merge(root + path, weight, Long::sum);
     }
     return collapsed;

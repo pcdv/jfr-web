@@ -16,7 +16,7 @@ const SHOWN = 200;
 /**
  * @param {(name: string) => void} onPick called with the method clicked
  * @param {(name: string) => void} onMethod called to show the callers and callees of one
- * @returns {{element: HTMLElement, show: (hot: {methods: HotMethod[], total: number}) => void}}
+ * @returns {{element: HTMLElement, show: (hot: {methods: HotMethod[], total: number}, unit?: 'ms' | 'bytes') => void}}
  *          the table, and what fills it with the methods of the filters
  */
 export function hotMethodsPanel(onPick, onMethod) {
@@ -25,6 +25,8 @@ export function hotMethodsPanel(onPick, onMethod) {
   let by = 'self';
   /** @type {{methods: HotMethod[], total: number}} */
   let hot = {methods: [], total: 0};
+  /** @type {'ms' | 'bytes'} */
+  let unit = 'ms';
 
   /** @param {'self' | 'total'} column */
   function header(column) {
@@ -62,8 +64,8 @@ export function hotMethodsPanel(onPick, onMethod) {
         },
         h('td', {class: 'mono'}, m.name),
         shareCell(m[by], hot.total, max, `the samples kept, by ${by} time`),
-        h('td', {class: 'num'}, fmt.duration(m.self)),
-        h('td', {class: 'num'}, fmt.duration(m.total)),
+        h('td', {class: 'num'}, fmt.amount(m.self, unit)),
+        h('td', {class: 'num'}, fmt.amount(m.total, unit)),
         h('td', {class: 'action'}, h('button', {
           type: 'button', class: 'small', title: 'What calls it, and what it calls, wherever it is called from',
           onclick: (/** @type {Event} */ e) => {
@@ -75,8 +77,9 @@ export function hotMethodsPanel(onPick, onMethod) {
 
   return {
     element: body,
-    show(methods) {
+    show(methods, u = 'ms') {
       hot = methods;
+      unit = u;
       draw();
     },
   };

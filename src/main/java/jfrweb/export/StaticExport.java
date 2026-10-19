@@ -136,6 +136,8 @@ public final class StaticExport {
     // its samples and operations: the page computes the rest, flame graphs,
     // operations and slowest of any interval
     get(api + "/profile", Map.of(), ".json");
+    if (!number(((Map<String, Object>) report.get("sampling")).get("allocations")).equals("0"))
+      get(api + "/profile", Map.of("samples", "alloc"), ".json");
     if (withRecordings)
       download(api + "/recording.jfr");
 

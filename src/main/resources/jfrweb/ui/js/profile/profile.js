@@ -10,8 +10,8 @@
  * No DOM: tested with Node.
  */
 
-/** Frame types, in the low 3 bits of a frame. */
-export const COMPILED = 0, INLINED = 1, INTERPRETED = 2, NATIVE = 3, SYNTHETIC = 4;
+/** Frame types, in the low 3 bits of a frame; ALLOCATED, the class an allocation sample allocated. */
+export const COMPILED = 0, INLINED = 1, INTERPRETED = 2, NATIVE = 3, SYNTHETIC = 4, ALLOCATED = 5;
 
 /** The root of the samples taken outside any operation, as on the server. */
 export const NO_OPERATION = '(no operation)';
@@ -27,6 +27,9 @@ export const NO_OPERATION = '(no operation)';
  * @property {Int32Array} operation of each sample, an index in operations, -1 outside any
  * @property {Uint8Array} kind of each sample: 0 Java, 1 native
  * @property {number[]} weights the ms a Java and a native sample stand for
+ * @property {'ms' | 'bytes'} unit what the weights count: bytes for allocation samples
+ * @property {Float64Array | null} weight of each sample, for allocation samples: the bytes each
+ *           stands for; null when weights tell them
  * @property {string} start of the recording, ISO-8601
  * @property {number} end of the recording, in ns since its start
  * @property {{name: string, id: number}[]} threads
@@ -54,7 +57,7 @@ export const NO_OPERATION = '(no operation)';
  */
 
 /** The version of the format this page reads: ProfileWriter.VERSION. */
-export const VERSION = 3;
+export const VERSION = 4;
 
 /**
  * @param {any} doc the JSON document
@@ -99,6 +102,8 @@ export function decode(doc) {
     operation: Int32Array.from(s.operation),
     kind: Uint8Array.from(s.kind),
     weights: doc.weights,
+    unit: doc.unit,
+    weight: s.weight ? Float64Array.from(s.weight) : null,
     start: doc.start,
     end: doc.end,
     threads: doc.threads.map((/** @type {number[]} */ [name, id]) => ({name: strings[name], id})),
@@ -163,6 +168,15 @@ function operations(o) {
  */
 
 /**
+ * @param {Profile} p
+ * @param {number} i a sample
+ * @returns {number} what it stands for, in the unit of the profile
+ */
+export function weightOf(p, i) {
+  return p.weight ? p.weight[i] : p.weights[p.kind[i]];
+}
+
+/**
  * Sums the samples a filter keeps, as the server's flame graphs did: rooted
  * by operation unless merged, the samples outside operations under one root
  * and their thread when added.
@@ -176,7 +190,7 @@ export function tree(p, filter) {
   const root = mutable('all', SYNTHETIC);
   let samples = 0;
   eachPath(p, filter, (i, path) => {
-    const w = p.weights[p.kind[i]];
+    const w = weightOf(p, i);
     let f = root;
     f.total += w;
     for (const key of path) {
@@ -217,7 +231,7 @@ export function timeOf(p, filter, path, start, bucket, count) {
     }
     const b = Math.floor((p.time[i] - start) / bucket);
     if (b >= 0 && b < count)
-      ms[b] += p.weights[p.kind[i]];
+      ms[b] += weightOf(p, i);
   });
   return ms;
 }
@@ -243,7 +257,7 @@ export function methodTrees(p, filter, name) {
       at++;
     if (at === path.length)
       return;
-    const w = p.weights[p.kind[i]];
+    const w = weightOf(p, i);
     samples++;
     /** @param {MutableFrame} root @param {number} from @param {number} step */
     const add = (root, from, step) => {
@@ -298,7 +312,7 @@ export function hotMethods(p, filter) {
   let total = 0;
   // from the root to the top, whatever the graph shows
   eachPath(p, {...filter, reversed: false}, (i, path) => {
-    const w = p.weights[p.kind[i]];
+    const w = weightOf(p, i);
     total += w;
     const top = path[path.length - 1];
     if (typeof top === 'number' && (top & 7) !== SYNTHETIC)
@@ -451,7 +465,7 @@ function withBase0(f) {
  * @returns {MutableFrame}
  */
 function mutable(name, type) {
-  return {name, type, total: 0, self: 0, types: [0, 0, 0, 0, 0], children: new Map()};
+  return {name, type, total: 0, self: 0, types: [0, 0, 0, 0, 0, 0], children: new Map()};
 }
 
 /**
