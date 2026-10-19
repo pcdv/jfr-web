@@ -91,6 +91,8 @@ export function renderSession(root, params, signal) {
     // interval: computed here, in a static export too
     const raw = api.getProfile(id);
     const profile = raw.then(decode);
+    /** @type {Promise<any> | null} that of the allocations, once the flame graph showed them */
+    let rawAllocations = null;
     // each panel tells its own failure
     profile.catch(() => {});
     Promise.all([api.getReport(id), api.getTimeline(id)]).then(
@@ -116,7 +118,7 @@ export function renderSession(root, params, signal) {
         // while its flame graph shows
         const flame = flamePanel(profile, signal, {
           // a second profile, loaded once asked for
-          allocations: report.sampling.allocations > 0 ? () => api.getProfile(id, 'alloc').then(decode) : null,
+          allocations: report.sampling.allocations > 0 ? () => (rawAllocations ??= api.getProfile(id, 'alloc')).then(decode) : null,
           showAllocations: api.getAbout()?.samples === 'alloc',
           onInstance: op => timelinePanel.mark(op),
           // the frame hovered or zoomed on in the flame graph: when its samples were taken
@@ -129,7 +131,9 @@ export function renderSession(root, params, signal) {
         });
         const details = recording(report);
         replace(content,
-          summary(report, details, raw),
+          // the profile the flame graph shows
+          summary(report, details, () => flame.samples() === 'alloc' && rawAllocations
+            ? {samples: 'alloc', raw: rawAllocations} : {samples: 'wall', raw}),
           details,
           section('timeline', 'Timeline', timelinePanel.element),
           // right under the timeline, which shows when the frame hovered
@@ -186,10 +190,10 @@ function recordingNow(id, refresh) {
  *
  * @param {api.Report} r
  * @param {HTMLElement} details shown or hidden by the button
- * @param {Promise<any>} raw the profile as the server sends it, which
- *     profile/profile.js decodes: saved as a .json by its own link
+ * @param {() => {samples: string, raw: Promise<any>}} shown the profile the flame graph shows, as
+ *     the server sends it, which profile/profile.js decodes: saved as a .json by its own link
  */
-function summary(r, details, raw) {
+function summary(r, details, shown) {
   const s = r.session;
   const key = 'jfrweb.section.details';
   let open = false;
@@ -211,7 +215,7 @@ function summary(r, details, raw) {
   return h('p', {class: 'summary'},
     `Started ${fmt.time(s.start)}, ${fmt.duration(s.duration)}, ${r.sampling.operations} operations, `,
     h('a', {href: api.downloadUrl(s.id), download: true}, `download the .jfr (${fmt.bytes(s.size)})`),
-    ' to open it in JDK Mission Control, or ', profileLink(s.id, raw), '. ', toggle, warnings(r));
+    ' to open it in JDK Mission Control, or ', profileLink(s.id, shown), '. ', toggle, warnings(r));
 }
 
 /**
@@ -219,18 +223,20 @@ function summary(r, details, raw) {
  * reads, and the tools that share it. Taken from the page, in a static export too.
  *
  * @param {number} id
- * @param {Promise<any>} raw
+ * @param {() => {samples: string, raw: Promise<any>}} shown the profile the flame graph shows: its
+ *     samples name the file
  */
-function profileLink(id, raw) {
+function profileLink(id, shown) {
   return h('a', {
     href: '#',
     title: 'The samples and operations as this page reads them (JSON)',
     onclick: async (/** @type {Event} */ e) => {
       e.preventDefault();
       try {
+        const {samples, raw} = shown();
         const blob = new Blob([JSON.stringify(await raw)], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
-        h('a', {href: url, download: `session-${id}.profile.json`}).click();
+        h('a', {href: url, download: `session-${id}.${samples}.profile.json`}).click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
       catch (err) {

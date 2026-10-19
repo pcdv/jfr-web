@@ -40,6 +40,7 @@ import {readSetting, writeSetting} from '../lib/settings.js';
  * @property {(from: number | undefined, to: number | undefined, name?: string | null) => void}
  *           showInterval selects an interval, in seconds since the start, or the whole
  *           session; and the operations of a name too when given, null for all
+ * @property {() => 'wall' | 'alloc'} samples those it shows
  * @property {(op: InstanceRow) => void} showInstance shows one operation, until a
  *           filter changes, and brings the flame graph into view
  */
@@ -396,6 +397,7 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
         selectName(n ?? '');
       update();
     },
+    samples: () => samplesChoice.value === 'alloc' ? 'alloc' : 'wall',
     showInstance(r) {
       instance = r.id;
       instanceLabel = `${fmt.label(r)} at ${r.start.toFixed(3)} s`;
