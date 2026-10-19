@@ -66,7 +66,10 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
   const samplesChoice = h('select', {name: 'samples'},
     h('option', {value: 'wall'}, 'Wall clock'),
     h('option', {value: 'alloc', disabled: !allocations}, 'Allocations'));
-  samplesChoice.value = allocations && showAllocations ? 'alloc' : 'wall';
+  // as last chosen, when the session has allocations to show
+  const SAMPLES = 'jfrweb.flame.samples';
+  samplesChoice.value = allocations && (showAllocations || readSetting(SAMPLES) === 'alloc') ? 'alloc' : 'wall';
+  samplesChoice.addEventListener('change', () => writeSetting(SAMPLES, samplesChoice.value));
   /** @type {Promise<Profile> | null} */
   let allocationProfile = null;
   /** @returns {Promise<Profile>} the profile of the samples chosen */
