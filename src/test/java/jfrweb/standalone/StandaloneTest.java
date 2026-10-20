@@ -155,6 +155,42 @@ public class StandaloneTest {
     standalone = null;
   }
 
+  @Test
+  public void testFollowsTheProfilerEmbedded() throws Exception {
+    Path sessions = dir.resolve("embedded-sessions");
+    Path history = Files.createDirectories(dir.resolve("embedded-history"));
+    Path snapshots = dir.resolve("embedded-snapshots");
+    Process embedding = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                                           "-cp", System.getProperty("java.class.path"), RemoteApp.class.getName(),
+                                           sessions.toString(), history.toString(), snapshots.toString())
+      .redirectErrorStream(true)
+      .start();
+    try {
+      BufferedReader out = new BufferedReader(new InputStreamReader(embedding.getInputStream(), StandardCharsets.UTF_8));
+      String line;
+      do {
+        line = out.readLine();
+      } while (line != null && !line.equals("ready"));
+      Assertions.assertEquals("ready", line);
+
+      // nothing said: it tells where it keeps its sessions, history and snapshots
+      standalone = Standalone.start(dir.resolve("own"), 0, String.valueOf(embedding.pid()), Standalone.Shared.NONE);
+      Assertions.assertEquals("{\"app\":\"" + APP + "\",\"recordingsOnly\":false,\"samples\":\"wall\",\"history\":true}",
+                              get(BASE + "api/about").body());
+      Assertions.assertTrue(post(BASE + "api/sessions").body().contains("\"state\":\"RECORDING\""));
+      Thread.sleep(500);
+      post(BASE + "api/sessions/1/stop");
+      try (Stream<Path> files = Files.list(sessions)) {
+        Assertions.assertTrue(files.anyMatch(f -> f.getFileName().toString().endsWith(".jfr")));
+      }
+      Assertions.assertFalse(Files.exists(dir.resolve("own").resolve(APP).resolve("ids.properties")));
+    }
+    finally {
+      embedding.destroyForcibly();
+      embedding.waitFor(10, TimeUnit.SECONDS);
+    }
+  }
+
   private String waitFor(String path, Predicate<String> condition) throws Exception {
     long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
     String body;

@@ -1,10 +1,14 @@
 package jfrweb.standalone;
 
+import java.nio.file.Path;
+
 import jdk.jfr.Enabled;
 import jdk.jfr.Event;
 import jdk.jfr.Name;
+import jfrweb.Profiler;
 import jfrweb.ops.Operation;
 import jfrweb.ops.Operations;
+import jfrweb.snapshot.Snapshots;
 
 import static jfrweb.analysis.AnalysisTest.Handlers.burn;
 
@@ -22,7 +26,16 @@ public class RemoteApp {
     String kind;
   }
 
-  public static void main(String[] args) {
+  /**
+   * @param args none, or the directories of a profiler embedded: sessions, history, snapshots
+   */
+  public static void main(String[] args) throws Exception {
+    if (args.length == 3)
+      Profiler.builder()
+        .directory(Path.of(args[0]))
+        .history(Path.of(args[1]))
+        .snapshots(Snapshots.builder().directory(Path.of(args[2])).start())
+        .start();
     System.out.println("ready");
     for (int i = 0; ; i++) {
       try (Operation op = Operations.begin("work").detail("item " + i)) {

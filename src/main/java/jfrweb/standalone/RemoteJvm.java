@@ -11,7 +11,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import javax.management.JMException;
 import javax.management.MBeanServerConnection;
+import javax.management.ObjectName;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
@@ -73,20 +75,7 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
    */
   public static RemoteJvm attach(long pid, String name, int stackDepth, Consumer<RecordedOperation> operations)
       throws IOException {
-    String url;
-    try {
-      VirtualMachine vm = VirtualMachine.attach(String.valueOf(pid));
-      try {
-        url = vm.startLocalManagementAgent();
-      }
-      finally {
-        vm.detach();
-      }
-    }
-    catch (AttachNotSupportedException e) {
-      throw new IOException("Cannot attach to JVM " + pid + ": " + e.getMessage(), e);
-    }
-    JMXConnector jmx = JMXConnectorFactory.connect(new JMXServiceURL(url));
+    JMXConnector jmx = connect(pid);
     try {
       MBeanServerConnection server = jmx.getMBeanServerConnection();
       // before the stream, which may be the first recording of the JVM
@@ -123,6 +112,54 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
       jmx.close();
       throw e;
     }
+  }
+
+  private static JMXConnector connect(long pid) throws IOException {
+    String url;
+    try {
+      VirtualMachine vm = VirtualMachine.attach(String.valueOf(pid));
+      try {
+        url = vm.startLocalManagementAgent();
+      }
+      finally {
+        vm.detach();
+      }
+    }
+    catch (AttachNotSupportedException e) {
+      throw new IOException("Cannot attach to JVM " + pid + ": " + e.getMessage(), e);
+    }
+    return JMXConnectorFactory.connect(new JMXServiceURL(url));
+  }
+
+  /**
+   * The directories of the profiler embedded in a JVM, which tells them over
+   * JMX, see {@code jfrweb.ProfilerInfoMBean}.
+   *
+   * @return them, or {@link Standalone.Shared#NONE} if it embeds none, or
+   * several, or cannot be asked
+   */
+  static Standalone.Shared embedded(long pid) {
+    try (JMXConnector jmx = connect(pid)) {
+      MBeanServerConnection server = jmx.getMBeanServerConnection();
+      Set<ObjectName> names = server.queryNames(new ObjectName("jfrweb:type=Profiler,*"), null);
+      if (names.size() != 1) {
+        if (names.size() > 1)
+          log.log(System.Logger.Level.INFO, "JVM " + pid + " embeds " + names.size() + " profilers: not told which one to follow");
+        return Standalone.Shared.NONE;
+      }
+      ObjectName name = names.iterator().next();
+      return new Standalone.Shared(path(server, name, "SessionsDirectory"), path(server, name, "HistoryDirectory"),
+                                   path(server, name, "SnapshotsDirectory"));
+    }
+    catch (IOException | JMException | RuntimeException e) {
+      log.log(System.Logger.Level.DEBUG, "Could not ask JVM " + pid + " for its profiler", e);
+      return Standalone.Shared.NONE;
+    }
+  }
+
+  private static Path path(MBeanServerConnection server, ObjectName name, String attribute) throws IOException, JMException {
+    Object v = server.getAttribute(name, attribute);
+    return v == null ? null : Path.of(v.toString());
   }
 
   private static void report(RecordedEvent e, Consumer<RecordedOperation> operations) {

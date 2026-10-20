@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import javax.management.ObjectName;
+
 import flak.App;
 import flak.AppFactory;
 import flak.BeforeHook;
@@ -39,12 +41,14 @@ public final class Profiler implements AutoCloseable {
   private final Sessions sessions;
   private final LiveStats live;
   private final AutoMode auto;
+  private final ObjectName mbean;
 
-  private Profiler(App app, Sessions sessions, LiveStats live, AutoMode auto) {
+  private Profiler(App app, Sessions sessions, LiveStats live, AutoMode auto, ObjectName mbean) {
     this.app = app;
     this.sessions = sessions;
     this.live = live;
     this.auto = auto;
+    this.mbean = mbean;
   }
 
   /**
@@ -91,6 +95,7 @@ public final class Profiler implements AutoCloseable {
    */
   @Override
   public void close() {
+    ProfilerInfo.unregister(mbean);
     auto.close();
     sessions.close();
     live.close();
@@ -250,7 +255,10 @@ public final class Profiler implements AutoCloseable {
       ProfilerApp.install(app, guard, new About(AppName.self(), false), sessions, live, auto, history, snapshots);
       app.start();
 
-      Profiler p = new Profiler(app, sessions, live, auto);
+      // read by a jfr-web profiling this JVM from outside
+      ProfilerInfo info = new ProfilerInfo(app.getRootUrl() + "/", sessions.getDirectory(), history,
+                                           snapshots == null ? null : snapshots.getDirectory());
+      Profiler p = new Profiler(app, sessions, live, auto, info.register());
       log.log(System.Logger.Level.INFO, "jfr-web profiler at " + p.getUrl() +
                                         ", recordings in " + sessions.getDirectory());
       return p;

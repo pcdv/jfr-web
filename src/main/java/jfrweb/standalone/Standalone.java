@@ -52,9 +52,8 @@ public final class Standalone implements AutoCloseable {
   private final AppFactory factory;
   private final App root;
   private final Map<String, Target> targets = new TreeMap<>();
-  /** What the application attached at the start reads and keeps elsewhere. */
-  private String sharedApp;
-  private Shared shared = Shared.NONE;
+  /** What each application reads and keeps elsewhere, when it is not where this keeps it. */
+  private final Map<String, Shared> shared = new TreeMap<>();
   private final ScheduledExecutorService watchdog;
 
   private Standalone(Path directory, AppFactory factory, App root) {
@@ -81,6 +80,14 @@ public final class Standalone implements AutoCloseable {
    */
   public record Shared(Path sessions, Path history, Path snapshots) {
     public static final Shared NONE = new Shared(null, null, null);
+
+    /**
+     * These, completed by what {@code other} has where they have none.
+     */
+    Shared or(Shared other) {
+      return new Shared(sessions != null ? sessions : other.sessions, history != null ? history : other.history,
+                        snapshots != null ? snapshots : other.snapshots);
+    }
   }
 
   /**
@@ -106,7 +113,9 @@ public final class Standalone implements AutoCloseable {
    *
    * @param attach the pid of the JVM, or a regex its name must contain a
    *               match of, e.g. its main class or jar
-   * @param shared what the application of the JVM keeps elsewhere
+   * @param shared what the application of the JVM keeps elsewhere, where the
+   *               profiler embedded in it does not tell it, see
+   *               {@link jfrweb.ProfilerInfoMBean}
    * @throws IllegalArgumentException if no JVM, or more than one, matches
    */
   public static Standalone start(Path directory, int port, String attach, Shared shared) throws IOException {
@@ -116,10 +125,8 @@ public final class Standalone implements AutoCloseable {
     factory.setLocalAddress(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
     App root = factory.createApp();
     Standalone s = new Standalone(directory, factory, root);
-    if (jvm != null) {
-      s.sharedApp = jvm.app();
-      s.shared = shared;
-    }
+    if (jvm != null)
+      s.shared.put(jvm.app(), shared.or(RemoteJvm.embedded(jvm.pid())));
     ProfilerApp.base(root, null);
     root.scan(s);
     // the page of the JVMs uses the styles and modules of the profiler's
@@ -250,6 +257,9 @@ public final class Standalone implements AutoCloseable {
     if (jvm == null)
       throw new HttpException(404, "No JVM " + pid + " on this machine");
 
+    // what the profiler embedded in it tells, for an application not served yet
+    if (!targets.containsKey(jvm.app()) && !shared.containsKey(jvm.app()))
+      shared.put(jvm.app(), RemoteJvm.embedded(jvm.pid()));
     Target target = target(jvm.app());
     RemoteJvm current = target.getJvm();
     if (current == null || current.getPid() != jvm.pid()) {
@@ -293,9 +303,11 @@ public final class Standalone implements AutoCloseable {
   private synchronized Target target(String app) throws IOException {
     Target t = targets.get(app);
     if (t == null) {
-      boolean own = app.equals(sharedApp);
-      t = new Target(app, own && shared.sessions() != null ? shared.sessions() : directory.resolve(app),
-                     own ? shared : Shared.NONE, factory);
+      Shared s = shared.getOrDefault(app, Shared.NONE);
+      t = new Target(app, s.sessions() != null ? s.sessions() : directory.resolve(app), s, factory);
+      if (!s.equals(Shared.NONE))
+        log.log(System.Logger.Level.INFO, app + ": sessions in " + t.getSessions().getDirectory()
+                                          + ", history in " + s.history() + ", snapshots in " + s.snapshots());
       targets.put(app, t);
     }
     return t;

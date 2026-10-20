@@ -68,8 +68,9 @@ public final class Main {
     "      are kept in <dir>/<application>, ~/.jfr-web by default; port 8095 by default.",
     "      --attach picks the JVM at once: its pid, or a regex matching its name. Then",
     "      --sessions, --history and --snapshots point to the directories of the profiler",
-    "      embedded in it, to show what it records: its history and snapshots are only",
-    "      read, and its sessions should not be started from both profilers at once");
+    "      embedded in it, if it does not tell them over JMX (jfr-web embedded does):",
+    "      its history and snapshots are only read, and its sessions should not be",
+    "      started from both profilers at once");
 
   private Main() {}
 
@@ -239,8 +240,7 @@ public final class Main {
     }
     // a session recording ends with its file written
     Runtime.getRuntime().addShutdownHook(new Thread(s::close, "jfr-web shutdown"));
-    System.err.println("jfr-web at " + s.getAttachedUrl() + ", sessions in "
-                       + (shared.sessions() != null ? shared.sessions() : s.getDirectory()));
+    System.err.println("jfr-web at " + s.getAttachedUrl());
     if (browser)
       browse(s.getAttachedUrl());
     return 0;
