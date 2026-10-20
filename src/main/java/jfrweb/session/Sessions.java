@@ -324,7 +324,7 @@ public final class Sessions implements AutoCloseable {
 
   /**
    * Lists the sessions of an earlier profiler. One that was recording when it
-   * ended ends when its file was last written.
+   * ended ends when its file was last written, or is dropped if nothing was written.
    */
   private void load() {
     if (!Files.isDirectory(directory))
@@ -339,9 +339,15 @@ public final class Sessions implements AutoCloseable {
           Path jfr = f.resolveSibling(name.substring(0, name.length() - ".properties".length()) + ".jfr");
           if (!Files.exists(jfr))
             continue;
+          String end = p.getProperty("end");
+          if (end == null && Files.size(jfr) == 0) {
+            // recording when the profiler ended: nothing was written, no report can be made of it
+            Files.delete(jfr);
+            Files.delete(f);
+            continue;
+          }
           int id = Integer.parseInt(p.getProperty("id"));
           Session s = new Session(id, Instant.parse(p.getProperty("start")), p.getProperty("trigger", "manual"), jfr);
-          String end = p.getProperty("end");
           s.stopped(end != null ? Instant.parse(end) : Files.getLastModifiedTime(jfr).toInstant());
           s.setName(p.getProperty("name"));
           s.owner = this;
