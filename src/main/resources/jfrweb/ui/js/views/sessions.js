@@ -62,15 +62,19 @@ export function renderSessions(root, params, signal) {
  * @param {() => void} refresh
  */
 function toolbar(sessions, snapshots, refresh) {
-  const recording = sessions.some(s => s.state === 'RECORDING');
+  const recording = sessions.find(s => s.state === 'RECORDING');
   const minutes = snapshots.window ? Math.round(snapshots.window / 60) : 0;
   return h('div', {class: 'toolbar'},
-    h('button', {
-      class: 'primary',
-      disabled: recording,
-      title: recording ? 'A session is already recording' : null,
-      onclick: () => act(() => api.startSession(), refresh),
-    }, 'Start a session'),
+    // the one recording is stopped from here too: its own button is far on the right
+    recording
+      ? h('button', {
+          class: 'danger',
+          onclick: () => act(() => api.stopSession(recording.id), refresh),
+        }, 'Stop session')
+      : h('button', {
+          class: 'primary',
+          onclick: () => act(() => api.startSession(), refresh),
+        }, 'Start a session'),
     snapshots.available
       ? [' ', h('button', {
           title: 'A rolling recording keeps the last minutes: save them, e.g. right after a problem. ' +

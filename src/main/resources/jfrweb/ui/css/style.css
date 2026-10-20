@@ -210,6 +210,12 @@ button.primary {
   color: var(--accent-fg);
 }
 
+button.danger {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
 /* an action among links, looking like them */
 button.link {
   padding: 0;
