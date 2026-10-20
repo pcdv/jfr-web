@@ -162,7 +162,7 @@ export function renderSession(root, params, signal) {
 function recordingNow(id, refresh) {
   const text = h('p', {class: 'summary'});
   const stop = h('button', {
-    class: 'primary',
+    class: 'danger',
     onclick: async () => {
       stop.disabled = true;
       try {
@@ -174,7 +174,7 @@ function recordingNow(id, refresh) {
       }
       refresh();
     },
-  }, 'Stop');
+  }, 'Stop session');
   return {
     element: h('div', null, text, h('div', {class: 'toolbar'}, stop)),
     /** @param {api.Session} s */
