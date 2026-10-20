@@ -97,18 +97,18 @@ function table(sessions, refresh) {
       h('th', {class: 'num'}, '#'), h('th', null, 'Name'), h('th', null, 'State'), h('th', null, 'Started'),
       h('th', {class: 'num'}, 'Duration'), h('th', {class: 'num'}, 'Size'),
       h('th', null, 'Trigger'), h('th', null, ''))),
-    h('tbody', null, sessions.map(s => h('tr', s.state === 'RECORDING' ? null : {
+    h('tbody', null, sessions.map(s => h('tr', {
         class: 'clickable',
-        title: 'Open the report',
+        title: s.state === 'RECORDING' ? 'Open the session' : 'Open the report',
         // its links and buttons do their own thing
         onclick: (/** @type {MouseEvent} */ e) => {
           if (!(e.target instanceof Element && e.target.closest('a, button')))
             location.hash = reportHash(s);
         },
       },
-      h('td', {class: 'num'}, s.state === 'RECORDING' ? s.id : h('a', {href: reportHash(s)}, s.id)),
+      h('td', {class: 'num'}, h('a', {href: reportHash(s)}, s.id)),
       h('td', null, s.name
-        ? (s.state === 'RECORDING' ? s.name : h('a', {href: reportHash(s)}, s.name))
+        ? h('a', {href: reportHash(s)}, s.name)
         : h('span', {class: 'hint'}, '—')),
       h('td', null, h('span', {class: `state ${s.state.toLowerCase()}`}, s.state.toLowerCase())),
       h('td', null, fmt.time(s.start)),
