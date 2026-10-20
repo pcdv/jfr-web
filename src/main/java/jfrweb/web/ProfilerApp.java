@@ -2,6 +2,7 @@ package jfrweb.web;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 
 import flak.App;
 import flak.BeforeHook;
@@ -79,6 +80,15 @@ public final class ProfilerApp {
       resp.addHeader("Content-Type", "application/json");
       resp.getOutputStream().write(Json.write(data).getBytes(StandardCharsets.UTF_8));
     });
+  }
+
+  /**
+   * Lists snapshots taken by another process as sessions, as they are when
+   * the profiler takes them itself.
+   */
+  public static void register(Sessions sessions, List<Snapshots.Snapshot> snapshots) {
+    for (Snapshots.Snapshot s : snapshots)
+      register(sessions, s);
   }
 
   private static void register(Sessions sessions, Snapshots.Snapshot s) {

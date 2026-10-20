@@ -83,7 +83,7 @@ public class StandaloneTest {
     Assertions.assertEquals(200, attached.statusCode(), attached.body());
     Assertions.assertEquals("{\"app\":\"" + APP + "\",\"path\":\"" + BASE + "\"}", attached.body());
     Assertions.assertTrue(get(BASE + "api/target").body().contains("\"pid\":" + pid + ","));
-    Assertions.assertEquals("{\"app\":\"" + APP + "\",\"recordingsOnly\":false,\"history\":false}",
+    Assertions.assertEquals("{\"app\":\"" + APP + "\",\"recordingsOnly\":false,\"samples\":\"wall\",\"history\":false}",
                         get(BASE + "api/about").body());
     Assertions.assertEquals(200, get(BASE).statusCode(), "the interface of the profiler");
 
@@ -122,6 +122,37 @@ public class StandaloneTest {
     String apps = get("api/jvms").body();
     Assertions.assertTrue(apps.contains("{\"app\":\"" + APP + "\",\"path\":\"" + BASE + "\",\"pid\":null,\"sessions\":2,"), apps);
     Assertions.assertTrue(get(BASE + "api/sessions").body().contains("\"name\":\"remote\""));
+  }
+
+  @Test
+  public void testAttachAtStartToTheDirectoriesOfAnotherProfiler() throws Exception {
+    Path sessions = Files.createDirectories(dir.resolve("embedded-sessions"));
+    Path history = Files.createDirectories(dir.resolve("embedded-history"));
+    Path snapshots = Files.createDirectories(dir.resolve("embedded-snapshots"));
+    Files.writeString(snapshots.resolve("snap.jfr"), "jfr");
+    Files.writeString(snapshots.resolve("snap.json"),
+                      "{\"start\":\"2026-10-20T08:00:00Z\",\"end\":\"2026-10-20T08:05:00Z\",\"reason\":\"slow\"}");
+
+    // by a regex of its name
+    standalone = Standalone.start(dir.resolve("own"), 0, "RemoteApp$", new Standalone.Shared(sessions, history, snapshots));
+    Assertions.assertTrue(standalone.getAttachedUrl().endsWith("/" + BASE), standalone.getAttachedUrl());
+    Assertions.assertTrue(get(BASE + "api/target").body().contains("\"pid\":" + child.pid() + ","));
+    Assertions.assertEquals("{\"app\":\"" + APP + "\",\"recordingsOnly\":false,\"samples\":\"wall\",\"history\":true}",
+                            get(BASE + "api/about").body());
+    Assertions.assertTrue(get(BASE + "api/sessions").body().contains("\"trigger\":\"snapshot: slow\""));
+
+    // its sessions are kept in the directory given
+    Assertions.assertTrue(post(BASE + "api/sessions").body().contains("\"state\":\"RECORDING\""));
+    Thread.sleep(500);
+    Assertions.assertTrue(post(BASE + "api/sessions/2/stop").body().contains("\"state\":\"STOPPED\""));
+    try (Stream<Path> files = Files.list(sessions)) {
+      Assertions.assertTrue(files.anyMatch(f -> f.getFileName().toString().endsWith(".jfr")));
+    }
+    standalone.close();
+
+    Assertions.assertThrows(IllegalArgumentException.class,
+                            () -> Standalone.start(dir.resolve("own"), 0, "no such jvm ", Standalone.Shared.NONE));
+    standalone = null;
   }
 
   private String waitFor(String path, Predicate<String> condition) throws Exception {

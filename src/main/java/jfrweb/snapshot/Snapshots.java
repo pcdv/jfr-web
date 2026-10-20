@@ -217,6 +217,18 @@ public final class Snapshots implements AutoCloseable {
   }
 
   private void loadExisting() throws IOException {
+    snapshots.addAll(read(directory));
+  }
+
+  /**
+   * The snapshots of a directory, the oldest first, read as they are: nothing
+   * is recorded, saved or purged. For a profiler of another process, which
+   * lists the snapshots of the one that takes them.
+   */
+  public static List<Snapshot> read(Path directory) throws IOException {
+    List<Snapshot> res = new ArrayList<>();
+    if (!Files.isDirectory(directory))
+      return res;
     try (Stream<Path> files = Files.list(directory)) {
       for (Path f : (Iterable<Path>) files::iterator) {
         if (!f.getFileName().toString().endsWith(".jfr") || !Files.exists(metaFile(f)))
@@ -224,15 +236,16 @@ public final class Snapshots implements AutoCloseable {
         try {
           @SuppressWarnings("unchecked")
           Map<String, Object> m = (Map<String, Object>) Json.parse(Files.readString(metaFile(f), StandardCharsets.UTF_8));
-          snapshots.add(new Snapshot(Instant.parse((String) m.get("start")), Instant.parse((String) m.get("end")),
-                                     (String) m.get("reason"), f));
+          res.add(new Snapshot(Instant.parse((String) m.get("start")), Instant.parse((String) m.get("end")),
+                               (String) m.get("reason"), f));
         }
         catch (RuntimeException e) {
           log.log(System.Logger.Level.WARNING, "Ignored snapshot " + f + ": " + e);
         }
       }
     }
-    snapshots.sort(Comparator.comparing(Snapshot::end));
+    res.sort(Comparator.comparing(Snapshot::end));
+    return res;
   }
 
   /**

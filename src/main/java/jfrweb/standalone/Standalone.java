@@ -52,6 +52,9 @@ public final class Standalone implements AutoCloseable {
   private final AppFactory factory;
   private final App root;
   private final Map<String, Target> targets = new TreeMap<>();
+  /** What the application attached at the start reads and keeps elsewhere. */
+  private String sharedApp;
+  private Shared shared = Shared.NONE;
   private final ScheduledExecutorService watchdog;
 
   private Standalone(Path directory, AppFactory factory, App root) {
@@ -63,6 +66,21 @@ public final class Standalone implements AutoCloseable {
       t.setDaemon(true);
       return t;
     });
+  }
+
+  /**
+   * Where an application keeps what its profiler reads, when it is not
+   * where this keeps it: the directories of the profiler embedded in it, for
+   * this to show the same history, sessions and snapshots.
+   *
+   * @param sessions  its sessions, in place of a directory of this; it is
+   *                  best used by one profiler at a time, as they give the
+   *                  ids of new sessions each by itself
+   * @param history   its operation history, only read
+   * @param snapshots its snapshots, only read: listed as sessions
+   */
+  public record Shared(Path sessions, Path history, Path snapshots) {
+    public static final Shared NONE = new Shared(null, null, null);
   }
 
   /**
@@ -79,11 +97,29 @@ public final class Standalone implements AutoCloseable {
    * @param port 0 for a free one
    */
   public static Standalone start(Path directory, int port) throws IOException {
+    return start(directory, port, null, Shared.NONE);
+  }
+
+  /**
+   * Serves the interface as {@link #start(Path, int)} does, and attaches to
+   * a JVM.
+   *
+   * @param attach the pid of the JVM, or a regex its name must contain a
+   *               match of, e.g. its main class or jar
+   * @param shared what the application of the JVM keeps elsewhere
+   * @throws IllegalArgumentException if no JVM, or more than one, matches
+   */
+  public static Standalone start(Path directory, int port, String attach, Shared shared) throws IOException {
+    Jvms.Jvm jvm = attach == null ? null : find(attach);
     Files.createDirectories(directory);
     AppFactory factory = Flak.getFactory(c -> c.getName().startsWith("flak.backend.jdk."));
     factory.setLocalAddress(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
     App root = factory.createApp();
     Standalone s = new Standalone(directory, factory, root);
+    if (jvm != null) {
+      s.sharedApp = jvm.app();
+      s.shared = shared;
+    }
     ProfilerApp.base(root, null);
     root.scan(s);
     // the page of the JVMs uses the styles and modules of the profiler's
@@ -97,7 +133,50 @@ public final class Standalone implements AutoCloseable {
     }
     s.watchdog.scheduleWithFixedDelay(s::watch, 1, 1, TimeUnit.SECONDS);
     log.log(System.Logger.Level.INFO, "jfr-web at " + s.getUrl() + ", sessions in " + directory);
+    if (jvm != null) {
+      try {
+        s.attach(String.valueOf(jvm.pid()));
+      }
+      catch (RuntimeException e) {
+        s.close();
+        throw new IOException(e.getMessage(), e);
+      }
+    }
     return s;
+  }
+
+  /**
+   * The JVM of a pid, or whose name matches a regex.
+   */
+  private static Jvms.Jvm find(String attach) {
+    List<Jvms.Jvm> found = new ArrayList<>();
+    java.util.regex.Pattern p = null;
+    if (!attach.matches("\\d+"))
+      p = java.util.regex.Pattern.compile(attach);
+    for (Jvms.Jvm j : Jvms.list())
+      if (p == null ? String.valueOf(j.pid()).equals(attach) : p.matcher(j.name()).find())
+        found.add(j);
+    if (found.isEmpty())
+      throw new IllegalArgumentException("No JVM of this machine matches " + attach);
+    if (found.size() > 1) {
+      StringBuilder sb = new StringBuilder("More than one JVM matches " + attach + ", name its pid:");
+      for (Jvms.Jvm j : found)
+        sb.append("\n  ").append(j.pid()).append(' ').append(j.name());
+      throw new IllegalArgumentException(sb.toString());
+    }
+    return found.get(0);
+  }
+
+  /**
+   * Where the interface of the JVM attached is.
+   *
+   * @return the url of the profiler, or that of the list of JVMs if none is
+   */
+  public synchronized String getAttachedUrl() {
+    for (Target t : targets.values())
+      if (t.getJvm() != null)
+        return root.getRootUrl() + t.path() + "/";
+    return getUrl();
   }
 
   public String getUrl() {
@@ -214,7 +293,9 @@ public final class Standalone implements AutoCloseable {
   private synchronized Target target(String app) throws IOException {
     Target t = targets.get(app);
     if (t == null) {
-      t = new Target(app, directory.resolve(app), factory);
+      boolean own = app.equals(sharedApp);
+      t = new Target(app, own && shared.sessions() != null ? shared.sessions() : directory.resolve(app),
+                     own ? shared : Shared.NONE, factory);
       targets.put(app, t);
     }
     return t;

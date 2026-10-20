@@ -62,9 +62,14 @@ public final class Main {
     "      timeline, operations, flame graphs; the .jfr files of a directory are taken.",
     "      --alloc: flame graphs show the allocations first, instead of the wall clock",
     "  jfr-web standalone [--port <port>] [--dir <dir>] [--no-browser]",
+    "                     [--attach <pid | regex> [--sessions <dir>] [--history <dir>] [--snapshots <dir>]]",
     "      the profiler on its own: lists the JVMs of this machine, and profiles the",
     "      one picked as if it was embedded, with nothing to install in it. Sessions",
-    "      are kept in <dir>/<application>, ~/.jfr-web by default; port 8095 by default");
+    "      are kept in <dir>/<application>, ~/.jfr-web by default; port 8095 by default.",
+    "      --attach picks the JVM at once: its pid, or a regex matching its name. Then",
+    "      --sessions, --history and --snapshots point to the directories of the profiler",
+    "      embedded in it, to show what it records: its history and snapshots are only",
+    "      read, and its sessions should not be started from both profilers at once");
 
   private Main() {}
 
@@ -204,11 +209,18 @@ public final class Main {
   private static int standalone(List<String> options) throws IOException {
     int port;
     Path dir;
+    String attach;
+    Standalone.Shared shared;
     try {
       String v = takeValue(options, "--port");
       port = v == null ? Standalone.PORT : Integer.parseInt(v);
       v = takeValue(options, "--dir");
       dir = v == null ? Standalone.defaultDirectory() : Path.of(v);
+      attach = takeValue(options, "--attach");
+      shared = new Standalone.Shared(path(takeValue(options, "--sessions")), path(takeValue(options, "--history")),
+                                     path(takeValue(options, "--snapshots")));
+      if (attach == null && !shared.equals(Standalone.Shared.NONE))
+        throw new IllegalArgumentException("--sessions, --history and --snapshots go with --attach");
     }
     catch (IllegalArgumentException e) {
       System.err.println(e.getMessage());
@@ -217,13 +229,25 @@ public final class Main {
     boolean browser = !options.remove("--no-browser");
     if (!checkNoneLeft(options))
       return 2;
-    Standalone s = Standalone.start(dir, port);
+    Standalone s;
+    try {
+      s = Standalone.start(dir, port, attach, shared);
+    }
+    catch (IllegalArgumentException e) {
+      System.err.println(e.getMessage());
+      return 2;
+    }
     // a session recording ends with its file written
     Runtime.getRuntime().addShutdownHook(new Thread(s::close, "jfr-web shutdown"));
-    System.err.println("jfr-web at " + s.getUrl() + ", sessions in " + s.getDirectory());
+    System.err.println("jfr-web at " + s.getAttachedUrl() + ", sessions in "
+                       + (shared.sessions() != null ? shared.sessions() : s.getDirectory()));
     if (browser)
-      browse(s.getUrl());
+      browse(s.getAttachedUrl());
     return 0;
+  }
+
+  private static Path path(String v) {
+    return v == null ? null : Path.of(v);
   }
 
   private static void browse(String url) {

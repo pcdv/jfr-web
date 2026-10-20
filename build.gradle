@@ -147,7 +147,8 @@ tasks.register('tcpDemo', JavaExec) {
 
 // jfr-web on its own: lists the JVMs of this machine, and profiles the one
 // picked, with nothing to install in it (see Standalone). -Pport= (8095 by
-// default), -Pdir= (~/.jfr-web by default), -Pbrowser=false
+// default), -Pdir= (~/.jfr-web by default), -Pbrowser=false; -Pattach=<pid or
+// regex of a name> and with it -Psessions=, -Phistory=, -Psnapshots=
 tasks.register('standalone', JavaExec) {
   group = 'application'
   description = 'Runs jfr-web on its own, to profile the other JVMs of this machine.'
@@ -163,6 +164,11 @@ tasks.register('standalone', JavaExec) {
     args '--dir', dir.get()
   if (providers.gradleProperty('browser').getOrElse('true') == 'false')
     args '--no-browser'
+  ['attach', 'sessions', 'history', 'snapshots'].each { name ->
+    def v = providers.gradleProperty(name)
+    if (v.present)
+      args "--${name}", v.get()
+  }
 }
 
 test {

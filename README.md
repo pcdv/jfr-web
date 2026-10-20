@@ -340,6 +340,14 @@ A page lists the running JVMs. **Connect** attaches to one the way JDK Mission C
 Arm and auto mode. It stays connected until you click **Disconnect**, connect to another JVM, or
 the JVM exits. One JVM at a time.
 
+To skip the list, name the JVM: `jfr-web standalone --attach <pid | regex>`, where the regex is
+matched against the name the JVM lists itself by (its main class or jar). It fails if none or
+several match. Next to it, `--sessions`, `--history` and `--snapshots` point to the directories
+of a profiler embedded in that JVM, to show what it records from a profiler of its own, e.g. one
+you restart as you work on the interface while the application keeps running. The history and the
+snapshots are only read; the sessions are best started from one profiler at a time, as each one
+gives the ids of new sessions by itself.
+
 Operations come from the target's JFR events (flak's requests, the `jfrweb.ops` API, and the
 [events you mapped](#mapping-your-own-jfr-events)), streamed as they end. A JVM with none of these
 still gets sessions and flame graphs by thread.

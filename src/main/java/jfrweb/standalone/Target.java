@@ -11,6 +11,7 @@ import jfrweb.live.LiveStats;
 import jfrweb.session.Recorder;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
+import jfrweb.snapshot.Snapshots;
 import jfrweb.web.About;
 import jfrweb.web.ProfilerApp;
 
@@ -31,8 +32,11 @@ final class Target implements AutoCloseable {
 
   /**
    * Serves its interface at /app/{app} of the server of the factory.
+   *
+   * @param directory where its sessions are kept
+   * @param shared    what it reads of the application, kept elsewhere, or null
    */
-  Target(String app, Path directory, AppFactory factory) throws IOException {
+  Target(String app, Path directory, Standalone.Shared shared, AppFactory factory) throws IOException {
     this.app = app;
     this.sessions = new Sessions(directory, Sessions.defaultSettings(), new Recorder() {
       @Override
@@ -45,7 +49,9 @@ final class Target implements AutoCloseable {
     });
     this.auto = AutoMode.fed(sessions);
     this.web = factory.createApp(path());
-    ProfilerApp.install(web, null, new About(app, false), sessions, live, auto, null, null);
+    ProfilerApp.install(web, null, new About(app, false), sessions, live, auto, shared.history(), null);
+    if (shared.snapshots() != null)
+      ProfilerApp.register(sessions, Snapshots.read(shared.snapshots()));
     web.scan(new TargetRoutes(this));
     web.start();
   }
