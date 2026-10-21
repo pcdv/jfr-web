@@ -197,7 +197,7 @@ public class ProfilerTest {
                                       "components/timeline", "components/slowest", "components/auto",
                                       "components/section", "views/history",
                                       "components/sessionTimeline", "lib/dom", "lib/settings",
-                                      "lib/dialog", "lib/router", "profile/profile", "profile/operations", "profile/timeline", "flame/render",
+                                      "lib/dialog", "lib/router", "profile/profile", "profile/operations", "profile/timeline", "flame/render", "flame/heat",
                                       "flamePage", "components/hotMethods", "components/share", "components/tabs"}) {
       HttpResponse<String> js = get("js/" + module + ".js");
       Assertions.assertEquals(200, js.statusCode(), module);

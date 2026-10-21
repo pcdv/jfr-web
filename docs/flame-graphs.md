@@ -109,8 +109,15 @@ Plain modules like the rest of the interface:
   or a name, as the server computes them. No DOM either.
 - `flame/render.js`: draws a tree on a canvas: layout, zoom on a click with the path back, tooltip
   (name, total and self time in ms, share of the view and of the whole), search by regex with
-  the share matched, colors by frame type from the CSS tokens, sharp on high-density screens,
-  redrawn on resize.
+  the share matched, colors by frame type from the CSS tokens (or by heat, below), sharp on
+  high-density screens, redrawn on resize.
+- `flame/heat.js`: the temperature of a frame, for the **Heat** checkbox of the graph's
+  toolbar (remembered): the self time of its method in all the frames of the graph, minus its own,
+  as a share of the whole time. A method running in many narrow frames is hot in each of them;
+  one with a single frame is cold however wide it is, since it is easy to see already. Scaled
+  to the hottest frame of the graph (at least 5% of the time) by a power of 0.4, so that
+  middling frames show too; drawn as a gradient: the frame's usual color, darkened toward deep
+  red (brightened in the dark theme). A search and a comparison keep their colors. No DOM: tested with Node.
 - `components/flame.js` keeps its panel and filters; the iframe gives way to the canvas, and
   `update()` rebuilds the tree locally. `onlyFilter`, which kept the static export to one filter
   at a time, goes away.

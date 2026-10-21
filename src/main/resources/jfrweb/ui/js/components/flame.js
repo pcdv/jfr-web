@@ -201,6 +201,9 @@ export function flamePanel(profile, signal, {onInstance = () => {}, filter: init
     for (const op of p.operation)
       if (op >= 0)
         sampled.add(p.strings[p.operations.name[op]]);
+    // a recording with none, e.g. of a JVM with no operation events: all its samples are outside
+    if (sampled.size === 0 && initial.all === undefined)
+      all.checked = true;
     for (const o of operationRows(p, {}))
       if (sampled.has(o.name))
         name.append(h('option', {value: o.name}, o.name));

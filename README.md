@@ -162,7 +162,9 @@ page from the session's samples, so filters change and combine at once. Hovering
 frame shows on the timeline when its samples were taken; a table of the methods by self or total
 time finds them in the graph; a right-click (or that table) shows one method's callers and callees,
 wherever it is called from; frames matching a pattern (reflection, proxies) can be hidden, their
-time given to their callers; and **Compare…** keeps a selection as a baseline, then colors the
+time given to their callers; **Heat** (a checkbox by the search field) darkens, by degrees, the methods that run a lot in total
+but are split in many frames, each too narrow to notice (a method with one wide frame stays cold);
+and **Compare…** keeps a selection as a baseline, then colors the
 graph of another interval or operation by what took more or less of the time. A single call also
 lists the exceptions it created and its slow file and socket accesses. You can name sessions, download the `.jfr` for JDK Mission
 Control, and if you give the profiler a `directory(...)`, it lists them again after a restart.
