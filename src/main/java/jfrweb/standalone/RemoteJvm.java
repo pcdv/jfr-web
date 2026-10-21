@@ -3,6 +3,7 @@ package jfrweb.standalone;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
+import java.lang.management.RuntimeMXBean;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -30,6 +31,7 @@ import jfrweb.analysis.EventMappings;
 import jfrweb.analysis.RecordedOperation;
 import jfrweb.ops.Operations;
 import jfrweb.session.Recorder;
+import jfrweb.session.RepositorySize;
 import jfrweb.session.StackDepth;
 
 /**
@@ -56,6 +58,7 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
   private final JMXConnector jmx;
   private final FlightRecorderMXBean jfr;
   private final RemoteRecordingStream stream;
+  private volatile Path repository;
 
   private RemoteJvm(long pid, String name, JMXConnector jmx, FlightRecorderMXBean jfr, RemoteRecordingStream stream) {
     this.pid = pid;
@@ -199,6 +202,7 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
   @Override
   public Running start(String recordingName, Map<String, String> settings, Path file) throws IOException {
     Path destination = file.toAbsolutePath();
+    RepositorySize size = new RepositorySize(this::repository);
     long id = jfr.newRecording();
     try {
       jfr.setRecordingSettings(id, settings);
@@ -212,17 +216,46 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
       close(id);
       throw e;
     }
-    return () -> {
-      try {
-        jfr.stopRecording(id);
-        // e.g. the JVM could not write there: through JMX instead
-        if (!Files.exists(destination))
-          copy(id, destination);
+    return new Running() {
+      @Override
+      public void stop() throws IOException {
+        try {
+          jfr.stopRecording(id);
+          // e.g. the JVM could not write there: through JMX instead
+          if (!Files.exists(destination))
+            copy(id, destination);
+        }
+        finally {
+          close(id);
+        }
       }
-      finally {
-        close(id);
+
+      @Override
+      public long size() {
+        return size.size();
       }
     };
+  }
+
+  /**
+   * Where the JVM keeps the chunks of its recordings, null if it does not
+   * tell (yet): it is on this machine.
+   */
+  private Path repository() {
+    Path p = repository;
+    if (p == null) {
+      try {
+        RuntimeMXBean runtime = ManagementFactory.newPlatformMXBeanProxy(
+          jmx.getMBeanServerConnection(), ManagementFactory.RUNTIME_MXBEAN_NAME, RuntimeMXBean.class);
+        String v = runtime.getSystemProperties().get(RepositorySize.PROPERTY);
+        if (v != null)
+          repository = p = Path.of(v);
+      }
+      catch (IOException | RuntimeException e) {
+        log.log(System.Logger.Level.DEBUG, "Could not ask JVM " + pid + " for its JFR repository", e);
+      }
+    }
+    return p;
   }
 
   private void copy(long id, Path file) throws IOException {

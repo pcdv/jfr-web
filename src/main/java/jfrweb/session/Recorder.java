@@ -35,5 +35,13 @@ public interface Recorder {
      * dropped.
      */
     void stop() throws IOException;
+
+    /**
+     * An estimate of the size of its file so far, in bytes (see
+     * {@link RepositorySize}). 0 if unknown.
+     */
+    default long size() {
+      return 0;
+    }
   }
 }

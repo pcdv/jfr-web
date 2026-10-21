@@ -113,7 +113,7 @@ function table(sessions, refresh) {
       h('td', null, h('span', {class: `state ${s.state.toLowerCase()}`}, s.state.toLowerCase())),
       h('td', null, fmt.time(s.start)),
       h('td', {class: 'num'}, fmt.duration(s.duration)),
-      h('td', {class: 'num'}, s.state === 'STOPPED' ? fmt.bytes(s.size) : ''),
+      h('td', {class: 'num'}, s.state === 'STOPPED' ? fmt.bytes(s.size) : s.size > 0 ? '~' + fmt.bytes(s.size) : ''),
       h('td', null, s.trigger),
       h('td', {class: 'actions'}, s.state === 'RECORDING'
         ? h('button', {onclick: () => act(() => api.stopSession(s.id), refresh)}, 'Stop')

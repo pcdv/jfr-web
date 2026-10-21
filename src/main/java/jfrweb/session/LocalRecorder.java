@@ -26,6 +26,10 @@ final class LocalRecorder implements Recorder {
     r.setName(name);
     r.setToDisk(true);
     r.setDestination(file);
+    RepositorySize size = new RepositorySize(() -> {
+      String p = System.getProperty(RepositorySize.PROPERTY);
+      return p == null ? null : Path.of(p);
+    });
     timer.acquire();
     try {
       r.start();
@@ -35,13 +39,21 @@ final class LocalRecorder implements Recorder {
       r.close();
       throw e;
     }
-    return () -> {
-      try {
-        r.stop();
+    return new Running() {
+      @Override
+      public void stop() {
+        try {
+          r.stop();
+        }
+        finally {
+          r.close();
+          timer.release();
+        }
       }
-      finally {
-        r.close();
-        timer.release();
+
+      @Override
+      public long size() {
+        return size.size();
       }
     };
   }

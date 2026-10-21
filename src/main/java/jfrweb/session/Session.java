@@ -107,11 +107,15 @@ public final class Session {
   }
 
   /**
-   * The size of the .jfr file, 0 while recording.
+   * The size of the .jfr file; while recording, an estimate of it so far.
    */
   public long getSize() {
+    if (state == State.RECORDING) {
+      Recorder.Running r = recording;
+      return r != null ? r.size() : 0;
+    }
     try {
-      return state == State.STOPPED ? Files.size(file) : 0;
+      return Files.size(file);
     }
     catch (IOException e) {
       return 0;
