@@ -983,6 +983,11 @@ svg.timeline .frame-samples {
   overflow: hidden;
 }
 
+.flame-scroll {
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
 .flame-canvas {
   display: block;
   width: 100%;

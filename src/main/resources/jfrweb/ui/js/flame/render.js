@@ -81,7 +81,9 @@ const TYPES = [
 export function flameGraph(signal, {onFrame = () => {}, onMethod, search: searchable = true} = {}) {
   const canvas = h('canvas', {class: 'flame-canvas', tabindex: 0});
   const tooltip = h('div', {class: 'tooltip', hidden: true});
-  const wrapper = h('div', {class: 'flame-wrapper'}, canvas, tooltip);
+  // as tall as the deepest stack, which scrolls if it is taller than the window
+  const scroller = h('div', {class: 'flame-scroll'}, canvas);
+  const wrapper = h('div', {class: 'flame-wrapper'}, scroller, tooltip);
   const search = h('input', {type: 'search', placeholder: 'Search, e.g. HashMap|parse', 'aria-label': 'Search frames',
                              hidden: !searchable});
   const matched = h('span', {class: 'flame-matched'});
@@ -167,7 +169,7 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
   }
 
   function draw() {
-    const width = wrapper.clientWidth;
+    const width = scroller.clientWidth;
     const height = levels.length * ROW;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(width * dpr);
@@ -394,8 +396,22 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
     matched.textContent = `Matched: ${percent(ms / (root.frame.total || 1))}, ${amount(ms)}`;
   }
 
-  const resized = new ResizeObserver(() => draw());
-  resized.observe(wrapper);
+  /** Whether the root is to be scrolled to once the graph has a size. */
+  let toRoot = false;
+
+  /** On the root: at the bottom of a graph growing upward. */
+  function scrollToRoot() {
+    if (!toRoot || scroller.clientWidth === 0)
+      return;
+    toRoot = false;
+    scroller.scrollTop = inverted ? 0 : scroller.scrollHeight;
+  }
+
+  const resized = new ResizeObserver(() => {
+    draw();
+    scrollToRoot();
+  });
+  resized.observe(scroller);
   signal.addEventListener('abort', () => resized.disconnect());
 
   return {
@@ -431,6 +447,8 @@ export function flameGraph(signal, {onFrame = () => {}, onMethod, search: search
       }
       zoomOn(path.length > 1 && z.level === path.length - 1 ? z : null);
       showMatched();
+      toRoot = true;
+      scrollToRoot();
     },
   };
 }
