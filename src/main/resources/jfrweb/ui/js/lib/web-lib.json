@@ -1,0 +1,20 @@
+{
+  "lang": "js",
+  "modules": [
+    "dom",
+    "dialog",
+    "settings",
+    "router"
+  ],
+  "commit": "09ad882",
+  "files": {
+    "dom.js": "86f1d4add5f35d3e",
+    "dom.d.ts": "8b13854c6394e484",
+    "dialog.js": "2fb9278cecc15598",
+    "dialog.d.ts": "ce581585c6009816",
+    "settings.js": "7d5fadcb2d5e29de",
+    "settings.d.ts": "d11722bf2eff7f13",
+    "router.js": "26e88d22006d1a06",
+    "router.d.ts": "e87d380adb57f7b2"
+  }
+}

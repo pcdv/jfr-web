@@ -1,20 +1,13 @@
-// @ts-check
+// From web-lib (https://github.com/pcdv/web-lib), src/dom.ts: changed there, then synced here.
+// @ts-nocheck: its types are in dom.d.ts
 /**
  * A few helpers to build the DOM, in place of a framework.
- *
- * Part of a small lib kept as identical copies in jfr-web and jfr-soundscape:
- * change both.
  */
-
-/** @typedef {Node | string | number | null | undefined | false} Child */
 
 /**
  * The element of the page with this id, which must be of a type.
  *
- * @template {HTMLElement} T
- * @param {string} id
- * @param {{new (): T, prototype: T}} type e.g. HTMLInputElement
- * @returns {T}
+ * @param type e.g. HTMLInputElement
  */
 export function $(id, type) {
   const el = document.getElementById(id);
@@ -26,12 +19,6 @@ export function $(id, type) {
 /**
  * Creates an element. Attributes named "on..." take a listener; true and
  * false add or omit a boolean attribute.
- *
- * @template {keyof HTMLElementTagNameMap} K
- * @param {K} tag
- * @param {Record<string, any> | null} [attrs]
- * @param {...(Child | Child[])} children
- * @returns {HTMLElementTagNameMap[K]}
  */
 export function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
@@ -47,10 +34,6 @@ export function h(tag, attrs, ...children) {
   return el;
 }
 
-/**
- * @param {Node} parent
- * @param {(Child | Child[])[]} children
- */
 function append(parent, children) {
   for (const c of children) {
     if (Array.isArray(c))
@@ -62,12 +45,7 @@ function append(parent, children) {
   }
 }
 
-/**
- * Replaces the content of an element.
- *
- * @param {Element} el
- * @param {...(Child | Child[])} children
- */
+/** Replaces the content of an element. */
 export function replace(el, ...children) {
   el.replaceChildren();
   append(el, children);

@@ -76,6 +76,12 @@ application {
   mainClass = 'jfrweb.cli.Main'
 }
 
+// what the interface's sources hold for type-checking and for the sync of
+// their lib, not for the browser
+processResources {
+  exclude '**/*.d.ts', '**/jsconfig.json', '**/web-lib.json'
+}
+
 // the command line, in the library's jar too: jbang runs it from its
 // coordinates, see jbang-catalog.json
 jar {

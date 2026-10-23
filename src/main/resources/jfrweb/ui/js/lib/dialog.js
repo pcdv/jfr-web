@@ -1,4 +1,5 @@
-// @ts-check
+// From web-lib (https://github.com/pcdv/web-lib), src/dialog.ts: changed there, then synced here.
+// @ts-nocheck: its types are in dialog.d.ts
 /**
  * Questions and messages in a dialog of the page, in place of prompt() and
  * alert(): a sandboxed frame blocks those, e.g. the browser inside VS Code,
@@ -6,18 +7,14 @@
  *
  * The dialog goes at the end of the body, out of the views: a view redrawn
  * meanwhile does not take it away.
- *
- * Part of a small lib kept as identical copies in jfr-web and jfr-soundscape:
- * change both.
  */
 import {h} from './dom.js';
 
 /**
  * Asks for a line of text.
  *
- * @param {string} question
- * @param {string} [value] the text proposed
- * @returns {Promise<string | null>} the text entered; null if cancelled
+ * @param value the text proposed
+ * @returns the text entered; null if cancelled
  */
 export async function ask(question, value = '') {
   const input = h('input', {type: 'text', value});
@@ -34,11 +31,7 @@ export async function ask(question, value = '') {
   return await closed === 'ok' ? input.value : null;
 }
 
-/**
- * Shows a message until dismissed.
- *
- * @param {string} message
- */
+/** Shows a message until dismissed. */
 export async function tell(message) {
   const dialog = h('dialog', {class: 'dialog'},
     h('form', {method: 'dialog'},
@@ -48,9 +41,8 @@ export async function tell(message) {
 }
 
 /**
- * @param {HTMLDialogElement} dialog
- * @returns {Promise<string>} its return value: the value of the button that
- * closed it, empty for Escape or Cancel
+ * @returns its return value: the value of the button that closed it, empty
+ * for Escape or Cancel
  */
 function show(dialog) {
   // most browsers close a modal dialog on Escape by themselves, not all
