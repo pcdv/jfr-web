@@ -1,7 +1,7 @@
 // @ts-check
 /**
- * A session's profile, as /api/sessions/:id/profile sends it (see
- * docs/flame-graphs.md): its samples and its operations, decoded once. The
+ * A session's profile, as /api/sessions/:id/profile sends it, a Flamepack
+ * (https://github.com/pcdv/flamepack): its samples and its operations, decoded once. The
  * samples are summed here into the flame graph of any filter, with no
  * request; the filters are those of the server's flame graphs
  * (FlameGraphs.write), with the same results. The operations are summed in

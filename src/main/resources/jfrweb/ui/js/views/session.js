@@ -229,14 +229,14 @@ function summary(r, details, shown) {
 function profileLink(id, shown) {
   return h('a', {
     href: '#',
-    title: 'The samples and operations as this page reads them (JSON)',
+    title: 'The samples and operations as this page reads them, a Flamepack (.flamepack.json)',
     onclick: async (/** @type {Event} */ e) => {
       e.preventDefault();
       try {
         const {samples, raw} = shown();
         const blob = new Blob([JSON.stringify(await raw)], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
-        h('a', {href: url, download: `session-${id}.${samples}.profile.json`}).click();
+        h('a', {href: url, download: `session-${id}.${samples}.flamepack.json`}).click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
       catch (err) {

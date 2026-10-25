@@ -21,7 +21,9 @@ import jfrweb.json.Json;
 /**
  * Writes the samples of a recording as a profile, from which the page builds
  * the flame graph of any filter by itself: each sample with its time, stack,
- * thread and operation. The format is described in docs/flame-graphs.md.
+ * thread and operation. The format is Flamepack, specified in
+ * https://github.com/pcdv/flamepack; how jfr-web uses it is in
+ * docs/flame-graphs.md.
  * <p>
  * Names are written once, sorted and front-coded: each string starts with a
  * character whose code minus 32 is the length of the prefix it shares with
