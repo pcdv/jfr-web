@@ -63,7 +63,8 @@ test('strings, stacks and samples decoded', () => {
   assert.deepEqual([...p.parent], [-1, 0, 1, 0, 0]);
   assert.deepEqual([...p.time], [0, 1000, 1500, 2000, 3000, 3000]);
   assert.deepEqual(p.threads, [{name: 'main', id: 1}, {name: 'pool-1', id: 22}]);
-  assert.throws(() => decode({...doc, version: 5}), /version 5.*reload the page/);
+  assert.throws(() => decode({...doc, version: 6}), /version 6.*\(5\): reload the page/);
+  assert.throws(() => decode({...doc, version: 3}), /version 3/);
 });
 
 test('rooted by operation; samples outside left out; a sample with no stack counts for its operation', () => {
@@ -243,4 +244,61 @@ test('allocation samples: each its own weight, in bytes', () => {
   // the sample outside operations left out
   assert.equal(root.total, 100 + 200 + 300 + 400 + 600);
   assert.equal(hotMethods(alloc, {}).total, root.total);
+});
+
+// version 5, the same profile with its stacks as columns, the samples' stacks as differences of
+// the node plus 1, and an operation's thread as an index in threads
+const doc5 = {
+  version: 5,
+  unit: 'ms',
+  weights: [20, 5],
+  start: "2026-10-18T08:00:00Z",
+  end: 60_000_000,
+  strings: frontCode(strings),
+  stacks: {depth: [0, 1, 2, 1, 1], name: [3, 4, 7, 4, 7], type: [INTERPRETED, COMPILED, COMPILED, INTERPRETED, COMPILED]},
+  samples: {
+    time: [0, 1000, 500, 500, 1000, 0],
+    // the nodes 2, 2, 3, 1, 4 and none, plus 1: 3, 3, 4, 2, 5, 0
+    stack: [3, 0, 1, -2, 3, -5],
+    thread: [0, 0, 1, 1, 0, 0],
+    operation: [0, 0, 1, 1, -1, 0],
+    kind: [0, 0, 0, 1, 0, 0],
+  },
+  threads: [[5, 1], [6, 22]],
+  operations: {name: [1, 2], start: [0, 0], duration: [0, 0], thread: [0, 1]},
+};
+
+test('version 5: the same profile as version 4', () => {
+  assert.deepEqual(decode(doc5), p);
+});
+
+test('version 5: what is absent reads as its default', () => {
+  const q = decode({version: 5, unit: 'count', strings: frontCode(['main', 'parse']),
+                    stacks: {depth: [0, 1], name: [0, 1]}, samples: {stack: [2, -1, 1]}});
+  assert.deepEqual([...q.stack], [1, 0, 1]);
+  assert.deepEqual([...q.parent], [-1, 0]);
+  assert.deepEqual([...q.frame], [0, 1 << 3]);
+  assert.deepEqual([...q.thread], [0, 0, 0]);
+  assert.deepEqual([...q.operation], [-1, -1, -1]);
+  assert.deepEqual([...q.time], [0, 0, 0]);
+  assert.deepEqual([...q.kind], [0, 0, 0]);
+  assert.deepEqual(q.threads, [{name: '', id: 0}]);
+  assert.deepEqual(q.weights, [1]);
+  assert.equal(q.operations.count, 0);
+  assert.equal(q.unit, 'count');
+  assert.equal(q.weight, null);
+  assert.equal(q.start, '');
+  assert.equal(q.end, 0);
+  assert.equal(hotMethods(q, {all: true}).total, 3);
+});
+
+test('version 5: an operation of an unnamed thread has none', () => {
+  const q = decode({version: 5, unit: 'ms', strings: frontCode(['GET /a', 'main']),
+                    stacks: {depth: [0], name: [1]}, samples: {stack: [1]},
+                    threads: [[-1, -1], [1, 7]],
+                    operations: {name: [0, 0], start: [0, 0], duration: [1, 1], thread: [0, 1]}});
+  assert.deepEqual([...q.operations.thread], [-1, 1]);
+  assert.deepEqual(q.threads, [{name: '', id: -1}, {name: 'main', id: 7}]);
+  assert.deepEqual([...q.operations.status], [0, 0]);
+  assert.deepEqual([...q.operations.detail], [-1, -1]);
 });

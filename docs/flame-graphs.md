@@ -41,8 +41,9 @@ A JSON document per session, from `GET /api/sessions/:id/profile` (sizes measure
 below), written by `ProfileWriter`. The format is named **Flamepack** and specified in its own
 repository, [pcdv/flamepack](https://github.com/pcdv/flamepack) (`SPEC.md`, with a JSON Schema,
 examples and a validator), since jheap and mountain-graph read and write it too and other tools
-may: a change of the format is made there as well. The rest of this section says how jfr-web
-uses it.
+may: a change of the format is made there as well. The server writes version 4 (`SPEC-4.md`);
+the page reads that and version 5 (`SPEC.md`, a draft), in which everything but the stacks is
+optional. The rest of this section says how jfr-web uses it.
 
 Any change of the format raises its version, however small, released or not: a page loaded
 before the server changed (a tab left open across an upgrade, modules in the browser's cache)

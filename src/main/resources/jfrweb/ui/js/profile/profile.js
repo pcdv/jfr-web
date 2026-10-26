@@ -27,7 +27,8 @@ export const NO_OPERATION = '(no operation)';
  * @property {Int32Array} operation of each sample, an index in operations, -1 outside any
  * @property {Uint8Array} kind of each sample: 0 Java, 1 native
  * @property {number[]} weights the ms a Java and a native sample stand for
- * @property {'ms' | 'bytes'} unit what the weights count: bytes for allocation samples
+ * @property {'ms' | 'bytes'} unit what the weights count: bytes for allocation samples. A profile
+ *           of version 5 may count 'count', which this page has no word for: its viewers say
  * @property {Float64Array | null} weight of each sample, for allocation samples: the bytes each
  *           stands for; null when weights tell them
  * @property {string} start of the recording, ISO-8601
@@ -56,8 +57,11 @@ export const NO_OPERATION = '(no operation)';
  * @property {Float64Array} bytesOut
  */
 
-/** The version of the format this page reads: ProfileWriter.VERSION. */
+/** The version of the format the server writes: ProfileWriter.VERSION. */
 export const VERSION = 4;
+
+/** The versions of the format this page reads. */
+export const VERSIONS = [4, 5];
 
 /**
  * @param {any} doc the JSON document
@@ -65,18 +69,107 @@ export const VERSION = 4;
  * @throws {Error} for another version: the page was loaded before the server changed
  */
 export function decode(doc) {
-  if (doc.version !== VERSION)
+  if (!VERSIONS.includes(doc.version))
     throw new Error(`The server sends its samples in a newer form (version ${doc.version}) than this page reads `
-                    + `(${VERSION}): reload the page.`);
+                    + `(${VERSIONS[VERSIONS.length - 1]}): reload the page.`);
+  return doc.version === 4 ? decode4(doc) : decode5(doc);
+}
 
-  // front-coded: the first character tells the length of the prefix shared
-  // with the previous string
-  const strings = new Array(doc.strings.length);
+/**
+ * @param {string[]} coded front-coded: the first character tells the length of the prefix shared
+ *        with the previous string
+ * @returns {string[]}
+ */
+function unpack(coded) {
+  const strings = new Array(coded.length);
   let previous = '';
   for (let i = 0; i < strings.length; i++) {
-    const s = doc.strings[i];
+    const s = coded[i];
     strings[i] = previous = previous.substring(0, s.charCodeAt(0) - 32) + s.substring(1);
   }
+  return strings;
+}
+
+/**
+ * Version 5 (https://github.com/pcdv/flamepack/blob/master/SPEC.md): everything but the
+ * strings, the stacks and the samples' stacks is optional, and reads as its default.
+ *
+ * @param {any} doc
+ * @returns {Profile}
+ */
+function decode5(doc) {
+  const strings = unpack(doc.strings);
+
+  // columns: a node's parent is the last node one level up
+  const {depth, name, type} = doc.stacks;
+  const n = depth.length;
+  const parent = new Int32Array(n), frame = new Int32Array(n);
+  const last = [];
+  for (let i = 0; i < n; i++) {
+    parent[i] = depth[i] === 0 ? -1 : last[depth[i] - 1];
+    frame[i] = name[i] << 3 | (type ? type[i] : 0);
+    last[depth[i]] = i;
+  }
+
+  const s = doc.samples;
+  const count = s.stack.length;
+  const stack = new Int32Array(count);
+  let sum = 0;
+  for (let i = 0; i < count; i++)
+    stack[i] = (sum += s.stack[i]) - 1;
+  const time = new Float64Array(count);
+  if (s.time) {
+    let t = 0;
+    for (let i = 0; i < count; i++)
+      time[i] = t += s.time[i];
+  }
+
+  /** @type {Profile['threads']} */
+  const threads = doc.threads
+    ? doc.threads.map((/** @type {number[]} */ [name, id]) => ({name: name < 0 ? '' : strings[name], id}))
+    : [{name: '', id: 0}];
+
+  return {
+    strings, parent, frame, time, stack,
+    thread: s.thread ? Int32Array.from(s.thread) : new Int32Array(count),
+    operation: s.operation ? Int32Array.from(s.operation) : new Int32Array(count).fill(-1),
+    kind: s.kind ? Uint8Array.from(s.kind) : new Uint8Array(count),
+    weights: doc.weights ?? [1],
+    unit: /** @type {any} */ (doc.unit),
+    weight: s.weight ? Float64Array.from(s.weight) : null,
+    start: doc.start ?? '',
+    end: doc.end ?? 0,
+    threads,
+    operations: operations5(doc.operations, doc.threads),
+  };
+}
+
+/**
+ * @param {any} o the operations of the document, if it has any
+ * @param {number[][] | undefined} threads those of the document, which an operation's thread is an
+ *        index in
+ * @returns {Operations}
+ */
+function operations5(o, threads) {
+  if (!o)
+    return operations({name: [], start: [], duration: [], thread: [], detail: [], status: [],
+                       failed: [], error: [], async: [], bytesIn: [], bytesOut: []});
+  const count = o.name.length;
+  /** @param {string} name @param {number} value @returns {number[]} */
+  const column = (name, value) => o[name] ?? new Array(count).fill(value);
+  // the profile keeps the name of an operation's thread, as an index in the strings: -1 for none
+  const thread = column('thread', -1).map(t => t < 0 || !threads ? -1 : threads[t][0]);
+  return operations({...o, thread, detail: column('detail', -1), status: column('status', 0),
+                     failed: column('failed', 0), error: column('error', -1), async: column('async', 0),
+                     bytesIn: column('bytesIn', 0), bytesOut: column('bytesOut', 0)});
+}
+
+/**
+ * @param {any} doc
+ * @returns {Profile}
+ */
+function decode4(doc) {
+  const strings = unpack(doc.strings);
 
   // depth first: a node's parent is the last node one level up
   const n = doc.stacks.length / 2;
