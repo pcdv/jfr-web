@@ -215,28 +215,58 @@ function summary(r, details, shown) {
   return h('p', {class: 'summary'},
     `Started ${fmt.time(s.start)}, ${fmt.duration(s.duration)}, ${r.sampling.operations} operations, `,
     h('a', {href: api.downloadUrl(s.id), download: true}, `download the .jfr (${fmt.bytes(s.size)})`),
-    ' to open it in JDK Mission Control, or ', profileLink(s.id, shown), '. ', toggle, warnings(r));
+    ' to open it in JDK Mission Control, or ', profileLink(s, r.recording.javaArguments, shown), '. ', toggle, warnings(r));
+}
+
+/**
+ * The name of the application, as the server's AppName.of reads it: that of the main class,
+ * or of the jar without its version.
+ *
+ * @param {string | null | undefined} command the main class or jar, and its arguments
+ * @returns {string | null} null when it tells none
+ */
+function appName(command) {
+  let main = (command ?? '').trim().split(/\s+/, 1)[0];
+  main = main.slice(Math.max(main.lastIndexOf('/'), main.lastIndexOf('\\')) + 1);
+  if (main.endsWith('.jar'))
+    main = main.slice(0, -'.jar'.length).replace(/[-_]v?\d.*$/, '');
+  main = main.replace(/[^A-Za-z0-9._-]/g, '_');
+  return main && !main.startsWith('.') ? main : null;
+}
+
+/**
+ * @param {string} iso when the session started
+ * @returns {string} in local time, sortable: 20261027T1432
+ */
+function stamp(iso) {
+  const d = new Date(iso);
+  const p = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
 /**
  * Saves the profile the page decoded, as is: the format profile/profile.js
  * reads, and the tools that share it. Taken from the page, in a static export too.
  *
- * @param {number} id
+ * The file is named name-date-kind.fpk: the application when the recording tells it (else
+ * the session's number), when it started, and what its samples are.
+ *
+ * @param {api.Session} s
+ * @param {string | null | undefined} command the application's main class or jar, and its arguments
  * @param {() => {samples: string, raw: Promise<any>}} shown the profile the flame graph shows: its
  *     samples name the file
  */
-function profileLink(id, shown) {
+function profileLink(s, command, shown) {
   return h('a', {
     href: '#',
-    title: 'The samples and operations as this page reads them, a Flamepack (.flamepack.json)',
+    title: 'The samples and operations as this page reads them, a Flamepack (.fpk)',
     onclick: async (/** @type {Event} */ e) => {
       e.preventDefault();
       try {
         const {samples, raw} = shown();
         const blob = new Blob([JSON.stringify(await raw)], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
-        h('a', {href: url, download: `session-${id}.${samples}.flamepack.json`}).click();
+        h('a', {href: url, download: `${appName(command) ?? `session-${s.id}`}-${stamp(s.start)}-${samples}.fpk`}).click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
       catch (err) {
