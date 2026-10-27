@@ -171,7 +171,7 @@ public class ProfilerTest {
     Assertions.assertTrue(profile.headers().firstValue("Content-Encoding").isEmpty());
     Assertions.assertEquals(profile.body(), new String(new GZIPInputStream(new ByteArrayInputStream(gzipped.body()))
                                                          .readAllBytes(), StandardCharsets.UTF_8));
-    Assertions.assertTrue(profile.body().startsWith("{\"version\":3,"), profile.body().substring(0, 40));
+    Assertions.assertTrue(profile.body().startsWith("{\"version\":5,"), profile.body().substring(0, 40));
     Assertions.assertTrue(profile.body().contains("ProfilerTest$Handlers.busy"), "front-coded, but whole here");
     Assertions.assertEquals(404, get("api/sessions/9/profile").statusCode());
 

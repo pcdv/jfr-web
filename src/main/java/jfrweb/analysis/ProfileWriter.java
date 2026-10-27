@@ -28,9 +28,9 @@ import jfrweb.json.Json;
  * Names are written once, sorted and front-coded: each string starts with a
  * character whose code minus 32 is the length of the prefix it shares with
  * the previous one, as async-profiler's pages do. Stacks are a tree, written
- * depth first as pairs of depth and frame: a node's parent is the last node
- * written one level up. A frame is the index of its name, shifted left by 3,
- * with its type in the low bits.
+ * depth first as columns of depth, name and type: a node's parent is the last
+ * node written one level up. A column that holds only what a reader assumes
+ * is left out.
  */
 public final class ProfileWriter {
 
@@ -39,9 +39,10 @@ public final class ProfileWriter {
    * changed refuses what it cannot read, instead of reading it wrong. 2 added
    * the fields of the operations to their names, 3 the start and end of the
    * recording, for the page to draw its timeline in any buckets, 4 the unit
-   * of the weights, and the weight of each allocation sample.
+   * of the weights, and the weight of each allocation sample, 5 Flamepack's
+   * version 5, with the stacks as columns, and the columns of the default left out.
    */
-  public static final int VERSION = 4;
+  public static final int VERSION = 5;
 
   /** Types of frames. */
   public static final int COMPILED = 0, INLINED = 1, INTERPRETED = 2, NATIVE = 3, SYNTHETIC = 4;
@@ -131,7 +132,7 @@ public final class ProfileWriter {
       RecordedOperation op = ops.get(i);
       operations.put(op, i);
       operationNames[i] = name(op.name());
-      operationThreads[i] = name(String.valueOf(op.threadName()));
+      operationThreads[i] = thread(op.threadId(), String.valueOf(op.threadName()));
       operationDetails[i] = op.detail() == null ? -1 : name(op.detail());
       operationErrors[i] = op.error() == null ? -1 : name(op.error());
     }
@@ -203,12 +204,17 @@ public final class ProfileWriter {
   }
 
   private int thread(RecordedThread t) {
-    long id = t.getJavaThreadId();
+    Integer i = threads.get(t.getJavaThreadId());
+    return i != null ? i : thread(t.getJavaThreadId(), String.valueOf(t.getJavaName()));
+  }
+
+  /** @return the index of the thread in the profile's threads, added when new */
+  private int thread(long id, String name) {
     Integer i = threads.get(id);
     if (i == null) {
       i = threadList.size();
       threads.put(id, i);
-      threadList.add(new long[]{name(String.valueOf(t.getJavaName())), id});
+      threadList.add(new long[]{name(name), id});
     }
     return i;
   }
@@ -271,7 +277,10 @@ public final class ProfileWriter {
 
     out.write("{\"version\":" + VERSION);
     out.write(",\"unit\":" + (allocations ? "\"bytes\"" : "\"ms\""));
-    out.write(",\"weights\":[" + weights[JAVA] + "," + weights[NATIVE_SAMPLE] + "]");
+    // allocation samples carry their own weight
+    if (!allocations)
+      out.write(",\"weights\":[" + weights[JAVA] + "," + weights[NATIVE_SAMPLE] + "]");
+    out.write(",\"meta\":{\"kind\":\"" + (allocations ? "alloc" : "wall") + "\"}");
     // the span of the recording: the end in ns since its start
     out.write(",\"start\":" + Json.write(String.valueOf(recordingStart)));
     out.write(",\"end\":" + (recordingEnd == null ? 0 : Analysis.nanos(recordingEnd) - start));
@@ -289,82 +298,109 @@ public final class ProfileWriter {
       out.write(Json.write((char) (shared + 32) + name.substring(shared)));
       previous = name;
     }
+    out.write("]");
 
-    out.write("],\"stacks\":[");
+    // the stacks as columns; the type, when any frame is not compiled
+    out.write(",\"stacks\":{");
+    out.write("\"depth\":[");
     for (int i = 0; i < n; i++) {
-      int frame = nodeFrame.get(order[i]);
       separate(out, i);
-      out.write(depth[order[i]] + "," + (rank[frame >>> 3] << 3 | frame & 7));
+      out.write(Integer.toString(depth[order[i]]));
     }
+    out.write("],\"name\":[");
+    for (int i = 0; i < n; i++) {
+      separate(out, i);
+      out.write(Integer.toString(rank[nodeFrame.get(order[i]) >>> 3]));
+    }
+    out.write("]");
+    optional(out, "type", n, i -> nodeFrame.get(order[i]) & 7, 0);
+    out.write("}");
 
-    out.write("],\"samples\":{\"time\":[");
-    long last = 0;
-    for (int i = 0; i < s; i++) {
-      long t = sampleTime.get(samples[i]);
-      separate(out, i);
-      out.write(Long.toString(t - last));
-      last = t;
-    }
-    out.write("],\"stack\":[");
+    // the samples: each stack as the node plus 1, as the difference with the last
+    out.write(",\"samples\":{\"stack\":[");
+    long lastNode = 0;
+    long[] times = new long[s];
+    long lastTime = 0;
     for (int i = 0; i < s; i++) {
       int node = sampleStack.get(samples[i]);
+      long at = node < 0 ? 0 : position[node] + 1;
       separate(out, i);
-      out.write(Integer.toString(node < 0 ? -1 : position[node]));
+      out.write(Long.toString(at - lastNode));
+      lastNode = at;
+      long t = sampleTime.get(samples[i]);
+      times[i] = t - lastTime;
+      lastTime = t;
     }
-    writeColumn(out, "thread", sampleThread, samples);
-    writeColumn(out, "operation", sampleOperation, samples);
-    writeColumn(out, "kind", sampleKind, samples);
-    if (allocations) {
-      out.write("],\"weight\":[");
-      for (int i = 0; i < s; i++) {
+    out.write("]");
+    optional(out, "time", s, i -> times[i], 0);
+    optional(out, "thread", s, i -> sampleThread.get(samples[i]), 0);
+    optional(out, "operation", s, i -> sampleOperation.get(samples[i]), -1);
+    optional(out, "kind", s, i -> sampleKind.get(samples[i]), 0);
+    if (allocations)
+      column(out, "weight", s, i -> sampleWeight.get(samples[i]));
+    out.write("}");
+
+    if (!threadList.isEmpty()) {
+      out.write(",\"threads\":[");
+      for (int i = 0; i < threadList.size(); i++) {
+        long[] t = threadList.get(i);
         separate(out, i);
-        out.write(Long.toString(sampleWeight.get(samples[i])));
+        out.write("[" + rank[(int) t[0]] + "," + t[1] + "]");
       }
+      out.write("]");
     }
 
-    out.write("]},\"threads\":[");
-    for (int i = 0; i < threadList.size(); i++) {
-      long[] t = threadList.get(i);
-      separate(out, i);
-      out.write("[" + rank[(int) t[0]] + "," + t[1] + "]");
-    }
     // the operations: their times in ns, for the same durations and totals
     // as the server's; each start as the difference with the previous one
     int operations = ops.size();
-    long[] starts = new long[operations];
-    long previousStart = 0;
-    for (int i = 0; i < operations; i++) {
-      long t = ops.get(i).startNanos() - start;
-      starts[i] = t - previousStart;
-      previousStart = t;
+    if (operations > 0) {
+      long[] starts = new long[operations];
+      long previousStart = 0;
+      for (int i = 0; i < operations; i++) {
+        long t = ops.get(i).startNanos() - start;
+        starts[i] = t - previousStart;
+        previousStart = t;
+      }
+      out.write(",\"operations\":{");
+      out.write("\"name\":[");
+      for (int i = 0; i < operations; i++) {
+        separate(out, i);
+        out.write(Integer.toString(rank[operationNames[i]]));
+      }
+      out.write("]");
+      column(out, "start", operations, i -> starts[i]);
+      column(out, "duration", operations, i -> ops.get(i).durationNanos());
+      optional(out, "thread", operations, i -> operationThreads[i], -1);
+      optional(out, "detail", operations, i -> operationDetails[i] < 0 ? -1 : rank[operationDetails[i]], -1);
+      optional(out, "status", operations, i -> ops.get(i).status(), 0);
+      optional(out, "failed", operations, i -> ops.get(i).failed() ? 1 : 0, 0);
+      optional(out, "error", operations, i -> operationErrors[i] < 0 ? -1 : rank[operationErrors[i]], -1);
+      optional(out, "async", operations, i -> ops.get(i).async() ? 1 : 0, 0);
+      optional(out, "bytesIn", operations, i -> ops.get(i).bytesIn(), 0);
+      optional(out, "bytesOut", operations, i -> ops.get(i).bytesOut(), 0);
+      out.write("}");
     }
-    out.write("],\"operations\":{");
-    writeColumn(out, "name", operations, i -> rank[operationNames[i]], false);
-    writeColumn(out, "start", operations, i -> starts[i], true);
-    writeColumn(out, "duration", operations, i -> ops.get(i).durationNanos(), true);
-    writeColumn(out, "thread", operations, i -> rank[operationThreads[i]], true);
-    writeColumn(out, "detail", operations, i -> operationDetails[i] < 0 ? -1 : rank[operationDetails[i]], true);
-    writeColumn(out, "status", operations, i -> ops.get(i).status(), true);
-    writeColumn(out, "failed", operations, i -> ops.get(i).failed() ? 1 : 0, true);
-    writeColumn(out, "error", operations, i -> operationErrors[i] < 0 ? -1 : rank[operationErrors[i]], true);
-    writeColumn(out, "async", operations, i -> ops.get(i).async() ? 1 : 0, true);
-    writeColumn(out, "bytesIn", operations, i -> ops.get(i).bytesIn(), true);
-    writeColumn(out, "bytesOut", operations, i -> ops.get(i).bytesOut(), true);
-    out.write("]}}");
+    out.write("}");
   }
 
-  /**
-   * Writes {@code "name":[v0,v1...}, the values of 0 to n - 1.
-   *
-   * @param after whether a column comes before, closed here
-   */
-  private static void writeColumn(Writer out, String name, int n, IntToLongFunction value, boolean after)
-    throws IOException {
-    out.write((after ? "]," : "") + "\"" + name + "\":[");
+  /** Writes {@code ,"name":[v0,v1...]}, the values of 0 to n - 1. */
+  private static void column(Writer out, String name, int n, IntToLongFunction value) throws IOException {
+    out.write(",\"" + name + "\":[");
     for (int i = 0; i < n; i++) {
       separate(out, i);
       out.write(Long.toString(value.applyAsLong(i)));
     }
+    out.write("]");
+  }
+
+  /** As {@link #column}, left out when all its values are the default of a reader. */
+  private static void optional(Writer out, String name, int n, IntToLongFunction value, long dflt)
+    throws IOException {
+    for (int i = 0; i < n; i++)
+      if (value.applyAsLong(i) != dflt) {
+        column(out, name, n, value);
+        return;
+      }
   }
 
   /**
@@ -384,14 +420,6 @@ public final class ProfileWriter {
       children[p][filled[p]++] = i;
     }
     return children;
-  }
-
-  private static void writeColumn(Writer out, String name, IntList column, int[] samples) throws IOException {
-    out.write("],\"" + name + "\":[");
-    for (int i = 0; i < samples.length; i++) {
-      separate(out, i);
-      out.write(Integer.toString(column.get(samples[i])));
-    }
   }
 
   private static void separate(Writer out, int i) throws IOException {

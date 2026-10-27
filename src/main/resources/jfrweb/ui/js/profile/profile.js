@@ -58,7 +58,7 @@ export const NO_OPERATION = '(no operation)';
  */
 
 /** The version of the format the server writes: ProfileWriter.VERSION. */
-export const VERSION = 4;
+export const VERSION = 5;
 
 /** The versions of the format this page reads. */
 export const VERSIONS = [4, 5];

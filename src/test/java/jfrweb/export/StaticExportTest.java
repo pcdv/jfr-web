@@ -79,7 +79,7 @@ public class StaticExportTest {
     Assertions.assertTrue(files.keySet().stream().anyMatch(k -> k.matches("api/sessions/1/instances/\\d+")), files.keySet().toString());
     Assertions.assertTrue(files.keySet().stream().noneMatch(k -> k.contains("/flame") || k.contains("/instances?")),
                           files.keySet().toString());
-    Assertions.assertTrue(Files.readString(out.resolve((String) files.get("api/sessions/1/profile"))).startsWith("{\"version\":4,"));
+    Assertions.assertTrue(Files.readString(out.resolve((String) files.get("api/sessions/1/profile"))).startsWith("{\"version\":5,"));
     Assertions.assertFalse(files.containsKey("api/sessions/1/recording.jfr"), "recordings left out");
     for (Object f : files.values())
       Assertions.assertTrue(Files.exists(out.resolve((String) f)), f + " written");

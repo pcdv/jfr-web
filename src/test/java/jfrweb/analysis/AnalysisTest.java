@@ -310,10 +310,10 @@ public class AnalysisTest {
 
     // the types: a request handled first runs interpreted, a second burnt
     // sorting gets compiled
-    List<?> stacks = (List<?>) profile.get("stacks");
+    Map<?, ?> stacks = (Map<?, ?>) profile.get("stacks");
     Set<Integer> types = new TreeSet<>();
-    for (int i = 1; i < stacks.size(); i += 2)
-      types.add((int) ((Long) stacks.get(i) & 7));
+    for (int i = 0; i < ((List<?>) stacks.get("name")).size(); i++)
+      types.add(column(stacks, "type", i, 0));
     Assertions.assertTrue(types.containsAll(List.of(ProfileWriter.COMPILED, ProfileWriter.INTERPRETED)),
                           types.toString());
   }
@@ -321,7 +321,8 @@ public class AnalysisTest {
   @Test
   public void testProfileFormat() throws IOException {
     Map<String, Object> p = profile();
-    Assertions.assertEquals(4L, p.get("version"));
+    Assertions.assertEquals(5L, p.get("version"));
+    Assertions.assertEquals("wall", ((Map<?, ?>) p.get("meta")).get("kind"));
     Assertions.assertEquals("ms", p.get("unit"));
 
     List<String> strings = strings(p);
@@ -332,18 +333,22 @@ public class AnalysisTest {
     int length = strings.stream().mapToInt(String::length).sum();
     Assertions.assertTrue(codedLength < length / 2, codedLength + " of " + length);
 
-    List<?> stacks = (List<?>) p.get("stacks");
+    Map<?, ?> stacks = (Map<?, ?>) p.get("stacks");
     long previous = -1;
-    for (int i = 0; i < stacks.size(); i += 2) {
-      long depth = (Long) stacks.get(i);
+    for (Object d : (List<?>) stacks.get("depth")) {
+      long depth = (Long) d;
       Assertions.assertTrue(depth <= previous + 1, "depth first, each node after its parent");
       previous = depth;
     }
+    Assertions.assertEquals(((List<?>) stacks.get("depth")).size(), ((List<?>) stacks.get("name")).size());
 
     Map<?, ?> samples = (Map<?, ?>) p.get("samples");
     Assertions.assertTrue(((List<?>) samples.get("time")).stream().allMatch(t -> (Long) t >= 0), "sorted by time");
-    for (String column : List.of("stack", "thread", "operation", "kind"))
-      Assertions.assertEquals(((List<?>) samples.get("time")).size(), ((List<?>) samples.get(column)).size(), column);
+    for (String column : List.of("thread", "operation", "kind"))
+      if (samples.containsKey(column))
+        Assertions.assertEquals(((List<?>) samples.get("stack")).size(), ((List<?>) samples.get(column)).size(), column);
+    Assertions.assertFalse(samples.containsKey("kind") && ((List<?>) samples.get("kind")).stream().allMatch(k -> (Long) k == 0),
+                           "a column of its default is left out");
 
     // an operation is known by its index in the analysis, as in the API; its
     // times in ns since the start of the recording, each start as a difference
@@ -357,7 +362,9 @@ public class AnalysisTest {
       start += (Long) ((List<?>) operations.get("start")).get(i);
       Assertions.assertEquals(op.startNanos() - recordingStart, start);
       Assertions.assertEquals(op.durationNanos(), (Long) ((List<?>) operations.get("duration")).get(i));
-      Assertions.assertEquals(op.threadName(), strings.get(column(operations, "thread", i)));
+      List<?> thread = (List<?>) ((List<?>) p.get("threads")).get(column(operations, "thread", i, -1));
+      Assertions.assertEquals(op.threadName(), strings.get((int) (long) (Long) thread.get(0)));
+      Assertions.assertEquals(op.threadId(), thread.get(1));
       Assertions.assertEquals(op.detail(), column(operations, "detail", i) < 0 ? null : strings.get(column(operations, "detail", i)));
       Assertions.assertEquals(op.status(), column(operations, "status", i));
       Assertions.assertEquals(op.failed() ? 1 : 0, column(operations, "failed", i));
@@ -387,13 +394,12 @@ public class AnalysisTest {
     }
     Assertions.assertEquals(expected, collapse(profile));
 
-    List<?> stacks = (List<?>) profile.get("stacks");
+    Map<?, ?> stacks = (Map<?, ?>) profile.get("stacks");
     List<String> strings = strings(profile);
     boolean allocated = false;
-    for (int i = 1; i < stacks.size(); i += 2) {
-      long f = (Long) stacks.get(i);
-      allocated |= (f & 7) == ProfileWriter.ALLOCATED && strings.get((int) (f >>> 3)).equals("int[]");
-    }
+    for (int i = 0; i < ((List<?>) stacks.get("name")).size(); i++)
+      allocated |= column(stacks, "type", i, 0) == ProfileWriter.ALLOCATED
+                   && strings.get(column(stacks, "name", i)).equals("int[]");
     Assertions.assertTrue(allocated, "int[] as an allocated frame");
   }
 
@@ -406,6 +412,11 @@ public class AnalysisTest {
 
   private static int column(Map<?, ?> columns, String name, int i) {
     return (int) (long) (Long) ((List<?>) columns.get(name)).get(i);
+  }
+
+  /** @param dflt what a reader assumes of a column the document leaves out */
+  private static int column(Map<?, ?> columns, String name, int i, int dflt) {
+    return columns.containsKey(name) ? column(columns, name, i) : dflt;
   }
 
   private static Map<String, Object> profile() throws IOException {
@@ -437,17 +448,16 @@ public class AnalysisTest {
    */
   private static Map<String, Long> collapse(Map<String, Object> p) {
     List<String> strings = strings(p);
-    List<?> stacks = (List<?>) p.get("stacks");
-    int n = stacks.size() / 2;
+    Map<?, ?> stacks = (Map<?, ?>) p.get("stacks");
+    int n = ((List<?>) stacks.get("depth")).size();
     int[] parent = new int[n];
     String[] frame = new String[n];
     int[] last = new int[256];
     for (int i = 0; i < n; i++) {
-      int depth = (int) (long) (Long) stacks.get(2 * i);
-      int f = (int) (long) (Long) stacks.get(2 * i + 1);
+      int depth = column(stacks, "depth", i);
       parent[i] = depth == 0 ? -1 : last[depth - 1];
       last[depth] = i;
-      frame[i] = strings.get(f >>> 3);
+      frame[i] = strings.get(column(stacks, "name", i));
     }
     List<?> weights = (List<?>) p.get("weights");
     List<?> threads = (List<?>) p.get("threads");
@@ -455,24 +465,27 @@ public class AnalysisTest {
     Map<?, ?> samples = (Map<?, ?>) p.get("samples");
 
     Map<String, Long> collapsed = new TreeMap<>();
-    int count = ((List<?>) samples.get("time")).size();
+    int count = ((List<?>) samples.get("stack")).size();
+    long sum = 0;
     for (int i = 0; i < count; i++) {
-      int op = (int) (long) (Long) ((List<?>) samples.get("operation")).get(i);
+      int op = column(samples, "operation", i, -1);
       String root;
       if (op >= 0) {
         root = strings.get((int) (long) (Long) operations.get(op));
       }
       else {
-        List<?> t = (List<?>) threads.get((int) (long) (Long) ((List<?>) samples.get("thread")).get(i));
+        List<?> t = (List<?>) threads.get(column(samples, "thread", i, 0));
         root = FlameGraphs.NO_OPERATION + ";[" + strings.get((int) (long) (Long) t.get(0)) + " tid=" + t.get(1) + "]";
       }
       StringBuilder path = new StringBuilder();
-      for (int node = (int) (long) (Long) ((List<?>) samples.get("stack")).get(i); node >= 0; node = parent[node])
+      // the node plus 1, as the difference with the last
+      sum += (Long) ((List<?>) samples.get("stack")).get(i);
+      for (int node = (int) sum - 1; node >= 0; node = parent[node])
         path.insert(0, ";" + frame[node]);
       // allocation samples have their own
       long weight = samples.containsKey("weight")
                     ? (Long) ((List<?>) samples.get("weight")).get(i)
-                    : (Long) weights.get((int) (long) (Long) ((List<?>) samples.get("kind")).get(i));
+                    : (Long) weights.get(column(samples, "kind", i, 0));
       collapsed.merge(root + path, weight, Long::sum);
     }
     return collapsed;
