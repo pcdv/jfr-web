@@ -121,7 +121,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.github.pcdv:jfr-web:0.4.0'
+  implementation 'com.github.pcdv:jfr-web:0.5.0'
 }
 ```
 
