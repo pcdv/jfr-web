@@ -123,7 +123,12 @@ export function timelineChart(data, onSelect, options = {}) {
   const capture = svgEl('rect', {x: LEFT, y: TOP, width: PLOT_W, height: PLOT_H, fill: 'transparent'});
   // the samples of a frame of the flame graph, over the bars, under the pointer
   const frameSamples = svgEl('path', {class: 'frame-samples', visibility: 'hidden'});
-  svg.append(hover, selection, marked, outline, frameSamples, capture);
+  // their outline, left open along the axis: an empty stretch draws no line
+  const frameOutline = svgEl('path', {class: 'frame-outline', visibility: 'hidden'});
+  // the top of their scale, which is not that of the axis
+  const frameScale = svgText(LEFT + 4, TOP + 10, '', 'axis-label frame-scale');
+  frameScale.setAttribute('visibility', 'hidden');
+  svg.append(hover, selection, marked, outline, frameSamples, frameOutline, frameScale, capture);
 
   /** @type {number} the series in focus, -1 for none */
   let focused = -1;
@@ -213,8 +218,9 @@ export function timelineChart(data, onSelect, options = {}) {
    * @param {'ms' | 'bytes'} [unit]
    */
   function samples(name, ms, unit = 'ms') {
+    const drawn = [frameSamples, frameOutline, frameScale];
     if (name === undefined || ms === undefined) {
-      frameSamples.setAttribute('visibility', 'hidden');
+      drawn.forEach(el => el.setAttribute('visibility', 'hidden'));
       frameLegend?.classList.remove('shown');
       return;
     }
@@ -226,7 +232,20 @@ export function timelineChart(data, onSelect, options = {}) {
       d += ` V ${fy(ms[i])} H ${x(i + 1)}`;
     d += ` V ${fy(0)} Z`;
     frameSamples.setAttribute('d', d);
-    frameSamples.setAttribute('visibility', 'visible');
+    // the same steps, one open run per stretch of buckets with samples
+    let line = '';
+    for (let i = 0; i < n; i++) {
+      if (ms[i] <= 0)
+        continue;
+      if (i === 0 || ms[i - 1] <= 0)
+        line += ` M ${x(i)} ${fy(0)}`;
+      line += ` V ${fy(ms[i])} H ${x(i + 1)}`;
+      if (i === n - 1 || ms[i + 1] <= 0)
+        line += ` V ${fy(0)}`;
+    }
+    frameOutline.setAttribute('d', line || 'M 0 0');
+    frameScale.textContent = fmt.amount(max, unit);
+    drawn.forEach(el => el.setAttribute('visibility', 'visible'));
     if (frameLegend) {
       replace(frameLegend, h('span', {class: 'swatch frame-swatch'}),
         h('span', {class: 'mono'}, name),

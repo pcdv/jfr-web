@@ -765,8 +765,19 @@ svg.timeline .outline {
 svg.timeline .frame-samples {
   fill: var(--flame-match);
   fill-opacity: 0.18;
+  pointer-events: none;
+}
+
+svg.timeline .frame-outline {
+  fill: none;
   stroke: var(--flame-match);
   stroke-width: 1.5;
+  pointer-events: none;
+}
+
+svg.timeline .axis-label.frame-scale {
+  fill: var(--flame-match);
+  font-weight: 600;
   pointer-events: none;
 }
 
