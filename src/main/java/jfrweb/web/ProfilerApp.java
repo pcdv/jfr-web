@@ -34,7 +34,17 @@ public final class ProfilerApp {
    */
   public static void install(App app, BeforeHook guard, About about, Sessions sessions, LiveStats live,
                              AutoMode auto, Path history, Snapshots snapshots) {
-    base(app, guard);
+    install(app, guard, SecurityHeaders.DEFAULT, about, sessions, live, auto, history, snapshots);
+  }
+
+  /**
+   * Sets up the interface on an app, not started yet, with security headers
+   * other than {@link SecurityHeaders#DEFAULT the defaults}.
+   */
+  public static void install(App app, BeforeHook guard, SecurityHeaders headers, About about,
+                             Sessions sessions, LiveStats live, AutoMode auto, Path history,
+                             Snapshots snapshots) {
+    base(app, guard, headers);
     app.scan(new ProfilerRoutes(sessions, live, auto, about, history != null));
     app.scan(new HistoryRoutes(history));
     if (snapshots != null) {
@@ -67,13 +77,22 @@ public final class ProfilerApp {
 
   /**
    * What any app of the interface needs: its guard, the protection against
-   * cross-origin requests, and the output format of its REST API,
-   * {@link ProfilerRoutes#JSON}.
+   * cross-origin requests, its {@link SecurityHeaders#DEFAULT security
+   * headers}, and the output format of its REST API, {@link ProfilerRoutes#JSON}.
    *
    * @param guard who may use it, null to refuse the clients that are not
    *              local
    */
   public static void base(App app, BeforeHook guard) {
+    base(app, guard, SecurityHeaders.DEFAULT);
+  }
+
+  /**
+   * As {@link #base(App, BeforeHook)}, with other security headers.
+   */
+  public static void base(App app, BeforeHook guard, SecurityHeaders headers) {
+    // first: also on the answers that refuse a client
+    app.addBeforeAllHook(headers);
     app.addBeforeAllHook(guard != null ? guard : new LoopbackOnly());
     app.addBeforeAllHook(new CrossOriginProtection());
     app.addOutputFormatter(ProfilerRoutes.JSON, (data, resp) -> {

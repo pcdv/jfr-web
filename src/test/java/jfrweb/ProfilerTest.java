@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Random;
 import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
@@ -27,6 +28,7 @@ import flak.annotations.Route;
 import jfrweb.history.OperationHistory;
 import jfrweb.ops.Operations;
 import jfrweb.snapshot.Snapshots;
+import jfrweb.web.SecurityHeaders;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -340,6 +342,38 @@ public class ProfilerTest {
                        })
                        .start();
     Assertions.assertEquals(401, get("api/sessions").statusCode());
+  }
+
+  @Test
+  public void testSecurityHeaders() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+    for (String path : new String[] {"", "api/about"}) {
+      HttpResponse<String> r = get(path);
+      Assertions.assertEquals(200, r.statusCode(), path);
+      SecurityHeaders.DEFAULT.getHeaders().forEach(
+        (name, value) -> Assertions.assertEquals(value, r.headers().firstValue(name).orElse(null), path + ": " + name));
+    }
+    profiler.close();
+
+    // also on a refusal
+    profiler = Profiler.builder().directory(dir).guard(req -> {
+      throw new HttpException(401, "who are you?");
+    }).start();
+    Assertions.assertEquals("DENY", get("api/sessions").headers().firstValue("X-Frame-Options").orElse(null));
+    profiler.close();
+
+    // changed by the application
+    profiler = Profiler.builder()
+                       .directory(dir)
+                       .header("Strict-Transport-Security", "max-age=60")
+                       .header("X-Frame-Options", "SAMEORIGIN")
+                       .header("Referrer-Policy", null)
+                       .start();
+    HttpResponse<String> r = get("");
+    Assertions.assertEquals("max-age=60", r.headers().firstValue("Strict-Transport-Security").orElse(null));
+    Assertions.assertEquals(List.of("SAMEORIGIN"), r.headers().allValues("X-Frame-Options"));
+    Assertions.assertTrue(r.headers().firstValue("Referrer-Policy").isEmpty());
+    Assertions.assertEquals("nosniff", r.headers().firstValue("X-Content-Type-Options").orElse(null));
   }
 
   @Test

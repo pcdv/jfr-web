@@ -24,6 +24,7 @@ import jfrweb.snapshot.Snapshots;
 import jfrweb.web.About;
 import jfrweb.web.AppName;
 import jfrweb.web.ProfilerApp;
+import jfrweb.web.SecurityHeaders;
 
 /**
  * A profiler embedded in the JVM, with a web interface. Installing it records
@@ -110,6 +111,7 @@ public final class Profiler implements AutoCloseable {
     private AppFactory factory;
     private String path;
     private BeforeHook guard;
+    private SecurityHeaders headers = SecurityHeaders.DEFAULT;
     private Path directory;
     private Duration maxAge = Duration.ofDays(7);
     private long maxSize = 1L << 30;
@@ -169,6 +171,19 @@ public final class Profiler implements AutoCloseable {
      */
     public Builder guard(BeforeHook guard) {
       this.guard = guard;
+      return this;
+    }
+
+    /**
+     * Changes one of the security headers of the interface, see
+     * {@link SecurityHeaders#DEFAULT}, e.g. to add Strict-Transport-Security
+     * when served over HTTPS, or to match the policy of the application it is
+     * mounted in.
+     *
+     * @param value null to send no such header
+     */
+    public Builder header(String name, String value) {
+      this.headers = headers.with(name, value);
       return this;
     }
 
@@ -275,7 +290,7 @@ public final class Profiler implements AutoCloseable {
         live.observe(a);
         auto.observe(a);
       }
-      ProfilerApp.install(app, guard, new About(AppName.self(), false), sessions, live, auto, history, snapshots);
+      ProfilerApp.install(app, guard, headers, new About(AppName.self(), false), sessions, live, auto, history, snapshots);
       app.start();
 
       // read by a jfr-web profiling this JVM from outside

@@ -245,8 +245,14 @@ or mounting the interface on a flak server you already run:
 Profiler.builder()
         .mount(factory, "/profiler")     // one more app on the server of an AppFactory
         .guard(loginCheck)               // a BeforeHook; by default only local clients get in
+        .header("Strict-Transport-Security", "max-age=31536000")   // e.g. when served over HTTPS
         .start();
 ```
+
+Every response carries security headers: a Content-Security-Policy that only allows the
+interface's own scripts, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: same-origin` (see `SecurityHeaders.DEFAULT`). `header(name, value)` changes one,
+and a null value drops it.
 
 jfr-web depends on flak's JDK backend, so that `Profiler.start()` works in any application. If
 your flak app runs on Netty, pick its backend explicitly: `Flak.getFactory()` takes the first one
