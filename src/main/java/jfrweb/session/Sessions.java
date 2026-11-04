@@ -8,6 +8,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.ParseException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -53,6 +54,9 @@ public final class Sessions implements AutoCloseable {
 
   /** Not session-*.properties: those are the sessions of {@link #load()}. */
   private static final String IDS = "ids.properties";
+
+  private Duration maxAge;
+  private long maxSize = Long.MAX_VALUE;
 
   /**
    * Sessions recording this JVM.
@@ -184,7 +188,80 @@ public final class Sessions implements AutoCloseable {
       sessions.remove(s);
       deleteProperties(s);
     }
+    purge();
     return s;
+  }
+
+  /**
+   * Limits what the sessions of this profiler keep on disk, none by default:
+   * the oldest are deleted beyond, now and as each session stops. The latest
+   * session is kept whatever its size, but not beyond the maximum age. The
+   * one recording and the recordings kept by others, e.g. snapshots, are
+   * never touched.
+   *
+   * @param maxAge how long a session is kept after it ended, null for ever
+   * @param maxSize the most the sessions may take, .jfr and .properties files,
+   *                in bytes
+   */
+  public synchronized void setRetention(Duration maxAge, long maxSize) {
+    this.maxAge = maxAge;
+    this.maxSize = maxSize;
+    purge();
+  }
+
+  /**
+   * Deletes the sessions older than the maximum age, then the oldest while
+   * they take more than the maximum size, see {@link #setRetention}. Sessions
+   * expire while none is taken: an application running for months calls it
+   * now and then, e.g. daily.
+   */
+  public synchronized void purge() {
+    List<Session> stopped = new ArrayList<>();
+    long total = 0;
+    for (Session s : sessions) {
+      if (s.owner == this && s.getState() == Session.State.STOPPED) {
+        stopped.add(s);
+        total += size(s);
+      }
+    }
+    stopped.sort(Comparator.comparing(Session::getEnd));
+
+    Instant expiry = maxAge == null ? Instant.MIN : Instant.now().minus(maxAge);
+    for (int i = 0; i < stopped.size(); i++) {
+      Session s = stopped.get(i);
+      // the latest stays, whatever its size, but not beyond the maximum age
+      boolean tooBig = i < stopped.size() - 1 && total > maxSize;
+      if (!tooBig && !s.getEnd().isBefore(expiry))
+        break;
+      total -= size(s);
+      delete(s);
+    }
+  }
+
+  private static long size(Session s) {
+    long size = 0;
+    for (Path f : new Path[]{s.getFile(), properties(s.getFile())}) {
+      try {
+        size += Files.size(f);
+      }
+      catch (IOException e) {
+        // already gone
+      }
+    }
+    return size;
+  }
+
+  private void delete(Session s) {
+    log.log(System.Logger.Level.INFO, "Deleting session " + s.getId() + ": " + s.getFile());
+    try {
+      Files.deleteIfExists(s.getFile());
+    }
+    catch (IOException e) {
+      log.log(System.Logger.Level.WARNING, "Could not delete session " + s.getId(), e);
+      return;
+    }
+    deleteProperties(s);
+    sessions.remove(s);
   }
 
   /**

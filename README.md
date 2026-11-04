@@ -221,6 +221,23 @@ Snapshots snapshots = Snapshots.builder()
 Profiler.builder().observe(app).snapshots(snapshots).start();
 ```
 
+**Retention.** The directory of the sessions is purged like the two above: sessions older than 7
+days are deleted, then the oldest while the rest takes more than 1 GiB. The latest session is kept
+whatever its size, but not beyond its age. The snapshots have limits of their own:
+`Snapshots.builder()` takes `maxAge` (7 days), `maxCount` (20) and `maxSize` (1 GiB). Both purge
+when they start and when a recording is added; as recordings also expire while none is taken, an
+application running for months calls `purge()` now and then:
+
+```java
+Profiler profiler = Profiler.builder().directory(Path.of("logs/profiler"))   // a dedicated directory
+                            .maxAge(Duration.ofDays(3))
+                            .maxSize(512L << 20)
+                            .start();
+// e.g. daily
+profiler.getSessions().purge();
+snapshots.purge();
+```
+
 The builder covers the rest: address, port, who may connect, where recordings go, JFR settings,
 or mounting the interface on a flak server you already run:
 

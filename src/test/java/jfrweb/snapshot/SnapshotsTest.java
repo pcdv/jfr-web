@@ -8,7 +8,10 @@ import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -123,6 +126,40 @@ public class SnapshotsTest {
     // after a restart, as after an incident: the snapshots are still there
     snapshots = Snapshots.builder().directory(dir).start();
     Assertions.assertEquals(List.of("2", "3"), snapshots.list().stream().map(Snapshots.Snapshot::reason).toList());
+  }
+
+  @Test
+  public void testExpiredSnapshotsArePurgedOnRestart() throws Exception {
+    // taken 10 days ago
+    Instant then = Instant.now().minus(Duration.ofDays(10));
+    snapshots = Snapshots.builder().directory(dir).clock(Clock.fixed(then, ZoneOffset.UTC)).start();
+    Snapshots.Snapshot old1 = snapshots.save("old 1");
+    Snapshots.Snapshot old2 = snapshots.save("old 2");
+    snapshots.close();
+
+    snapshots = Snapshots.builder().directory(dir).start();
+    Assertions.assertEquals(List.of(), snapshots.list(), "even the latest, beyond the maximum age");
+    Assertions.assertFalse(Files.exists(old1.file()));
+    Assertions.assertFalse(Files.exists(old2.file()));
+
+    // not the recent ones
+    snapshots.save("recent");
+    snapshots.close();
+    snapshots = Snapshots.builder().directory(dir).maxAge(Duration.ofDays(1)).start();
+    Assertions.assertEquals(1, snapshots.list().size());
+  }
+
+  @Test
+  public void testPurgeDeletesWhatExpiredSinceTheLastSnapshot() throws Exception {
+    snapshots = Snapshots.builder().directory(dir).maxAge(Duration.ofMillis(50)).start();
+    Snapshots.Snapshot s = snapshots.save("soon expired");
+    Thread.sleep(100);
+
+    // as the application does now and then, with no snapshot taken
+    snapshots.purge();
+
+    Assertions.assertEquals(List.of(), snapshots.list());
+    Assertions.assertFalse(Files.exists(s.file()));
   }
 
   private void get(String path) throws IOException {

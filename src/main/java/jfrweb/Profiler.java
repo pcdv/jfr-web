@@ -5,6 +5,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -110,6 +111,8 @@ public final class Profiler implements AutoCloseable {
     private String path;
     private BeforeHook guard;
     private Path directory;
+    private Duration maxAge = Duration.ofDays(7);
+    private long maxSize = 1L << 30;
     private Map<String, String> settings;
     private int stackDepth = StackDepth.DEFAULT;
     private boolean highResolutionTimer = true;
@@ -179,6 +182,25 @@ public final class Profiler implements AutoCloseable {
     }
 
     /**
+     * How long a session is kept after it ended, 7 days by default: the
+     * directory is dedicated to the sessions, what it holds may be deleted.
+     * See {@link Sessions#setRetention} and {@link Sessions#purge}.
+     */
+    public Builder maxAge(Duration maxAge) {
+      this.maxAge = maxAge;
+      return this;
+    }
+
+    /**
+     * The most the sessions may take on disk, in bytes, 1 GiB by default: the
+     * oldest are deleted beyond.
+     */
+    public Builder maxSize(long bytes) {
+      this.maxSize = bytes;
+      return this;
+    }
+
+    /**
      * The number of frames JFR keeps of each stack, {@link StackDepth#DEFAULT}
      * by default, instead of the 64 of the JVM: set as this starts, if nothing
      * recorded with JFR in this JVM yet, and the command line does not set it.
@@ -236,6 +258,7 @@ public final class Profiler implements AutoCloseable {
       Sessions sessions = new Sessions(directory != null ? directory : Files.createTempDirectory("jfr-web"),
                                        settings != null ? settings : Sessions.defaultSettings(),
                                        highResolutionTimer);
+      sessions.setRetention(maxAge, maxSize);
       App app;
       if (factory != null) {
         app = factory.createApp(path);

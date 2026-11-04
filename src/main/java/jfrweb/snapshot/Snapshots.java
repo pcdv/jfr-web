@@ -41,8 +41,8 @@ import jfrweb.session.StackDepth;
  * telling why and when. Snapshots are taken by hand ({@link #save}), or by
  * themselves when an operation is much slower than usual for its name, or
  * when errors burst (see {@link Triggers}): with no threshold to configure.
- * Automatic snapshots are spaced, and the directory is purged by number of
- * snapshots and total size.
+ * Automatic snapshots are spaced, and the directory is purged by age, number
+ * of snapshots and total size, see {@link #purge()}.
  * <pre>
  * Snapshots snapshots = Snapshots.builder()
  *                                .directory(Path.of("logs/snapshots"))
@@ -70,6 +70,7 @@ public final class Snapshots implements AutoCloseable {
   private final Duration aftermath;
   private final int maxCount;
   private final long maxSize;
+  private final Duration maxAge;
   private final Map<String, String> settings;
   private final Clock clock;
 
@@ -89,6 +90,7 @@ public final class Snapshots implements AutoCloseable {
     this.aftermath = b.aftermath;
     this.maxCount = b.maxCount;
     this.maxSize = b.maxSize;
+    this.maxAge = b.maxAge;
     this.settings = b.settings != null ? b.settings : defaultSettings();
     this.clock = b.clock;
     this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -161,6 +163,7 @@ public final class Snapshots implements AutoCloseable {
   private void start() throws IOException {
     Files.createDirectories(directory);
     loadExisting();
+    purge();
     rolling = new Recording(EventMappings.withMapped(settings));
     rolling.setName("jfr-web rolling recording");
     rolling.setToDisk(true);
@@ -249,18 +252,32 @@ public final class Snapshots implements AutoCloseable {
   }
 
   /**
-   * Deletes the oldest snapshots beyond the maximum number, then while they
-   * take more than the maximum size. The latest is always kept.
+   * Deletes the snapshots older than the maximum age, then the oldest while
+   * there are more than the maximum number, or they take more than the
+   * maximum size. Done as this starts and as each snapshot is taken.
+   * Snapshots expire while none is taken: an application running for months
+   * calls it now and then, e.g. daily.
    */
-  private void purge() throws IOException {
-    long total = 0;
-    for (Snapshot s : snapshots)
-      total += Files.size(s.file());
-    while (snapshots.size() > 1 && (snapshots.size() > maxCount || total > maxSize)) {
-      Snapshot oldest = snapshots.remove(0);
-      total -= Files.size(oldest.file());
-      Files.deleteIfExists(oldest.file());
-      Files.deleteIfExists(metaFile(oldest.file()));
+  public synchronized void purge() {
+    try {
+      long total = 0;
+      for (Snapshot s : snapshots)
+        total += Files.size(s.file());
+      Instant expiry = clock.instant().minus(maxAge);
+      while (!snapshots.isEmpty()) {
+        Snapshot oldest = snapshots.get(0);
+        // the latest stays, whatever the number and size, but not beyond the maximum age
+        boolean tooMany = snapshots.size() > 1 && (snapshots.size() > maxCount || total > maxSize);
+        if (!tooMany && !oldest.end().isBefore(expiry))
+          break;
+        snapshots.remove(0);
+        total -= Files.size(oldest.file());
+        Files.deleteIfExists(oldest.file());
+        Files.deleteIfExists(metaFile(oldest.file()));
+      }
+    }
+    catch (IOException e) {
+      log.log(System.Logger.Level.WARNING, "Could not purge the snapshots", e);
     }
   }
 
@@ -287,6 +304,7 @@ public final class Snapshots implements AutoCloseable {
     private Duration aftermath = Duration.ofSeconds(10);
     private int maxCount = 20;
     private long maxSize = 1L << 30;
+    private Duration maxAge = Duration.ofDays(7);
     private Map<String, String> settings;
     private int stackDepth = StackDepth.DEFAULT;
     private final List<App> apps = new ArrayList<>();
@@ -342,6 +360,15 @@ public final class Snapshots implements AutoCloseable {
      */
     public Builder maxSize(long bytes) {
       this.maxSize = bytes;
+      return this;
+    }
+
+    /**
+     * How long a snapshot is kept after it was taken, 7 days by default, see
+     * {@link Snapshots#purge()}.
+     */
+    public Builder maxAge(Duration maxAge) {
+      this.maxAge = maxAge;
       return this;
     }
 
