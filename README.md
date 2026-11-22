@@ -351,6 +351,70 @@ doesn't stream them to its live view, history and auto mode unless it registers 
 would otherwise start every armed session right away, for events the application may never
 record.
 
+### Tests run by JUnit 4
+
+JUnit 4 records no event, so a JVM running JUnit 4 tests shows no test as an operation. A rule
+can record the event of the JUnit Platform, named `org.junit.TestExecution`, and the built-in
+mapping then reads it. The rule is applied twice: as a rule, for each test, and as a class rule,
+for each test class.
+
+```java
+public class JfrTestEvents implements TestRule {
+  @Override
+  public Statement apply(Statement base, Description d) {
+    return new Statement() {
+      @Override
+      public void evaluate() throws Throwable {
+        TestExecution e = new TestExecution();
+        e.begin();
+        Throwable error = null;
+        try {
+          base.evaluate();
+        }
+        catch (Throwable t) {
+          error = t;
+          throw t;
+        }
+        finally {
+          e.end();
+          if (e.shouldCommit()) {
+            e.uniqueId = d.isTest() ? "[class:" + d.getClassName() + "]/[method:" + d.getMethodName() + "]"
+                                    : "[class:" + d.getClassName() + "]";
+            e.displayName = d.getTestClass().getSimpleName() + (d.isTest() ? "." + d.getMethodName() : "");
+            e.exceptionClass = error == null ? null : error.getClass();
+            e.commit();
+          }
+        }
+      }
+    };
+  }
+
+  @Name("org.junit.TestExecution")
+  @StackTrace(false)
+  static class TestExecution extends Event {
+    String uniqueId;
+    String displayName;
+    Class<?> exceptionClass;
+  }
+}
+```
+
+Put it first in the rule chain, so that an event covers the set up and the tear down of its test,
+and declare it once more as a `@ClassRule` in the base class of the tests. The three fields are
+the ones the mapping reads. The event may carry more, such as the result of the test.
+
+Then record the test JVM, either with standalone mode as in
+[Profiling a test suite](#profiling-a-test-suite), or with a recording written to disk by the
+arguments of the test JVM (the `jvmArgs` of the Gradle `test` task):
+
+```
+-XX:StartFlightRecording:filename=build/jfr,dumponexit=true,settings=profile
+```
+
+A directory as `filename` gives each test JVM its own file, named after its pid, on every JDK 17
+or later (a `%p` in a file name works from JDK 21 only). Open the files with
+`jfr-web open build/jfr`.
+
 ## Standalone
 
 Standalone mode profiles the other JVMs on your machine without touching them: no dependency, no
