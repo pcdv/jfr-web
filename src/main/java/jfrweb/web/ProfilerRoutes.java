@@ -305,14 +305,16 @@ public class ProfilerRoutes {
   }
 
   /**
-   * Starts a session. Query: {@code name}, optional.
+   * Starts a session. Query: {@code name}, optional; {@code stopAfter}, in
+   * seconds, for a session that stops by itself after that long.
    */
   @Route("/api/sessions")
   @Post
   @OutputFormat(JSON)
   public Map<String, Object> start(Query q) throws IOException {
+    Duration stopAfter = seconds(q, "stopAfter", null);
     try {
-      Session s = sessions.start("manual");
+      Session s = sessions.start("manual", stopAfter);
       s.setName(q.get("name"));
       return session(s);
     }
@@ -677,6 +679,7 @@ public class ProfilerRoutes {
     m.put("end", s.getEnd());
     m.put("duration", s.getDuration().toMillis());
     m.put("size", s.getSize());
+    m.put("stopAt", s.getStopAt());
     return m;
   }
 

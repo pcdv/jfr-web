@@ -271,6 +271,25 @@ public class ProfilerTest {
     Assertions.assertEquals(404, post("api/sessions/9/settings").statusCode());
   }
 
+  @Test
+  public void testSessionStopsAfterItsTime() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+
+    Assertions.assertEquals(400, post("api/sessions?stopAfter=soon").statusCode());
+    Assertions.assertEquals(400, post("api/sessions?stopAfter=0").statusCode());
+    Assertions.assertEquals("[]", get("api/sessions").body(), "none started by a refused request");
+
+    HttpResponse<String> started = post("api/sessions?stopAfter=0.5");
+    Assertions.assertEquals(200, started.statusCode(), started.body());
+    Assertions.assertTrue(started.body().matches(".*\"stopAt\":\"[^\"]+\".*"), started.body());
+    for (int i = 0; i < 100 && !get("api/sessions").body().contains("STOPPED"); i++)
+      Thread.sleep(50);
+    String list = get("api/sessions").body();
+    Assertions.assertTrue(list.contains("\"state\":\"STOPPED\""), "stopped by itself: " + list);
+    Assertions.assertTrue(list.contains("\"stopAt\":null"), list);
+    Assertions.assertEquals(200, get("api/sessions/1/report").statusCode());
+  }
+
   /** JFR merges the settings of the recordings that run together, as the snapshots' rolling recording does. */
   @Test
   public void testSettingsMergedWithAnotherRecording() throws Exception {

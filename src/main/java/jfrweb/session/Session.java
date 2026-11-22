@@ -34,6 +34,9 @@ public final class Session {
   private volatile State state = State.RECORDING;
   private volatile String name;
 
+  /** When it stops by itself, null if it does not. */
+  volatile Instant stopAt;
+
   /** What it was asked to record, null if not known, e.g. for a snapshot. */
   volatile RecordingOptions options;
 
@@ -94,6 +97,14 @@ public final class Session {
     Sessions o = owner;
     if (o != null)
       o.save(this);
+  }
+
+  /**
+   * When the session stops by itself while it records, or null if it only
+   * stops when told to.
+   */
+  public Instant getStopAt() {
+    return state == State.RECORDING ? stopAt : null;
   }
 
   /**

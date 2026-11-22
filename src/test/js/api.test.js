@@ -39,6 +39,10 @@ test('a session starts with its name, the next ones record as chosen', async () 
   assert.deepEqual(fetched.at(-1), {url: 'api/sessions?name=slow+login', method: 'POST'});
   await api.startSession();
   assert.deepEqual(fetched.at(-1), {url: 'api/sessions', method: 'POST'});
+  await api.startSession('', 300);
+  assert.deepEqual(fetched.at(-1), {url: 'api/sessions?stopAfter=300', method: 'POST'});
+  await api.startSession('a b', null);
+  assert.deepEqual(fetched.at(-1), {url: 'api/sessions?name=a+b', method: 'POST'});
 
   await api.setRecording({preset: 'light', enabled: {exceptions: false}, values: {java: '5 ms'},
                           other: 'jdk.ClassLoad#threshold=5 ms'});

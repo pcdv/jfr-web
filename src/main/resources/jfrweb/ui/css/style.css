@@ -595,6 +595,18 @@ details.tabbed [role=tabpanel][hidden] {
   width: 14em;
 }
 
+.toolbar .stop-after {
+  color: var(--muted);
+}
+
+.toolbar .stop-after input, .toolbar .stop-after select {
+  font: inherit;
+}
+
+.toolbar .stop-after input {
+  width: 6em;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;

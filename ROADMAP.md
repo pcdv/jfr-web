@@ -236,7 +236,8 @@ started by hand and by the auto mode alike.
   itself: the preset closest to it, the panel's choices, and what is left as lines written by
   hand. JFR merges the settings of recordings that run together, so these can differ from what
   was asked
-- [ ] Stop a session after a given time
+- [x] Stop a session after a given time: "Stop after" next to the name of a session started by
+  hand, in seconds or minutes; the auto mode keeps its own limit
 
 ## Later
 

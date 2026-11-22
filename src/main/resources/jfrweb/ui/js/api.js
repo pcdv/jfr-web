@@ -14,6 +14,7 @@
  * @property {string | null} end ISO-8601, null while recording
  * @property {number} duration in ms
  * @property {number} size of the .jfr file in bytes, 0 while recording
+ * @property {string | null} [stopAt] ISO-8601, when it stops by itself while recording; null if it does not
  */
 
 /**
@@ -337,10 +338,17 @@ export function getSession(id) {
 
 /**
  * @param {string} [name] none to leave it unnamed
+ * @param {number | null} [stopAfter] seconds after which it stops by itself, none to record until stopped
  * @returns {Promise<Session>}
  */
-export function startSession(name) {
-  return call(name ? `api/sessions?${new URLSearchParams({name})}` : 'api/sessions', {method: 'POST'});
+export function startSession(name, stopAfter) {
+  const q = new URLSearchParams();
+  if (name)
+    q.set('name', name);
+  if (stopAfter)
+    q.set('stopAfter', String(stopAfter));
+  const query = q.toString();
+  return call(query ? `api/sessions?${query}` : 'api/sessions', {method: 'POST'});
 }
 
 /**

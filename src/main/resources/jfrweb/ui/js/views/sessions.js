@@ -9,6 +9,7 @@ import {errorBox} from '../components/errorBox.js';
 import * as fmt from '../format.js';
 import {autoPanel} from '../components/auto.js';
 import {recordingPanel} from '../components/recording.js';
+import {stopAfterField} from '../components/stopAfter.js';
 import {renameButton} from '../components/sessionName.js';
 
 /** How often the list refreshes while a session records or auto mode is armed, in ms. */
@@ -27,6 +28,9 @@ export function renderSessions(root, params, signal) {
   /** The name of the next session: kept while the toolbar is drawn again. */
   const name = h('input', {type: 'text', class: 'session-name', placeholder: 'Name, optional',
                            'aria-label': 'Name of the session to start'});
+
+  /** How long the next session records at most: kept, like the name, while the toolbar is drawn again. */
+  const stopAfter = stopAfterField();
 
   /** @type {number | undefined} */
   let timer;
@@ -59,7 +63,7 @@ export function renderSessions(root, params, signal) {
         const barJson = JSON.stringify([recording?.id ?? null, snapshots.available, snapshots.window]);
         if (barJson !== barShown) {
           barShown = barJson;
-          replace(bar, toolbar(sessions, snapshots, name, refresh));
+          replace(bar, toolbar(sessions, snapshots, name, stopAfter, refresh));
         }
         // asked when a session starts or stops, which locks or unlocks it, not at each refresh
         if ((recording !== undefined) !== recordingShown) {
@@ -94,9 +98,10 @@ export function renderSessions(root, params, signal) {
  * @param {api.Session[]} sessions
  * @param {api.SnapshotState} snapshots
  * @param {HTMLInputElement} name that of the session to start
+ * @param {ReturnType<typeof stopAfterField>} stopAfter how long it records at most
  * @param {() => void} refresh
  */
-function toolbar(sessions, snapshots, name, refresh) {
+function toolbar(sessions, snapshots, name, stopAfter, refresh) {
   const recording = sessions.find(s => s.state === 'RECORDING');
   const minutes = snapshots.window ? Math.round(snapshots.window / 60) : 0;
   return h('div', {class: 'toolbar'},
@@ -106,11 +111,11 @@ function toolbar(sessions, snapshots, name, refresh) {
           class: 'danger',
           onclick: () => act(() => api.stopSession(recording.id), refresh),
         }, 'Stop session')
-      : [name, ' ', h('button', {
+      : [name, ' ', stopAfter.element, ' ', h('button', {
           class: 'primary',
           title: 'Records what the Recording panel says',
           onclick: () => act(async () => {
-            await api.startSession(name.value.trim());
+            await api.startSession(name.value.trim(), stopAfter.seconds());
             name.value = '';
           }, refresh),
         }, 'Start a session')],
@@ -149,7 +154,8 @@ function table(sessions, refresh) {
       h('td', null, s.name
         ? h('a', {href: reportHash(s)}, s.name)
         : h('span', {class: 'hint'}, '—')),
-      h('td', null, h('span', {class: `state ${s.state.toLowerCase()}`}, s.state.toLowerCase())),
+      h('td', null, h('span', {class: `state ${s.state.toLowerCase()}`}, s.state.toLowerCase()),
+        s.stopAt ? h('span', {class: 'hint'}, ` · stops at ${new Date(s.stopAt).toLocaleTimeString()}`) : null),
       h('td', null, fmt.time(s.start)),
       h('td', {class: 'num'}, fmt.duration(s.duration)),
       h('td', {class: 'num'}, s.state === 'STOPPED' ? fmt.bytes(s.size) : s.size > 0 ? '~' + fmt.bytes(s.size) : ''),

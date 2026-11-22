@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import jdk.jfr.Configuration;
 import jfrweb.analysis.EventMappings;
@@ -58,6 +61,9 @@ public final class Sessions implements AutoCloseable {
 
   private Duration maxAge;
   private long maxSize = Long.MAX_VALUE;
+
+  /** Stops the sessions that have a time limit, created when one is first set. */
+  private ScheduledExecutorService timer;
 
   /** What the next session records: changed from the interface, kept in {@link RecordingOptions#FILE}. */
   private RecordingOptions options = RecordingOptions.standard();
@@ -217,6 +223,18 @@ public final class Sessions implements AutoCloseable {
    *                               recorder cannot record now
    */
   public synchronized Session start(String trigger) throws IOException {
+    return start(trigger, null);
+  }
+
+  /**
+   * Starts recording, and stops by itself after a duration.
+   *
+   * @param trigger   how the session is started, e.g. "manual"
+   * @param stopAfter how long it records at most, null for as long as it is not stopped
+   * @throws IllegalStateException if a session is already recording, or the
+   *                               recorder cannot record now
+   */
+  public synchronized Session start(String trigger, Duration stopAfter) throws IOException {
     if (recording != null)
       throw new IllegalStateException("Session " + recording.getId() + " is already recording");
 
@@ -236,7 +254,32 @@ public final class Sessions implements AutoCloseable {
     recording = s;
     save(s);
     saveIds();
+    if (stopAfter != null) {
+      s.stopAt = now.plus(stopAfter);
+      timer().schedule(() -> stopOnTime(id), stopAfter.toMillis(), TimeUnit.MILLISECONDS);
+    }
     return s;
+  }
+
+  /** Stops a session whose time is up, unless it was stopped meanwhile: it is no-op then. */
+  private void stopOnTime(int id) {
+    try {
+      stop(id);
+    }
+    catch (RuntimeException e) {
+      log.log(System.Logger.Level.WARNING, "Could not stop session " + id + " when its time was up", e);
+    }
+  }
+
+  private ScheduledExecutorService timer() {
+    if (timer == null) {
+      timer = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "jfr-web session timer");
+        t.setDaemon(true);
+        return t;
+      });
+    }
+    return timer;
   }
 
   /**
@@ -412,6 +455,8 @@ public final class Sessions implements AutoCloseable {
   public synchronized void close() {
     if (recording != null)
       stop(recording.getId());
+    if (timer != null)
+      timer.shutdownNow();
   }
 
   // --- kept on disk

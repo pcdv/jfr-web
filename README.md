@@ -200,8 +200,10 @@ period or threshold. A text area takes any other JFR setting, one per line, as f
 sets one of its settings. That is how you record the events of your own application. The events the operations are read from stay on, and a value JFR would ignore
 without a word is refused. A change is kept in the sessions directory and applies to the next
 session: a session that records keeps the settings it started with. The depth of the stacks is
-shown, not set, as JFR fixes it once per JVM, before its first recording. The box next to
-**Start a session** names the session. A report's details have a **Record the next sessions like
+shown, not set, as JFR fixes it once per JVM, before its first recording. The boxes next to
+**Start a session** name the session and set how long it records at most (**Stop after**, in
+seconds or minutes, empty for no limit); the list tells when it will stop. The auto mode has its own
+limit. A report's details have a **Record the next sessions like
 this one** button: it fills the panel with what that session was asked to record, so a session that
 showed what you needed can be recorded again. A recording that kept no such record, a snapshot or a
 session of an older version, gives its settings as the recording tells them. Those can differ from
