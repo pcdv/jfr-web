@@ -482,6 +482,9 @@ jfr-web flame app.jfr -o busy.html --operation 'GET /api/.*'
 jfr-web history logs/operations --from 2026-10-13T10:00 --to 2026-10-13T11:00
 ```
 
+`jfr-web help` lists the commands, and `jfr-web help <command>` (or `<command> --help`) gives the
+options of one, with examples.
+
 `flame` writes one HTML file that works opened from the disk: the interface's flame graph, its
 filters still changeable. `--operation` and `--thread <regex>` keep the samples it holds; `--all`
 (samples taken outside operations), `--merged`, `--reversed` and `--java` (the merged, hot methods

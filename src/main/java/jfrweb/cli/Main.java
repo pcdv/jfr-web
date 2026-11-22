@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
@@ -32,52 +33,12 @@ import jfrweb.standalone.Viewer;
  */
 public final class Main {
 
-  private static final String USAGE = String.join("\n",
-    "Usage: jfr-web [--events <file>] <command> ...",
-    "  --events: the events of the application to read as operations, see EventMappings;",
-    "  ~/.jfr-web/operation-events.properties is read too if it exists",
-    "",
-    "  jfr-web report <file.jfr> [--events]",
-    "      how the file was recorded, and its operations sorted by total time",
-    "  jfr-web flame <file.jfr> [-o <file.html>] [--operation <regex>] [--thread <regex>]",
-    "                           [--all] [--merged] [--reversed] [--java] [--alloc] [--collapsed]",
-    "      wall-clock flame graph of the samples taken in operations, rooted by",
-    "      operation (e.g. \"GET /api/user/:id\"); --all adds the other samples,",
-    "      --merged merges the operations into one tree, --reversed puts the methods",
-    "      running at the root, --java keeps the samples of Java code only, --alloc takes",
-    "      the allocation samples instead, weighing bytes, the class allocated on top. A page that",
-    "      works opened from the disk, its filters changeable; --operation and --thread",
-    "      keep the samples it holds. --collapsed: collapsed stacks instead, one line each",
-    "  jfr-web history <dir> [--from <time>] [--to <time>] [--operation <name>]",
-    "      the operations and slowest operations of a period of an operation history,",
-    "      the last hour by default; times like 2026-10-13T10:00 (local time) or",
-    "      2026-10-13T08:00:00Z",
-    "  jfr-web export <file.jfr>... -o <dir> [--history <dir>] [--no-recordings] [--title <text>]",
-    "      the web interface and the recordings as a static site, with the responses",
-    "      computed beforehand: served by any web server, with no Java behind it;",
-    "      --title shows in its top bar in place of jfr-web.",
-    "      A recording holds the environment variables and system properties of the",
-    "      JVM unless turned off: --no-recordings leaves the .jfr files out",
-    "  jfr-web open <file.jfr | dir>... [--history <dir>] [--port <port>] [--no-browser] [--alloc]",
-    "      the web interface on recordings made elsewhere, each one as a session: report,",
-    "      timeline, operations, flame graphs; the .jfr files of a directory are taken.",
-    "      --alloc: flame graphs show the allocations first, instead of the wall clock",
-    "  jfr-web standalone [--port <port>] [--dir <dir>] [--no-browser]",
-    "                     [--attach <pid | regex> [--follow] [--sessions <dir>] [--history <dir>] [--snapshots <dir>]]",
-    "      the profiler on its own: lists the JVMs of this machine, and profiles the",
-    "      one picked as if it was embedded, with nothing to install in it. Sessions",
-    "      are kept in <dir>/<application>, ~/.jfr-web by default; port 8095 by default.",
-    "      --attach picks the JVM at once: its pid, or a regex matching its name. With a regex,",
-    "      --follow waits for each new JVM that matches and records a session of it until it",
-    "      exits, e.g. a test suite run again and again. Then",
-    "      --sessions, --history and --snapshots point to the directories of the profiler",
-    "      embedded in it, if it does not tell them over JMX (jfr-web embedded does):",
-    "      its history and snapshots are only read, and its sessions should not be",
-    "      started from both profilers at once");
-
   private Main() {}
 
   public static void main(String[] args) {
+    Integer helped = help(args, System.out);
+    if (helped != null)
+      System.exit(helped);
     try {
       args = eventMappings(args);
     }
@@ -112,19 +73,26 @@ public final class Main {
    * @return the exit status
    */
   static int run(String[] args, PrintStream stdout) throws IOException {
-    if (args.length < 2) {
-      System.err.println(USAGE);
+    if (args.length == 0) {
+      System.err.print(Help.overview());
       return 2;
     }
-
     String command = args[0];
+    if (Help.of(command) == null) {
+      System.err.println("Unknown command: " + command + "\n\n" + Help.overview());
+      return 2;
+    }
+    if (args.length < 2) {
+      System.err.print(Help.of(command));
+      return 2;
+    }
     Path file = Path.of(args[1]);
     List<String> options = new ArrayList<>(List.of(args).subList(2, args.length));
 
     switch (command) {
       case "report":
         boolean events = options.remove("--events");
-        if (!checkNoneLeft(options))
+        if (!checkNoneLeft(options, command))
           return 2;
         new TextReport(Analysis.load(file), stdout).print(events);
         return 0;
@@ -139,9 +107,48 @@ public final class Main {
         return export(file, options);
 
       default:
-        System.err.println("Unknown command: " + command + "\n" + USAGE);
+        // open and standalone run until stopped: see main
+        System.err.print(Help.of(command));
         return 2;
     }
+  }
+
+  /**
+   * Prints the help asked for: the overview, or that of a command, with
+   * "help", "help <command>", "<command> --help" or "<command> -h".
+   *
+   * @return the exit status, or null if no help is asked for
+   */
+  static Integer help(String[] args, PrintStream stdout) {
+    List<String> rest = new ArrayList<>(List.of(args));
+    // the option before the command
+    if (rest.size() >= 2 && rest.get(0).equals("--events"))
+      rest = rest.subList(2, rest.size());
+    if (rest.isEmpty()) {
+      System.err.print(Help.overview());
+      return 2;
+    }
+    String command;
+    if (Help.asks(rest.get(0))) {
+      if (rest.size() == 1) {
+        stdout.print(Help.overview());
+        return 0;
+      }
+      command = rest.get(1);
+    }
+    else if (rest.stream().anyMatch(a -> a.equals("--help") || a.equals("-h"))) {
+      command = rest.get(0);
+    }
+    else {
+      return null;
+    }
+    String help = Help.of(command);
+    if (help == null) {
+      System.err.println("Unknown command: " + command + "\n\n" + Help.overview());
+      return 2;
+    }
+    stdout.print(help);
+    return 0;
   }
 
   /** The events of the application read as operations, by default. */
@@ -149,18 +156,21 @@ public final class Main {
 
   /**
    * Registers the events mapped to operations: those of the default file if
-   * it exists, and of --events.
+   * it exists, and of --events, before the command (report has an --events
+   * option of its own).
    *
    * @return the other arguments
    */
   static String[] eventMappings(String[] args) throws IOException {
-    List<String> rest = new ArrayList<>(List.of(args));
     if (Files.isRegularFile(EVENT_MAPPINGS))
       report(EventMappings.load(EVENT_MAPPINGS), EVENT_MAPPINGS);
-    String file = takeValue(rest, "--events");
-    if (file != null)
-      report(EventMappings.load(Path.of(file)), Path.of(file));
-    return rest.toArray(new String[0]);
+    if (args.length == 0 || !args[0].equals("--events"))
+      return args;
+    if (args.length < 2)
+      throw new IllegalArgumentException("Missing value after --events");
+    Path file = Path.of(args[1]);
+    report(EventMappings.load(file), file);
+    return Arrays.copyOfRange(args, 2, args.length);
   }
 
   private static void report(List<EventMapping> mappings, Path file) {
@@ -178,8 +188,7 @@ public final class Main {
       history = v == null ? null : Path.of(v);
     }
     catch (IllegalArgumentException e) {
-      System.err.println(e.getMessage());
-      return 2;
+      return usage("open", e.getMessage());
     }
     boolean browser = !options.remove("--no-browser");
     boolean allocations = options.remove("--alloc");
@@ -189,12 +198,10 @@ public final class Main {
         recordings.add(Path.of(o));
         options.remove(o);
       }
-    if (!checkNoneLeft(options))
+    if (!checkNoneLeft(options, "open"))
       return 2;
-    if (recordings.isEmpty()) {
-      System.err.println("No recording to open\n" + USAGE);
-      return 2;
-    }
+    if (recordings.isEmpty())
+      return usage("open", "No recording to open");
     Viewer v;
     try {
       v = Viewer.start(recordings, history, port, allocations);
@@ -234,11 +241,10 @@ public final class Main {
       }
     }
     catch (IllegalArgumentException e) {
-      System.err.println(e.getMessage());
-      return 2;
+      return usage("standalone", e.getMessage());
     }
     boolean browser = !options.remove("--no-browser");
-    if (!checkNoneLeft(options))
+    if (!checkNoneLeft(options, "standalone"))
       return 2;
     Standalone s;
     try {
@@ -298,8 +304,7 @@ public final class Main {
       title = takeValue(options, "--title");
     }
     catch (IllegalArgumentException e) {
-      System.err.println(e.getMessage());
-      return 2;
+      return usage("export", e.getMessage());
     }
     boolean withRecordings = !options.remove("--no-recordings");
     List<Path> recordings = new ArrayList<>();
@@ -309,7 +314,7 @@ public final class Main {
         recordings.add(Path.of(o));
         options.remove(o);
       }
-    if (!checkNoneLeft(options))
+    if (!checkNoneLeft(options, "export"))
       return 2;
     StaticExport.export(recordings, history, out, withRecordings, title);
     System.err.println("Wrote " + out + ": serve it with any web server");
@@ -328,10 +333,9 @@ public final class Main {
       operation = takeValue(options, "--operation");
     }
     catch (IllegalArgumentException e) {
-      System.err.println(e.getMessage());
-      return 2;
+      return usage("history", e.getMessage());
     }
-    if (!checkNoneLeft(options))
+    if (!checkNoneLeft(options, "history"))
       return 2;
     HistoryReport.print(dir, from, to, operation, stdout);
     return 0;
@@ -374,8 +378,7 @@ public final class Main {
       }
     }
     catch (IllegalArgumentException e) {
-      System.err.println(e.getMessage());
-      return 2;
+      return usage("flame", e.getMessage());
     }
     o.outsideOperations(options.remove("--all"));
     o.merged(options.remove("--merged"));
@@ -389,7 +392,7 @@ public final class Main {
       title = title.replace("Wall clock", "Java code");
     }
     boolean collapsed = options.remove("--collapsed");
-    if (!checkNoneLeft(options))
+    if (!checkNoneLeft(options, "flame"))
       return 2;
 
     Analysis analysis = Analysis.load(file);
@@ -434,10 +437,20 @@ public final class Main {
     return options.remove(i);
   }
 
-  private static boolean checkNoneLeft(List<String> options) {
+  private static boolean checkNoneLeft(List<String> options, String command) {
     if (options.isEmpty())
       return true;
-    System.err.println("Unknown options: " + options + "\n" + USAGE);
+    usage(command, "Unknown options: " + options);
     return false;
+  }
+
+  /**
+   * Tells what is wrong in the arguments of a command, and where its help is.
+   *
+   * @return the exit status
+   */
+  private static int usage(String command, String message) {
+    System.err.println(message + "\n" + Help.hint(command));
+    return 2;
   }
 }
