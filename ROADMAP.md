@@ -229,7 +229,11 @@ started by hand and by the auto mode alike.
 - [x] Name given when a session starts
 - [ ] The whole event catalog of the JVM, searchable, with the settings of each event (needs the
   event types of the recorder, through JMX for an attached JVM)
-- [ ] "Record again with these settings" on a report, read from the recording itself
+- [x] "Record the next sessions like this one" on a report: what the session was asked to record,
+  kept with it. For a recording that kept none (snapshot, older session), read from the recording
+  itself: the preset closest to it, the panel's choices, and what is left as lines written by
+  hand. JFR merges the settings of recordings that run together, so these can differ from what
+  was asked
 - [ ] Stop a session after a given time
 
 ## Later

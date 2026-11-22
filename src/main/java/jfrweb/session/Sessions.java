@@ -230,6 +230,7 @@ public final class Sessions implements AutoCloseable {
     lastId = id;
     Session s = new Session(id, now, trigger, file);
     s.recording = r;
+    s.options = options;
     s.owner = this;
     sessions.add(s);
     recording = s;
@@ -434,6 +435,8 @@ public final class Sessions implements AutoCloseable {
     p.setProperty("trigger", s.getTrigger());
     if (s.getName() != null)
       p.setProperty("name", s.getName());
+    if (s.options != null)
+      s.options.writeTo(p, "recording.");
     try (Writer w = Files.newBufferedWriter(properties(s.getFile()), StandardCharsets.UTF_8)) {
       p.store(w, "A session of jfr-web");
     }
@@ -531,6 +534,14 @@ public final class Sessions implements AutoCloseable {
           Session s = new Session(id, Instant.parse(p.getProperty("start")), p.getProperty("trigger", "manual"), jfr);
           s.stopped(end != null ? Instant.parse(end) : Files.getLastModifiedTime(jfr).toInstant());
           s.setName(p.getProperty("name"));
+          if (p.getProperty("recording.preset") != null) {
+            try {
+              s.options = RecordingOptions.readFrom(p, "recording.");
+            }
+            catch (IllegalArgumentException e) {
+              log.log(System.Logger.Level.DEBUG, "Could not read what session " + id + " was asked to record", e);
+            }
+          }
           s.owner = this;
           sessions.add(s);
           lastId = Math.max(lastId, id);

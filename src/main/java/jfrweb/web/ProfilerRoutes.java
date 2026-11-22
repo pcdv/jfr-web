@@ -264,7 +264,8 @@ public class ProfilerRoutes {
    * Query: {@code preset}, the id of one; for each event choice, its id as
    * {@code true} or {@code false} to switch it, and {@code <id>.value} for its
    * period, threshold or throttle, none or blank for the preset's;
-   * {@code other}, JFR settings one per line, e.g. {@code jdk.ClassLoad#threshold=5 ms}.
+   * {@code other}, JFR settings one per line, e.g. {@code jdk.ClassLoad} to switch an event on, then
+   * {@code jdk.ClassLoad#threshold=5 ms}: a setting alone does not switch its event on.
    * What is not given is the preset's: a query of a preset alone resets the rest.
    */
   @Route("/api/recording")
@@ -336,6 +337,28 @@ public class ProfilerRoutes {
     Session s = find(id);
     s.setName(q.get("name"));
     return session(s);
+  }
+
+  /**
+   * Makes the next sessions record as this one did: what it was asked to
+   * record, if the session kept it. Else read from its recording, which tells
+   * what JFR did: the preset closest to it, the choices of the Recording
+   * panel, and the rest as lines written by hand. Answers as {@link #recording()}.
+   */
+  @Route("/api/sessions/:id/settings")
+  @Post
+  @OutputFormat(JSON)
+  public Map<String, Object> reuse(int id) throws IOException {
+    Session s = stopped(id);
+    try {
+      RecordingOptions asked = s.getOptions();
+      sessions.setOptions(asked != null ? asked
+                                        : RecordingOptions.like(s.getAnalysis().getInfo().getEnabledEvents(), sessions.getSettings()));
+    }
+    catch (IllegalStateException e) {
+      throw new HttpException(409, e.getMessage());
+    }
+    return recording();
   }
 
   @Route("/api/sessions/:id/stop")

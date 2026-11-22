@@ -325,9 +325,34 @@ function recording(r) {
            'and flame graphs show their top under "(truncated)". Start the JVM with ',
            h('code', null, `-XX:FlightRecorderOptions:stackdepth=${r.sampling.suggestedStackDepth}`),
            ', or let jfr-web start before anything else records with JFR: it raises the depth then.']),
-      h('dt', null, 'Events'), h('dd', null, `${r.recording.enabledEvents} enabled`)),
+      h('dt', null, 'Events'), h('dd', null, `${r.recording.enabledEvents} enabled`,
+        api.recordingsOnly() ? null : reuseButton(r.session.id))),
     h('h3', null, 'Known biases'),
     h('ul', null, r.biases.map(b => h('li', null, b))));
+}
+
+/**
+ * A button that makes the next sessions record as this one did.
+ *
+ * @param {number} id
+ */
+function reuseButton(id) {
+  const done = h('span', {class: 'hint'});
+  const button = h('button', {
+    class: 'link',
+    title: 'Sets the Recording panel of the Sessions page from the settings this session was recorded with',
+    onclick: async () => {
+      try {
+        await api.reuseSettings(id);
+        replace(done, 'The next sessions record like this one: see the Recording panel of the ',
+                h('a', {href: '#/'}, 'Sessions page'), '.');
+      }
+      catch (e) {
+        tell(e instanceof Error ? e.message : String(e));
+      }
+    },
+  }, 'Record the next sessions like this one');
+  return [' · ', button, ' ', done];
 }
 
 /**

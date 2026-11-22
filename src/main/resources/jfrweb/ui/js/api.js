@@ -384,6 +384,16 @@ export function getRecording() {
 }
 
 /**
+ * Makes the next sessions record as a session did, read from its recording.
+ *
+ * @param {number} id
+ * @returns {Promise<RecordingState>}
+ */
+export function reuseSettings(id) {
+  return call(`api/sessions/${id}/settings`, {method: 'POST'});
+}
+
+/**
  * @param {RecordingChoice} c what is not given is the preset's
  * @returns {Promise<RecordingState>}
  */

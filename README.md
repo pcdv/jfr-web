@@ -196,12 +196,17 @@ settings, the JDK's lighter `default` configuration, or the operations alone, wi
 On top of it you change how often Java and native code are sampled, the allocation samples, and
 the exceptions, file and socket accesses, lock waits, collections and CPU load, each with its
 period or threshold. A text area takes any other JFR setting, one per line, as for
-`jcmd JFR.start` (`jdk.ClassLoad#threshold=5 ms`): that is how you record the events of your own
-application. The events the operations are read from stay on, and a value JFR would ignore
+`jcmd JFR.start`: an event name (`jdk.ClassLoad`) switches it on, and `jdk.ClassLoad#threshold=5 ms`
+sets one of its settings. That is how you record the events of your own application. The events the operations are read from stay on, and a value JFR would ignore
 without a word is refused. A change is kept in the sessions directory and applies to the next
 session: a session that records keeps the settings it started with. The depth of the stacks is
 shown, not set, as JFR fixes it once per JVM, before its first recording. The box next to
-**Start a session** names the session.
+**Start a session** names the session. A report's details have a **Record the next sessions like
+this one** button: it fills the panel with what that session was asked to record, so a session that
+showed what you needed can be recorded again. A recording that kept no such record, a snapshot or a
+session of an older version, gives its settings as the recording tells them. Those can differ from
+what was asked: JFR merges the settings of the recordings that run at the same time, e.g. the
+rolling recording of the snapshots, and the shorter period wins.
 
 **History of operations**, for production. No profiling here: the same counters as the live view,
 written to disk every minute into hourly files, purged by age and size. It runs on its own; give

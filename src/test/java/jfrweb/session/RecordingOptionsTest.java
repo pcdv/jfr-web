@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
@@ -136,6 +137,78 @@ public class RecordingOptionsTest {
     assertFalse(options(Map.of("exceptions", false), Map.of(), "").normalized(STANDARD).isStandard());
   }
 
+  // --- as a recording was made
+
+  /** The settings of the enabled events, as RecordingInfo tells them. */
+  private static Map<String, Map<String, String>> recorded(Map<String, String> settings) {
+    Map<String, Map<String, String>> res = new TreeMap<>();
+    settings.forEach((key, value) -> {
+      int i = key.indexOf('#');
+      res.computeIfAbsent(key.substring(0, i), e -> new TreeMap<>()).put(key.substring(i + 1), value);
+    });
+    res.values().removeIf(s -> !"true".equals(s.get("enabled")));
+    return res;
+  }
+
+  /** What was recorded is what the options would record: the events on, with their settings. */
+  private static void assertSameRecording(Map<String, String> expected, Map<String, String> actual) {
+    Map<String, Map<String, String>> want = recorded(expected), got = recorded(actual);
+    assertEquals(want.keySet(), got.keySet());
+    want.forEach((event, settings) -> settings.forEach((option, value) -> {
+      // the settings that are set by the options: those the recording gives of an event
+      if (got.get(event).containsKey(option))
+        assertEquals(value, got.get(event).get(option), event + "#" + option);
+    }));
+  }
+
+  private static void assertLike(RecordingOptions original) {
+    Map<String, String> settings = original.settings(STANDARD);
+    RecordingOptions like = RecordingOptions.like(recorded(settings), STANDARD);
+    assertSameRecording(settings, like.settings(STANDARD));
+  }
+
+  @Test
+  public void recordedAgainAsItWas() {
+    assertLike(RecordingOptions.standard());
+    assertLike(RecordingOptions.of(RecordingOptions.Preset.LIGHT));
+    assertLike(RecordingOptions.of(RecordingOptions.Preset.OPERATIONS));
+    assertLike(options(Map.of("exceptions", false, "gc", false, "allocations", false),
+                       Map.of("java", "3 ms", "fileIo", "50 ms", "socketIo", "2 s"),
+                       "jdk.ClassLoad#threshold=5 ms\njdk.Compilation"));
+    assertLike(RecordingOptions.of(RecordingOptions.Preset.OPERATIONS, Map.of("java", true), Map.of("java", "7 ms"),
+                                   "jdk.OldObjectSample#cutoff=infinity"));
+  }
+
+  @Test
+  public void thePresetClosestIsTheStart() {
+    assertEquals(RecordingOptions.Preset.STANDARD,
+                 RecordingOptions.like(recorded(STANDARD), STANDARD).preset());
+    assertEquals(RecordingOptions.Preset.LIGHT,
+                 RecordingOptions.like(recorded(Sessions.lightSettings()), STANDARD).preset());
+    assertEquals(RecordingOptions.Preset.OPERATIONS,
+                 RecordingOptions.like(recorded(RecordingOptions.required()), STANDARD).preset());
+    // a recording of the profile as it is asks for nothing by hand
+    assertTrue(RecordingOptions.like(recorded(STANDARD), STANDARD).isStandard());
+  }
+
+  @Test
+  public void aRecordingOfOtherToolsGivesWhatCanBeUsed() {
+    Map<String, Map<String, String>> other = new TreeMap<>(recorded(Sessions.lightSettings()));
+    // JFR tells a zero threshold in ns, and a value the panel refuses
+    other.put("jdk.GarbageCollection", Map.of("enabled", "true", "threshold", "0 ns"));
+    other.put("jdk.ExecutionSample", Map.of("enabled", "true", "period", "100 us"));
+    other.put("jdk.ClassLoad", Map.of("enabled", "true", "threshold", "5 ms", "stackTrace", "true"));
+    RecordingOptions o = RecordingOptions.like(other, STANDARD);
+
+    assertEquals(RecordingOptions.Preset.LIGHT, o.preset());
+    assertFalse(o.other().contains("GarbageCollection"), o.other());
+    assertTrue(o.other().contains("jdk.ClassLoad#enabled=true"), o.other());
+    assertTrue(o.other().contains("jdk.ClassLoad#threshold=5 ms"), o.other());
+    // under 1 ms: left to the preset
+    assertEquals("20 ms", o.value(RecordingOptions.ENTRIES.get(0), STANDARD));
+    assertFalse(o.other().contains("ExecutionSample"), o.other());
+  }
+
   // --- the sessions
 
   @Test
@@ -173,6 +246,33 @@ public class RecordingOptionsTest {
     sessions.setOptions(RecordingOptions.standard());
     assertFalse(Files.exists(dir.resolve("recording.properties")));
     assertTrue(new Sessions(dir, STANDARD, recorder).getOptions().isStandard());
+  }
+
+  @Test
+  public void aSessionKnowsWhatItWasAskedToRecord() throws IOException {
+    Recorder recorder = (name, settings, file) -> () -> Files.writeString(file, "jfr");
+    Sessions sessions = new Sessions(dir.resolve("sessions"), STANDARD, recorder);
+    RecordingOptions asked = options(Map.of("exceptions", false), Map.of("java", "3 ms"), "jdk.ClassLoad");
+    sessions.setOptions(asked);
+    Session s = sessions.start("manual");
+    sessions.stop(s.getId());
+    // changed since: the next one is another matter
+    sessions.setOptions(RecordingOptions.of(RecordingOptions.Preset.LIGHT));
+    Session other = sessions.start("manual");
+    sessions.stop(other.getId());
+
+    assertEquals(asked.settings(STANDARD), s.getOptions().settings(STANDARD));
+    assertEquals(RecordingOptions.Preset.LIGHT, other.getOptions().preset());
+
+    // after a restart
+    Sessions again = new Sessions(dir.resolve("sessions"), STANDARD, recorder);
+    assertEquals(asked.settings(STANDARD), again.get(s.getId()).getOptions().settings(STANDARD));
+    assertEquals(RecordingOptions.Preset.LIGHT, again.get(other.getId()).getOptions().preset());
+
+    // a recording made elsewhere does not tell
+    Path snapshot = Files.writeString(dir.resolve("snapshot.jfr"), "jfr");
+    java.time.Instant t = java.time.Instant.parse("2026-11-22T08:00:00Z");
+    assertNull(again.register(t, t.plusSeconds(60), "snapshot", snapshot).getOptions());
   }
 
   @Test

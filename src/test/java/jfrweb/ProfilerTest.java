@@ -241,10 +241,10 @@ public class ProfilerTest {
     Assertions.assertEquals(400, locked.statusCode());
     Assertions.assertTrue(locked.body().contains("Line 1"), locked.body());
 
-    HttpResponse<String> set = post("api/recording?java.value=50+ms&exceptions=false&other=" + encode("jdk.ClassLoad#threshold=5 ms"));
+    HttpResponse<String> set = post("api/recording?java.value=50+ms&exceptions=false&other=" + encode("jdk.ClassLoad\njdk.ClassLoad#threshold=5 ms"));
     Assertions.assertEquals(200, set.statusCode(), set.body());
     Assertions.assertTrue(set.body().contains("\"standard\":false"), set.body());
-    Assertions.assertTrue(set.body().contains("\"other\":\"jdk.ClassLoad#threshold=5 ms\""), set.body());
+    Assertions.assertTrue(set.body().contains("\"other\":\"jdk.ClassLoad#enabled=true\\njdk.ClassLoad#threshold=5 ms\""), set.body());
     Assertions.assertTrue(Files.exists(dir.resolve("recording.properties")));
 
     Assertions.assertEquals(200, post("api/sessions").statusCode());
@@ -258,6 +258,16 @@ public class ProfilerTest {
     // a preset alone resets the rest
     Assertions.assertTrue(post("api/recording").body().contains("\"standard\":true"));
     Assertions.assertFalse(Files.exists(dir.resolve("recording.properties")));
+
+    // and a session tells how to record again as it was, from its own recording
+    HttpResponse<String> again = post("api/sessions/1/settings");
+    Assertions.assertEquals(200, again.statusCode(), again.body());
+    Assertions.assertTrue(again.body().contains("\"standard\":false"), again.body());
+    Assertions.assertTrue(again.body().contains("\"value\":\"50 ms\""), again.body());
+    Assertions.assertTrue(again.body().contains("\"id\":\"exceptions\",") && !again.body().matches(".*\"id\":\"exceptions\",[^}]*\"enabled\":true.*"),
+                          again.body());
+    Assertions.assertTrue(again.body().contains("\"other\":\"jdk.ClassLoad#enabled=true\\njdk.ClassLoad#threshold=5 ms\""), again.body());
+    Assertions.assertEquals(404, post("api/sessions/9/settings").statusCode());
   }
 
   private static String encode(String s) {

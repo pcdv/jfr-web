@@ -48,6 +48,8 @@ test('a session starts with its name, the next ones record as chosen', async () 
   });
   await api.getRecording();
   assert.deepEqual(fetched.at(-1), {url: 'api/recording', method: 'GET'});
+  await api.reuseSettings(3);
+  assert.deepEqual(fetched.at(-1), {url: 'api/sessions/3/settings', method: 'POST'});
 });
 
 test('an error carries the status and the text of the answer', async () => {

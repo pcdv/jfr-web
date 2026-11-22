@@ -34,6 +34,9 @@ public final class Session {
   private volatile State state = State.RECORDING;
   private volatile String name;
 
+  /** What it was asked to record, null if not known, e.g. for a snapshot. */
+  volatile RecordingOptions options;
+
   /** While recording. */
   Recorder.Running recording;
 
@@ -91,6 +94,15 @@ public final class Session {
     Sessions o = owner;
     if (o != null)
       o.save(this);
+  }
+
+  /**
+   * What the session was asked to record, or null if that is not known, e.g.
+   * for a snapshot: the recording itself tells what JFR did, which differs
+   * when other recordings ran at the same time, as JFR merges their settings.
+   */
+  public RecordingOptions getOptions() {
+    return options;
   }
 
   public State getState() {

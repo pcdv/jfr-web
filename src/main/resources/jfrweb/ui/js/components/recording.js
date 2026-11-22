@@ -46,7 +46,7 @@ export function recordingPanel(initial) {
   });
 
   const other = h('textarea', {id: 'rec-other', class: 'wide mono', rows: 3, spellcheck: 'false',
-                               placeholder: 'jdk.ClassLoad#threshold=5 ms'});
+                               placeholder: 'jdk.ClassLoad\njdk.ClassLoad#threshold=5 ms'});
   const unknown = h('div', {class: 'hint warn'});
   const required = h('div', {class: 'hint'});
   const depth = h('span');
@@ -62,8 +62,9 @@ export function recordingPanel(initial) {
     eventRows,
     h('label', {class: 'label', for: 'rec-other'}, 'Other events'),
     h('div', null, other,
-      h('div', {class: 'hint'}, 'One per line, as for jcmd JFR.start: event#setting=value, or an event name to ' +
-        'switch it on. Settings: enabled, threshold, period, stackTrace, cutoff, throttle.'),
+      h('div', {class: 'hint'}, 'One per line, as for jcmd JFR.start: an event name switches it on, ' +
+        'event#setting=value sets one of enabled, threshold, period, stackTrace, cutoff, throttle. ' +
+        'A setting alone does not switch its event on.'),
       unknown, required),
     h('span', {class: 'label'}, 'Stack depth'),
     h('div', null, depth,
