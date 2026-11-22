@@ -331,9 +331,69 @@ export function getSession(id) {
   return call(`api/sessions/${id}`);
 }
 
-/** @returns {Promise<Session>} */
-export function startSession() {
-  return call('api/sessions', {method: 'POST'});
+/**
+ * @param {string} [name] none to leave it unnamed
+ * @returns {Promise<Session>}
+ */
+export function startSession(name) {
+  return call(name ? `api/sessions?${new URLSearchParams({name})}` : 'api/sessions', {method: 'POST'});
+}
+
+/**
+ * An event, or a few that go together, that the next session may record or not.
+ *
+ * @typedef {object} RecordingEvent
+ * @property {string} id
+ * @property {string} label
+ * @property {string} hint what it shows, and what it costs
+ * @property {'period' | 'threshold' | 'throttle' | null} option the setting that can be changed
+ * @property {string | null} optionLabel e.g. "every"
+ * @property {boolean} enabled
+ * @property {string} value of its option, e.g. "10 ms", empty if none is set
+ */
+
+/**
+ * What the next session records, manual or automatic.
+ *
+ * @typedef {object} RecordingState
+ * @property {string} preset the id of the one chosen
+ * @property {{id: string, label: string, description: string}[]} presets
+ * @property {RecordingEvent[]} events
+ * @property {string} other JFR settings written by hand, one per line
+ * @property {string[]} required the events always recorded: the operations
+ * @property {boolean} known whether the JVM could tell its events, to check the lines written by hand
+ * @property {string[]} unknown the events of those lines that the JVM does not know (yet)
+ * @property {number} stackDepth frames JFR keeps of a stack, 0 if unknown
+ * @property {boolean} standard whether it is what the profiler was started with
+ * @property {boolean} recording whether a session records: it keeps its settings, the next ones may change
+ */
+
+/**
+ * What the choices of the next session are.
+ *
+ * @typedef {object} RecordingChoice
+ * @property {string} preset
+ * @property {Record<string, boolean>} enabled by event id
+ * @property {Record<string, string>} values by event id, blank for the preset's
+ * @property {string} other
+ */
+
+/** @returns {Promise<RecordingState>} */
+export function getRecording() {
+  return call('api/recording');
+}
+
+/**
+ * @param {RecordingChoice} c what is not given is the preset's
+ * @returns {Promise<RecordingState>}
+ */
+export function setRecording(c) {
+  const q = new URLSearchParams({preset: c.preset, other: c.other});
+  for (const [id, b] of Object.entries(c.enabled))
+    q.set(id, String(b));
+  for (const [id, v] of Object.entries(c.values))
+    q.set(`${id}.value`, v);
+  return call(`api/recording?${q}`, {method: 'POST'});
 }
 
 /**

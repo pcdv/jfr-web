@@ -3,6 +3,7 @@ package jfrweb.standalone;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 
 import flak.App;
 import flak.AppFactory;
@@ -45,6 +46,18 @@ final class Target implements AutoCloseable {
         if (j == null)
           throw new IllegalStateException("No JVM of " + app + " connected: connect to one from the list of JVMs");
         return j.start(name, settings, file);
+      }
+
+      @Override
+      public Set<String> eventNames() {
+        RemoteJvm j = jvm;
+        return j == null ? null : j.eventNames();
+      }
+
+      @Override
+      public int stackDepth() {
+        RemoteJvm j = jvm;
+        return j == null ? 0 : j.stackDepth();
       }
     });
     this.auto = AutoMode.fed(sessions);

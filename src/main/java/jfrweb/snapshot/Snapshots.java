@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.text.ParseException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -12,7 +11,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,11 +22,10 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import flak.App;
-import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
 import jfrweb.analysis.EventMappings;
 import jfrweb.json.Json;
-import jfrweb.ops.Operations;
+import jfrweb.session.Sessions;
 import jfrweb.session.StackDepth;
 
 /**
@@ -113,17 +110,7 @@ public final class Snapshots implements AutoCloseable {
    * 95% of the cost of the recording, about 7% of a core on an idle application server.
    */
   public static Map<String, String> defaultSettings() {
-    try {
-      Map<String, String> s = new HashMap<>(Configuration.getConfiguration("default").getSettings());
-      s.put("flak.Request#enabled", "true");
-      s.put(Operations.EVENT + "#enabled", "true");
-      s.put(Operations.SEGMENT_EVENT + "#enabled", "true");
-      s.put("jdk.CPULoad#period", "60 s");
-      return s;
-    }
-    catch (IOException | ParseException e) {
-      throw new IllegalStateException("Cannot read the default configuration of the JDK", e);
-    }
+    return Sessions.lightSettings();
   }
 
   public Path getDirectory() {

@@ -2,8 +2,12 @@ package jfrweb.session;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
+import jdk.jfr.EventType;
+import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
 
 /**
@@ -56,6 +60,25 @@ final class LocalRecorder implements Recorder {
         return size.size();
       }
     };
+  }
+
+  /**
+   * Null before JFR recorded in this JVM: asking would start it, and the
+   * depth of the stacks can only be set before that, see {@link StackDepth}.
+   */
+  @Override
+  public Set<String> eventNames() {
+    if (!FlightRecorder.isInitialized())
+      return null;
+    Set<String> names = new HashSet<>();
+    for (EventType t : FlightRecorder.getFlightRecorder().getEventTypes())
+      names.add(t.getName());
+    return names;
+  }
+
+  @Override
+  public int stackDepth() {
+    return FlightRecorder.isInitialized() ? StackDepth.current() : 0;
   }
 
   @Override

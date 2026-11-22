@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
@@ -34,6 +35,7 @@ import jfrweb.analysis.Timeline;
 import jfrweb.auto.AutoMode;
 import jfrweb.auto.Trigger;
 import jfrweb.live.LiveStats;
+import jfrweb.session.RecordingOptions;
 import jfrweb.session.Session;
 import jfrweb.session.Sessions;
 import jfrweb.session.StackDepth;
@@ -203,6 +205,93 @@ public class ProfilerRoutes {
     res.put("windows", LiveStats.WINDOWS);
     res.put("operations", operations);
     return res;
+  }
+
+  /**
+   * What the next session records, manual or automatic: the preset and what
+   * was changed on it, the lines written by hand, and what cannot change.
+   */
+  @Route("/api/recording")
+  @OutputFormat(JSON)
+  public Map<String, Object> recording() {
+    RecordingOptions o = sessions.getOptions();
+    Map<String, String> standard = sessions.getSettings();
+
+    List<Object> presets = new ArrayList<>();
+    for (RecordingOptions.Preset p : RecordingOptions.Preset.values()) {
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("id", p.id());
+      m.put("label", p.label());
+      m.put("description", p.description());
+      presets.add(m);
+    }
+    List<Object> events = new ArrayList<>();
+    for (RecordingOptions.Entry e : RecordingOptions.ENTRIES) {
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("id", e.id());
+      m.put("label", e.label());
+      m.put("hint", e.hint());
+      m.put("option", e.option());
+      m.put("optionLabel", e.optionLabel());
+      m.put("enabled", o.isEnabled(e, standard));
+      m.put("value", o.value(e, standard));
+      events.add(m);
+    }
+    Set<String> known = sessions.eventNames();
+    List<String> unknown = new ArrayList<>();
+    if (known != null)
+      for (String e : o.otherEvents())
+        if (!known.contains(e))
+          unknown.add(e);
+
+    Map<String, Object> res = new LinkedHashMap<>();
+    res.put("preset", o.preset().id());
+    res.put("presets", presets);
+    res.put("events", events);
+    res.put("other", o.other());
+    res.put("required", new ArrayList<>(RecordingOptions.requiredEvents()));
+    res.put("known", known != null);
+    res.put("unknown", unknown);
+    res.put("stackDepth", sessions.stackDepth());
+    res.put("standard", o.isStandard());
+    res.put("recording", sessions.getRecording() != null);
+    return res;
+  }
+
+  /**
+   * Changes what the next sessions record, and answers as {@link #recording()}.
+   * <p>
+   * Query: {@code preset}, the id of one; for each event choice, its id as
+   * {@code true} or {@code false} to switch it, and {@code <id>.value} for its
+   * period, threshold or throttle, none or blank for the preset's;
+   * {@code other}, JFR settings one per line, e.g. {@code jdk.ClassLoad#threshold=5 ms}.
+   * What is not given is the preset's: a query of a preset alone resets the rest.
+   */
+  @Route("/api/recording")
+  @Post
+  @OutputFormat(JSON)
+  public Map<String, Object> setRecording(Query q) {
+    try {
+      Map<String, Boolean> enabled = new LinkedHashMap<>();
+      Map<String, String> values = new LinkedHashMap<>();
+      for (RecordingOptions.Entry e : RecordingOptions.ENTRIES) {
+        String b = q.get(e.id());
+        if (b != null && !b.isBlank())
+          enabled.put(e.id(), Boolean.parseBoolean(b));
+        String v = q.get(e.id() + ".value");
+        if (v != null && !v.isBlank())
+          values.put(e.id(), v);
+      }
+      RecordingOptions.Preset preset = RecordingOptions.Preset.of(q.get("preset", RecordingOptions.Preset.STANDARD.id()));
+      sessions.setOptions(RecordingOptions.of(preset, enabled, values, q.get("other", "")));
+    }
+    catch (IllegalArgumentException e) {
+      throw new HttpException(400, e.getMessage());
+    }
+    catch (IllegalStateException e) {
+      throw new HttpException(409, e.getMessage());
+    }
+    return recording();
   }
 
   @Route("/api/sessions")

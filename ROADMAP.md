@@ -212,6 +212,26 @@ Plan and format in [docs/flame-graphs.md](docs/flame-graphs.md).
 - [x] Static export, `jfr-web flame` and `--collapsed` on it; `jfr-converter` removed
 - [x] Timeline and flame graph linked; hot methods; method view; frames hidden by pattern; diff
 
+## M11: what a session records
+
+A Recording panel on the Sessions page sets what the next session records, for the sessions
+started by hand and by the auto mode alike.
+
+- [x] Presets (jfr-web, the JDK's light configuration, operations only) and changes on top: Java
+  and native sampling periods, allocation throttle, exceptions, file and socket accesses, lock
+  waits, collections, CPU load, each with its period or threshold
+- [x] JFR settings written by hand, one per line as for `jcmd JFR.start`, for events the panel
+  does not list, e.g. those of the application; those unknown to the JVM are flagged
+- [x] Values checked before they reach JFR, which ignores what it does not understand without a
+  word; the events the operations are read from cannot be switched off
+- [x] Kept in the sessions directory, locked while a session records, the stack depth shown only
+  (JFR sets it once per JVM)
+- [x] Name given when a session starts
+- [ ] The whole event catalog of the JVM, searchable, with the settings of each event (needs the
+  event types of the recorder, through JMX for an attached JVM)
+- [ ] "Record again with these settings" on a report, read from the recording itself
+- [ ] Stop a session after a given time
+
 ## Later
 
 - [ ] async-profiler as an additional source on Linux and macOS

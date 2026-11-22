@@ -110,7 +110,10 @@ public final class StackDepth {
     return current(ManagementFactory.getPlatformMBeanServer());
   }
 
-  static int current(MBeanServerConnection server) {
+  /**
+   * The depth JFR uses in another JVM, e.g. one attached to, or 0 if unknown.
+   */
+  public static int current(MBeanServerConnection server) {
     try {
       for (String line : configure(server).lines().toList()) {
         // "Stack depth: 64"

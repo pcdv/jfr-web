@@ -34,6 +34,22 @@ test('requests carry their parameters encoded, and their method', async () => {
   assert.deepEqual(fetched.at(-1), {url: 'api/sessions/1/name?name=a+b', method: 'POST'});
 });
 
+test('a session starts with its name, the next ones record as chosen', async () => {
+  await api.startSession('slow login');
+  assert.deepEqual(fetched.at(-1), {url: 'api/sessions?name=slow+login', method: 'POST'});
+  await api.startSession();
+  assert.deepEqual(fetched.at(-1), {url: 'api/sessions', method: 'POST'});
+
+  await api.setRecording({preset: 'light', enabled: {exceptions: false}, values: {java: '5 ms'},
+                          other: 'jdk.ClassLoad#threshold=5 ms'});
+  assert.deepEqual(fetched.at(-1), {
+    url: 'api/recording?preset=light&other=jdk.ClassLoad%23threshold%3D5+ms&exceptions=false&java.value=5+ms',
+    method: 'POST',
+  });
+  await api.getRecording();
+  assert.deepEqual(fetched.at(-1), {url: 'api/recording', method: 'GET'});
+});
+
 test('an error carries the status and the text of the answer', async () => {
   await assert.rejects(api.getSession(9), {message: '404 No session 9'});
 });

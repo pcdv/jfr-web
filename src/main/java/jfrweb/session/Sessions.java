@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import jdk.jfr.Configuration;
 import jfrweb.analysis.EventMappings;
@@ -57,6 +58,9 @@ public final class Sessions implements AutoCloseable {
 
   private Duration maxAge;
   private long maxSize = Long.MAX_VALUE;
+
+  /** What the next session records: changed from the interface, kept in {@link RecordingOptions#FILE}. */
+  private RecordingOptions options = RecordingOptions.standard();
 
   /**
    * Sessions recording this JVM.
@@ -119,6 +123,93 @@ public final class Sessions implements AutoCloseable {
   }
 
   /**
+   * The JDK's "default" settings, light enough for production, plus flak's
+   * request event, jfr-web's operation events, and the load of the CPU
+   * measured every minute instead of every second: on Windows, a measure
+   * costs about 65 ms of CPU (performance counters), and every second it was
+   * 95% of the cost of the recording, about 7% of a core on an idle application server.
+   */
+  public static Map<String, String> lightSettings() {
+    try {
+      Map<String, String> s = new HashMap<>(Configuration.getConfiguration("default").getSettings());
+      s.put("flak.Request#enabled", "true");
+      s.put(Operations.EVENT + "#enabled", "true");
+      s.put(Operations.SEGMENT_EVENT + "#enabled", "true");
+      s.put("jdk.CPULoad#period", "60 s");
+      return s;
+    }
+    catch (IOException | ParseException e) {
+      throw new IllegalStateException("Cannot read the default configuration of the JDK", e);
+    }
+  }
+
+  /**
+   * The settings this profiler was given, see {@link RecordingOptions.Preset#STANDARD}.
+   */
+  public Map<String, String> getSettings() {
+    return settings;
+  }
+
+  /**
+   * What the next session records. By default, the settings of this profiler.
+   */
+  public synchronized RecordingOptions getOptions() {
+    return options;
+  }
+
+  /**
+   * Changes what the next sessions record, manual or automatic, and keeps it
+   * next to the sessions.
+   *
+   * @throws IllegalStateException if a session is recording: it keeps what it started with
+   */
+  public synchronized void setOptions(RecordingOptions options) {
+    if (recording != null)
+      throw new IllegalStateException("Session " + recording.getId() + " is recording: change what to record once it stopped");
+    this.options = options.normalized(settings);
+    Path file = directory.resolve(RecordingOptions.FILE);
+    try {
+      if (this.options.isStandard()) {
+        Files.deleteIfExists(file);
+      }
+      else {
+        Files.createDirectories(directory);
+        this.options.save(file);
+      }
+    }
+    catch (IOException e) {
+      log.log(System.Logger.Level.WARNING, "Could not keep what to record in " + file, e);
+    }
+  }
+
+  /**
+   * The names of the events the recorder knows, or null if it cannot tell
+   * (yet): events of the application appear once their class is loaded.
+   */
+  public Set<String> eventNames() {
+    try {
+      return recorder.eventNames();
+    }
+    catch (RuntimeException e) {
+      log.log(System.Logger.Level.DEBUG, "Could not list the events", e);
+      return null;
+    }
+  }
+
+  /**
+   * The number of frames JFR keeps of each stack where it records, 0 if unknown.
+   */
+  public int stackDepth() {
+    try {
+      return recorder.stackDepth();
+    }
+    catch (RuntimeException e) {
+      log.log(System.Logger.Level.DEBUG, "Could not read the stack depth", e);
+      return 0;
+    }
+  }
+
+  /**
    * Starts recording.
    *
    * @param trigger how the session is started, e.g. "manual"
@@ -135,7 +226,7 @@ public final class Sessions implements AutoCloseable {
     Path file = directory.resolve("session-" + id + "-" + FILE_TIME.format(now) + ".jfr");
 
     // the events of the application mapped to operations, mapped now
-    Recorder.Running r = recorder.start("jfr-web-" + id, EventMappings.withMapped(settings), file);
+    Recorder.Running r = recorder.start("jfr-web-" + id, EventMappings.withMapped(options.settings(settings)), file);
     lastId = id;
     Session s = new Session(id, now, trigger, file);
     s.recording = r;
@@ -156,7 +247,7 @@ public final class Sessions implements AutoCloseable {
   public synchronized void warmUp() {
     if (recording != null)
       return;
-    recorder.warmUp(settings);
+    recorder.warmUp(options.settings(settings));
   }
 
   /**
@@ -390,6 +481,18 @@ public final class Sessions implements AutoCloseable {
     }
   }
 
+  private void loadOptions() {
+    Path f = directory.resolve(RecordingOptions.FILE);
+    if (!Files.exists(f))
+      return;
+    try {
+      options = RecordingOptions.load(f).normalized(settings);
+    }
+    catch (IOException | RuntimeException e) {
+      log.log(System.Logger.Level.WARNING, "Could not read what to record in " + f + ", using the settings of the profiler", e);
+    }
+  }
+
   private static void deleteProperties(Session s) {
     try {
       Files.deleteIfExists(properties(s.getFile()));
@@ -407,6 +510,7 @@ public final class Sessions implements AutoCloseable {
     if (!Files.isDirectory(directory))
       return;
     loadIds();
+    loadOptions();
     try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "session-*.properties")) {
       for (Path f : files) {
         try (Reader r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {

@@ -558,12 +558,36 @@ details.tabbed [role=tabpanel][hidden] {
   width: 5em;
 }
 
+.form-grid input.short {
+  width: 7em;
+}
+
+.form-grid input:disabled, .form-grid textarea:disabled, .form-grid select:disabled {
+  opacity: 0.6;
+}
+
+.form-grid textarea.wide {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 40em;
+}
+
+.form-grid select {
+  font: inherit;
+}
+
 .form-grid .hint {
   font-size: 12px;
 }
 
-.card.auto summary .state, .card.auto summary .hint {
+.card.auto summary .state, .card.auto summary .hint,
+.card.recording summary .hint {
   font-weight: normal;
+}
+
+.toolbar input.session-name {
+  font: inherit;
+  width: 14em;
 }
 
 .filters {

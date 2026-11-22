@@ -8,6 +8,7 @@ import {h, replace} from '../lib/dom.js';
 import {errorBox} from '../components/errorBox.js';
 import * as fmt from '../format.js';
 import {autoPanel} from '../components/auto.js';
+import {recordingPanel} from '../components/recording.js';
 import {renameButton} from '../components/sessionName.js';
 
 /** How often the list refreshes while a session records or auto mode is armed, in ms. */
@@ -18,8 +19,14 @@ const POLL = 1000;
  */
 export function renderSessions(root, params, signal) {
   const auto = h('div');
+  const recordingHost = h('div');
+  const bar = h('div');
   const content = h('div');
-  root.append(h('h1', null, 'Profiling sessions'), auto, content);
+  root.append(h('h1', null, 'Profiling sessions'), auto, recordingHost, bar, content);
+
+  /** The name of the next session: kept while the toolbar is drawn again. */
+  const name = h('input', {type: 'text', class: 'session-name', placeholder: 'Name, optional',
+                           'aria-label': 'Name of the session to start'});
 
   /** @type {number | undefined} */
   let timer;
@@ -27,6 +34,12 @@ export function renderSessions(root, params, signal) {
   let latest = 0;
   /** The auto mode shown, redrawn only when it changes: its form may be in use. */
   let autoShown = '';
+  /** The toolbar shown, redrawn only when it changes: its name may be typed in. */
+  let barShown = '';
+  /** Whether a session recorded when what to record was shown: it is read-only then. */
+  let recordingShown = null;
+  /** @type {ReturnType<typeof recordingPanel> | undefined} */
+  let recordingCard;
 
   async function refresh() {
     clearTimeout(timer);
@@ -41,7 +54,28 @@ export function renderSessions(root, params, signal) {
         autoShown = autoJson;
         replace(auto, autoPanel(autoState, refresh));
       }
-      replace(content, api.recordingsOnly() ? null : toolbar(sessions, snapshots, refresh), table(sessions, refresh));
+      if (!api.recordingsOnly()) {
+        const recording = sessions.find(s => s.state === 'RECORDING');
+        const barJson = JSON.stringify([recording?.id ?? null, snapshots.available, snapshots.window]);
+        if (barJson !== barShown) {
+          barShown = barJson;
+          replace(bar, toolbar(sessions, snapshots, name, refresh));
+        }
+        // asked when a session starts or stops, which locks or unlocks it, not at each refresh
+        if ((recording !== undefined) !== recordingShown) {
+          recordingShown = recording !== undefined;
+          const state = await api.getRecording().catch(() => null);
+          if (signal.aborted || mine !== latest)
+            return;
+          if (!state)
+            recordingShown = null;
+          else if (recordingCard)
+            recordingCard.update(state);
+          else
+            replace(recordingHost, (recordingCard = recordingPanel(state)).element);
+        }
+      }
+      replace(content, table(sessions, refresh));
       // snapshots may be taken by themselves at any time
       if (autoState.armed || snapshots.available || sessions.some(s => s.state === 'RECORDING'))
         timer = window.setTimeout(refresh, autoState.armed || !snapshots.available ? POLL : 5 * POLL);
@@ -59,9 +93,10 @@ export function renderSessions(root, params, signal) {
 /**
  * @param {api.Session[]} sessions
  * @param {api.SnapshotState} snapshots
+ * @param {HTMLInputElement} name that of the session to start
  * @param {() => void} refresh
  */
-function toolbar(sessions, snapshots, refresh) {
+function toolbar(sessions, snapshots, name, refresh) {
   const recording = sessions.find(s => s.state === 'RECORDING');
   const minutes = snapshots.window ? Math.round(snapshots.window / 60) : 0;
   return h('div', {class: 'toolbar'},
@@ -71,10 +106,14 @@ function toolbar(sessions, snapshots, refresh) {
           class: 'danger',
           onclick: () => act(() => api.stopSession(recording.id), refresh),
         }, 'Stop session')
-      : h('button', {
+      : [name, ' ', h('button', {
           class: 'primary',
-          onclick: () => act(() => api.startSession(), refresh),
-        }, 'Start a session'),
+          title: 'Records what the Recording panel says',
+          onclick: () => act(async () => {
+            await api.startSession(name.value.trim());
+            name.value = '';
+          }, refresh),
+        }, 'Start a session')],
     snapshots.available
       ? [' ', h('button', {
           title: 'A rolling recording keeps the last minutes: save them, e.g. right after a problem. ' +

@@ -3,6 +3,7 @@ package jfrweb.session;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What records the sessions: JFR in this JVM, or in another one, e.g. over
@@ -26,6 +27,23 @@ public interface Recorder {
    * fast: the first recording of a JVM sets JFR up. Nothing by default.
    */
   default void warmUp(Map<String, String> settings) {}
+
+  /**
+   * The names of the events JFR can record where it records, or null if it
+   * cannot tell now, e.g. no JVM is attached. An event of the application is
+   * known once its class is loaded.
+   */
+  default Set<String> eventNames() {
+    return null;
+  }
+
+  /**
+   * The number of frames JFR keeps of each stack where it records, 0 if
+   * unknown.
+   */
+  default int stackDepth() {
+    return 0;
+  }
 
   /** A recording in progress. */
   interface Running {

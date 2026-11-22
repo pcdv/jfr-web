@@ -22,6 +22,7 @@ import javax.management.remote.JMXServiceURL;
 import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import jdk.jfr.consumer.RecordedEvent;
+import jdk.management.jfr.EventTypeInfo;
 import jdk.management.jfr.FlightRecorderMXBean;
 import jdk.management.jfr.RecordingInfo;
 import jdk.management.jfr.RemoteRecordingStream;
@@ -238,6 +239,31 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
         return size.size();
       }
     };
+  }
+
+  @Override
+  public Set<String> eventNames() {
+    try {
+      Set<String> names = new HashSet<>();
+      for (EventTypeInfo t : jfr.getEventTypes())
+        names.add(t.getName());
+      return names;
+    }
+    catch (RuntimeException e) {
+      log.log(System.Logger.Level.DEBUG, "Could not list the events of JVM " + pid, e);
+      return null;
+    }
+  }
+
+  @Override
+  public int stackDepth() {
+    try {
+      return StackDepth.current(jmx.getMBeanServerConnection());
+    }
+    catch (IOException e) {
+      log.log(System.Logger.Level.DEBUG, "Could not read the stack depth of JVM " + pid, e);
+      return 0;
+    }
   }
 
   /**

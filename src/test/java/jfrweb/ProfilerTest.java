@@ -226,6 +226,45 @@ public class ProfilerTest {
   }
 
   @Test
+  public void testRecordingOptions() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+
+    String state = get("api/recording").body();
+    Assertions.assertTrue(state.startsWith("{\"preset\":\"standard\""), state);
+    Assertions.assertTrue(state.contains("\"standard\":true,\"recording\":false"), state);
+    Assertions.assertTrue(state.contains("\"id\":\"java\",\"label\":\"Java samples\""), state);
+
+    // JFR would ignore these without a word
+    Assertions.assertEquals(400, post("api/recording?java.value=often").statusCode());
+    Assertions.assertEquals(400, post("api/recording?preset=fast").statusCode());
+    HttpResponse<String> locked = post("api/recording?other=" + encode("flak.Request#enabled=false"));
+    Assertions.assertEquals(400, locked.statusCode());
+    Assertions.assertTrue(locked.body().contains("Line 1"), locked.body());
+
+    HttpResponse<String> set = post("api/recording?java.value=50+ms&exceptions=false&other=" + encode("jdk.ClassLoad#threshold=5 ms"));
+    Assertions.assertEquals(200, set.statusCode(), set.body());
+    Assertions.assertTrue(set.body().contains("\"standard\":false"), set.body());
+    Assertions.assertTrue(set.body().contains("\"other\":\"jdk.ClassLoad#threshold=5 ms\""), set.body());
+    Assertions.assertTrue(Files.exists(dir.resolve("recording.properties")));
+
+    Assertions.assertEquals(200, post("api/sessions").statusCode());
+    Assertions.assertEquals(409, post("api/recording?preset=light").statusCode(), "a session keeps its settings");
+    Assertions.assertTrue(get("api/recording").body().contains("\"recording\":true"));
+    post("api/sessions/1/stop");
+
+    String report = get("api/sessions/1/report").body();
+    Assertions.assertTrue(report.matches(".*\"java\":\\{\"period\":50(\\.0)?,.*"), "recorded as asked: " + report);
+
+    // a preset alone resets the rest
+    Assertions.assertTrue(post("api/recording").body().contains("\"standard\":true"));
+    Assertions.assertFalse(Files.exists(dir.resolve("recording.properties")));
+  }
+
+  private static String encode(String s) {
+    return java.net.URLEncoder.encode(s, StandardCharsets.UTF_8);
+  }
+
+  @Test
   public void testAutoModeArmedBrowser() throws Exception {
     profiler = Profiler.builder().directory(dir).observe(app).start();
 
