@@ -441,6 +441,41 @@ public final class RecordingOptions {
     return best.normalized(standard);
   }
 
+  /**
+   * A choice whose recording shows other settings than the ones asked.
+   *
+   * @param asked    "off", or the value of its option, e.g. "50 ms"
+   * @param recorded "on", or the value of its option, e.g. "20 ms"
+   */
+  public record Merged(Entry entry, String asked, String recorded) {}
+
+  /**
+   * The choices of {@link #ENTRIES} that a recording shows with other
+   * settings than these options asked for. JFR merges the settings of the
+   * recordings that run at the same time: an event is on if any of them
+   * switches it on, and its period or threshold is the smallest asked.
+   *
+   * @param recorded the settings of each enabled event, by event then setting, as the recording tells them
+   * @param standard the settings of this profiler, see {@link Preset#STANDARD}
+   */
+  public List<Merged> merged(Map<String, Map<String, String>> recorded, Map<String, String> standard) {
+    List<Merged> res = new ArrayList<>();
+    for (Entry entry : ENTRIES) {
+      Map<String, String> r = recorded.getOrDefault(entry.events().get(0), Map.of());
+      boolean on = "true".equals(r.get("enabled"));
+      String recordedValue = entry.option() == null ? null : r.get(entry.option());
+      if (!isEnabled(entry, standard)) {
+        if (on)
+          res.add(new Merged(entry, "off", recordedValue != null ? recordedValue : "on"));
+        continue;
+      }
+      String asked = value(entry, standard);
+      if (on && !asked.isEmpty() && recordedValue != null && !same(asked, recordedValue))
+        res.add(new Merged(entry, asked, recordedValue));
+    }
+    return res;
+  }
+
   /** The lines that make a preset with some choices record as the settings given. */
   private static List<String> difference(Preset preset, Map<String, Boolean> enabled, Map<String, String> values,
                                          Map<String, String> flat, Map<String, String> standard) {

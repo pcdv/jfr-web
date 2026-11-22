@@ -72,7 +72,7 @@ export function renderSessions(root, params, signal) {
           else if (recordingCard)
             recordingCard.update(state);
           else
-            replace(recordingHost, (recordingCard = recordingPanel(state)).element);
+            replace(recordingHost, (recordingCard = recordingPanel(state, snapshots.available)).element);
         }
       }
       replace(content, table(sessions, refresh));

@@ -16,10 +16,12 @@ const OPEN_KEY = 'jfrweb.recording.open';
  * A foldable panel, whose title tells what is recorded when folded.
  *
  * @param {api.RecordingState} initial
+ * @param {boolean} rolling whether a rolling recording runs in the same JVM, for the snapshots: JFR merges
+ *        its settings with those of a session
  * @returns {{element: HTMLElement, update: (state: api.RecordingState) => void}} update: shows what the
  *          profiler says, e.g. once a session started or stopped
  */
-export function recordingPanel(initial) {
+export function recordingPanel(initial, rolling) {
   const summary = h('span', {class: 'hint'});
   const status = h('span', {class: 'hint'});
   const lock = h('div', {class: 'hint warn'});
@@ -58,7 +60,13 @@ export function recordingPanel(initial) {
       h('button', {type: 'button', title: 'Back to what the profiler was started with',
                    onclick: () => save({preset: 'standard', enabled: {}, values: {}, other: ''})}, 'Reset'),
       ' ', status, lock,
-      presetHint),
+      presetHint,
+      rolling
+        ? h('div', {class: 'hint'}, 'A rolling recording for the snapshots runs in this JVM, with the settings of the ' +
+            'Light preset unless it was given others. JFR merges the settings of recordings that run together: ' +
+            'an event is on if any of them switches it on, and the shortest period or lowest threshold wins. ' +
+            'A slower period, a higher threshold, or an event switched off here does not lower what that recording records.')
+        : null),
     eventRows,
     h('label', {class: 'label', for: 'rec-other'}, 'Other events'),
     h('div', null, other,

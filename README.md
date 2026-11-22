@@ -206,7 +206,8 @@ this one** button: it fills the panel with what that session was asked to record
 showed what you needed can be recorded again. A recording that kept no such record, a snapshot or a
 session of an older version, gives its settings as the recording tells them. Those can differ from
 what was asked: JFR merges the settings of the recordings that run at the same time, e.g. the
-rolling recording of the snapshots, and the shorter period wins.
+rolling recording of the snapshots, and the shorter period wins. The panel says so when snapshots
+run, and a report lists what was recorded other than the session asked.
 
 **History of operations**, for production. No profiling here: the same counters as the live view,
 written to disk every minute into hourly files, purged by age and size. It runs on its own; give

@@ -48,6 +48,10 @@
  *            operationEvents: boolean, operations: number, truncated: number, stackDepth: number,
  *            suggestedStackDepth: number}} sampling truncated: the samples whose stack JFR cut at
  *            stackDepth frames
+ * @property {{label: string, optionLabel: string | null, asked: string, recorded: string}[]} [merged]
+ *           the choices whose settings differ from what the session asked: JFR merges the settings of
+ *           the recordings that run at the same time. Empty when the session did not keep what it
+ *           asked, and absent from older static exports
  * @property {string[]} biases
  * @property {{name: string, samples: number}[]} threads
  * @property {OperationRow[]} operations

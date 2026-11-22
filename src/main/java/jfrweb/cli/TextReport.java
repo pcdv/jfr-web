@@ -100,7 +100,7 @@ final class TextReport {
     Duration observed = analysis.getInfo().getObservedInterval(event);
     if (observed == null || observed.compareTo(p.multipliedBy(5).dividedBy(4)) <= 0)
       return "every " + ms(p.toNanos());
-    return "every " + ms(p.toNanos()) + " asked, " + ms(observed.toNanos()) + " observed";
+    return "every " + ms(p.toNanos()) + " in effect, " + ms(observed.toNanos()) + " observed";
   }
 
   /**

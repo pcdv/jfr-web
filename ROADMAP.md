@@ -227,6 +227,8 @@ started by hand and by the auto mode alike.
 - [x] Kept in the sessions directory, locked while a session records, the stack depth shown only
   (JFR sets it once per JVM)
 - [x] Name given when a session starts
+- [x] The rolling recording of the snapshots merges its settings with a session's: the panel says
+  so, and a report lists what was recorded other than asked ("in effect" in place of "asked")
 - [ ] The whole event catalog of the JVM, searchable, with the settings of each event (needs the
   event types of the recorder, through JMX for an attached JVM)
 - [x] "Record the next sessions like this one" on a report: what the session was asked to record,

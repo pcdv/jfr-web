@@ -418,10 +418,25 @@ public class ProfilerRoutes {
     for (OperationStats o : OperationStats.of(a.getOperations()))
       operations.add(operationRow(o));
 
+    // what JFR did where it differs from what the session asked, when it kept that
+    List<Object> merged = new ArrayList<>();
+    RecordingOptions asked = s.getOptions();
+    if (asked != null) {
+      for (RecordingOptions.Merged m : asked.merged(info.getEnabledEvents(), sessions.getSettings())) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("label", m.entry().label());
+        row.put("optionLabel", m.entry().optionLabel());
+        row.put("asked", m.asked());
+        row.put("recorded", m.recorded());
+        merged.add(row);
+      }
+    }
+
     Map<String, Object> res = new LinkedHashMap<>();
     res.put("session", session(s));
     res.put("recording", recording);
     res.put("sampling", sampling);
+    res.put("merged", merged);
     res.put("biases", RecordingInfo.KNOWN_BIASES);
     res.put("threads", threads);
     res.put("operations", operations);

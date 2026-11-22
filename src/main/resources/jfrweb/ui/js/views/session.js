@@ -316,6 +316,7 @@ function recording(r) {
           ? `. While operations ran, their threads got ${fmt.percent(share)} of the native samples: ` +
             'JFR samples one thread in native code per period, and idle threads take the rest.'
           : null),
+      merged(r),
       h('dt', null, 'Operations'), h('dd', null, r.sampling.operationEvents
         ? `${r.sampling.operations}, from the events of flak's requests and of the jfrweb.ops API`
         : 'neither flak.Request nor jfrweb.Operation enabled: no operation context'),
@@ -329,6 +330,27 @@ function recording(r) {
         api.recordingsOnly() ? null : reuseButton(r.session.id))),
     h('h3', null, 'Known biases'),
     h('ul', null, r.biases.map(b => h('li', null, b))));
+}
+
+/**
+ * What JFR recorded other than the session asked: told when it differs, with why.
+ *
+ * @param {api.Report} r
+ */
+function merged(r) {
+  const rows = r.merged ?? [];
+  if (rows.length === 0)
+    return null;
+  return [
+    h('dt', null, 'Not as asked'),
+    h('dd', null,
+      h('ul', {class: 'plain'}, rows.map(m => h('li', null,
+        `${m.label}: asked ${m.asked === 'off' ? 'off' : (m.optionLabel ? m.optionLabel + ' ' : '') + m.asked}, ` +
+        `recorded ${m.recorded === 'on' ? 'on' : (m.optionLabel ? m.optionLabel + ' ' : '') + m.recorded}`))),
+      h('span', {class: 'hint'},
+        'JFR merges the settings of the recordings that run at the same time, e.g. the rolling recording of the ' +
+        'snapshots: an event is on if any of them switches it on, and the shortest period or lowest threshold wins.')),
+  ];
 }
 
 /**
@@ -364,5 +386,5 @@ function sampling(s) {
   const observed = s.observed !== null && s.observed > s.period * 1.25
     ? `, observed every ${fmt.duration(s.observed)}`
     : '';
-  return `every ${fmt.duration(s.period)} asked${observed}; ${s.samples} samples, ${s.inOperations} in operations`;
+  return `every ${fmt.duration(s.period)} in effect${observed}; ${s.samples} samples, ${s.inOperations} in operations`;
 }

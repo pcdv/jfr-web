@@ -209,6 +209,30 @@ public class RecordingOptionsTest {
     assertFalse(o.other().contains("ExecutionSample"), o.other());
   }
 
+  @Test
+  public void whatAnotherRecordingChangedIsTold() {
+    RecordingOptions asked = options(Map.of("exceptions", false, "gc", false), Map.of("java", "50 ms", "fileIo", "0 ms"), "");
+    Map<String, Map<String, String>> same = recorded(asked.settings(STANDARD));
+    // what JFR tells: an event of its own rolling recording
+    assertTrue(asked.merged(same, STANDARD).isEmpty());
+
+    Map<String, Map<String, String>> merged = new TreeMap<>(same);
+    merged.put("jdk.ExecutionSample", Map.of("enabled", "true", "period", "20 ms"));
+    merged.put("jdk.GarbageCollection", Map.of("enabled", "true", "threshold", "0 ns"));
+    // 0 ms is 0 ns
+    merged.put("jdk.FileRead", Map.of("enabled", "true", "threshold", "0 ns"));
+    java.util.List<RecordingOptions.Merged> told = asked.merged(merged, STANDARD);
+
+    assertEquals(2, told.size(), told.toString());
+    assertEquals("Java samples", told.get(0).entry().label());
+    assertEquals("50 ms", told.get(0).asked());
+    assertEquals("20 ms", told.get(0).recorded());
+    assertEquals("Garbage collections", told.get(1).entry().label());
+    assertEquals("off", told.get(1).asked());
+    // a choice with no value to set is on or off
+    assertEquals("on", told.get(1).recorded());
+  }
+
   // --- the sessions
 
   @Test

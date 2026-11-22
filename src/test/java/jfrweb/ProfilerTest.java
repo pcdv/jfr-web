@@ -254,6 +254,7 @@ public class ProfilerTest {
 
     String report = get("api/sessions/1/report").body();
     Assertions.assertTrue(report.matches(".*\"java\":\\{\"period\":50(\\.0)?,.*"), "recorded as asked: " + report);
+    Assertions.assertTrue(report.contains("\"merged\":[]"), "nothing else recorded: " + report);
 
     // a preset alone resets the rest
     Assertions.assertTrue(post("api/recording").body().contains("\"standard\":true"));
@@ -268,6 +269,23 @@ public class ProfilerTest {
                           again.body());
     Assertions.assertTrue(again.body().contains("\"other\":\"jdk.ClassLoad#enabled=true\\njdk.ClassLoad#threshold=5 ms\""), again.body());
     Assertions.assertEquals(404, post("api/sessions/9/settings").statusCode());
+  }
+
+  /** JFR merges the settings of the recordings that run together, as the snapshots' rolling recording does. */
+  @Test
+  public void testSettingsMergedWithAnotherRecording() throws Exception {
+    profiler = Profiler.builder().directory(dir).start();
+    try (jdk.jfr.Recording rolling = new jdk.jfr.Recording(
+           java.util.Map.of("jdk.ExecutionSample#enabled", "true", "jdk.ExecutionSample#period", "20 ms"))) {
+      rolling.start();
+      Assertions.assertEquals(200, post("api/recording?java.value=50+ms").statusCode());
+      Assertions.assertEquals(200, post("api/sessions").statusCode());
+      post("api/sessions/1/stop");
+      String report = get("api/sessions/1/report").body();
+      Assertions.assertTrue(report.matches(".*\"java\":\\{\"period\":20(\\.0)?,.*"), "the shorter period wins: " + report);
+      Assertions.assertTrue(report.contains("\"merged\":[{\"label\":\"Java samples\",\"optionLabel\":\"every\","
+                                            + "\"asked\":\"50 ms\",\"recorded\":\"20 ms\"}"), report);
+    }
   }
 
   private static String encode(String s) {
