@@ -10,8 +10,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import jfrweb.analysis.EventMapping;
@@ -189,6 +192,36 @@ public class StandaloneTest {
       embedding.destroyForcibly();
       embedding.waitFor(10, TimeUnit.SECONDS);
     }
+  }
+
+  @Test
+  public void testFollowsTheJvmsOfARegex() throws Exception {
+    standalone = Standalone.start(dir, 0);
+    List<String> urls = new CopyOnWriteArrayList<>();
+    // not the JVM running since the test started
+    standalone.follow(Pattern.compile("RemoteApp \\d+$"), Standalone.Shared.NONE, urls::add);
+
+    // each run: attached as it starts, recorded until it exits
+    for (int run = 1; run <= 2; run++) {
+      Process p = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                                     "-cp", System.getProperty("java.class.path"), RemoteApp.class.getName(), "4000")
+        .redirectErrorStream(true)
+        .start();
+      try {
+        int id = run;
+        waitFor(BASE + "api/sessions", b -> b.contains("\"id\":" + id + ",\"state\":\"RECORDING\""));
+        Assertions.assertTrue(get(BASE + "api/target").body().contains("\"pid\":" + p.pid() + ","));
+        Assertions.assertTrue(p.waitFor(30, TimeUnit.SECONDS));
+        waitFor(BASE + "api/sessions", b -> b.contains("\"id\":" + id + ",\"state\":\"STOPPED\""));
+        String report = get(BASE + "api/sessions/" + id + "/report").body();
+        Assertions.assertTrue(report.contains("\"name\":\"work\",\"count\":"), report);
+      }
+      finally {
+        p.destroyForcibly();
+      }
+    }
+    Assertions.assertEquals(2, urls.size());
+    Assertions.assertTrue(urls.get(0).endsWith("/" + BASE), urls.get(0));
   }
 
   private String waitFor(String path, Predicate<String> condition) throws Exception {

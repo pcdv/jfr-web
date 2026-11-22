@@ -15,6 +15,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 import jfrweb.analysis.Analysis;
@@ -62,11 +63,13 @@ public final class Main {
     "      timeline, operations, flame graphs; the .jfr files of a directory are taken.",
     "      --alloc: flame graphs show the allocations first, instead of the wall clock",
     "  jfr-web standalone [--port <port>] [--dir <dir>] [--no-browser]",
-    "                     [--attach <pid | regex> [--sessions <dir>] [--history <dir>] [--snapshots <dir>]]",
+    "                     [--attach <pid | regex> [--follow] [--sessions <dir>] [--history <dir>] [--snapshots <dir>]]",
     "      the profiler on its own: lists the JVMs of this machine, and profiles the",
     "      one picked as if it was embedded, with nothing to install in it. Sessions",
     "      are kept in <dir>/<application>, ~/.jfr-web by default; port 8095 by default.",
-    "      --attach picks the JVM at once: its pid, or a regex matching its name. Then",
+    "      --attach picks the JVM at once: its pid, or a regex matching its name. With a regex,",
+    "      --follow waits for each new JVM that matches and records a session of it until it",
+    "      exits, e.g. a test suite run again and again. Then",
     "      --sessions, --history and --snapshots point to the directories of the profiler",
     "      embedded in it, if it does not tell them over JMX (jfr-web embedded does):",
     "      its history and snapshots are only read, and its sessions should not be",
@@ -212,6 +215,8 @@ public final class Main {
     Path dir;
     String attach;
     Standalone.Shared shared;
+    boolean follow = options.remove("--follow");
+    Pattern followed = null;
     try {
       String v = takeValue(options, "--port");
       port = v == null ? Standalone.PORT : Integer.parseInt(v);
@@ -222,6 +227,11 @@ public final class Main {
                                      path(takeValue(options, "--snapshots")));
       if (attach == null && !shared.equals(Standalone.Shared.NONE))
         throw new IllegalArgumentException("--sessions, --history and --snapshots go with --attach");
+      if (follow) {
+        if (attach == null || attach.matches("\\d+"))
+          throw new IllegalArgumentException("--follow goes with --attach <regex>");
+        followed = Pattern.compile(attach);
+      }
     }
     catch (IllegalArgumentException e) {
       System.err.println(e.getMessage());
@@ -232,7 +242,7 @@ public final class Main {
       return 2;
     Standalone s;
     try {
-      s = Standalone.start(dir, port, attach, shared);
+      s = follow ? Standalone.start(dir, port) : Standalone.start(dir, port, attach, shared);
     }
     catch (IllegalArgumentException e) {
       System.err.println(e.getMessage());
@@ -240,6 +250,16 @@ public final class Main {
     }
     // a session recording ends with its file written
     Runtime.getRuntime().addShutdownHook(new Thread(s::close, "jfr-web shutdown"));
+    if (follow) {
+      System.err.println("jfr-web at " + s.getUrl() + ", waiting for the JVMs matching " + attach);
+      // the page of the first JVM: it lists the sessions of the next ones too
+      AtomicBoolean opened = new AtomicBoolean(!browser);
+      s.follow(followed, shared, url -> {
+        if (!opened.getAndSet(true))
+          browse(url);
+      });
+      return 0;
+    }
     System.err.println("jfr-web at " + s.getAttachedUrl());
     if (browser)
       browse(s.getAttachedUrl());

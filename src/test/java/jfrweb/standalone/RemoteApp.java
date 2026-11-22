@@ -14,8 +14,9 @@ import static jfrweb.analysis.AnalysisTest.Handlers.burn;
 
 /**
  * Run in a JVM of its own by StandaloneTest, to attach to: an application with
- * no profiler, whose operations "work" take about 20 ms each, until killed;
- * every fifth, an event of its own, as a framework would record.
+ * no profiler, whose operations "work" take about 20 ms each, until killed or
+ * for the time given; every fifth, an event of its own, as a framework would
+ * record.
  */
 public class RemoteApp {
 
@@ -27,7 +28,8 @@ public class RemoteApp {
   }
 
   /**
-   * @param args none, or the directories of a profiler embedded: sessions, history, snapshots
+   * @param args none, the ms to run before exiting, or the directories of a
+   *             profiler embedded: sessions, history, snapshots
    */
   public static void main(String[] args) throws Exception {
     if (args.length == 3)
@@ -36,8 +38,9 @@ public class RemoteApp {
         .history(Path.of(args[1]))
         .snapshots(Snapshots.builder().directory(Path.of(args[2])).start())
         .start();
+    long end = args.length == 1 ? System.nanoTime() + Long.parseLong(args[0]) * 1_000_000 : Long.MAX_VALUE;
     System.out.println("ready");
-    for (int i = 0; ; i++) {
+    for (int i = 0; System.nanoTime() < end; i++) {
       try (Operation op = Operations.begin("work").detail("item " + i)) {
         burn(20);
       }

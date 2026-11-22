@@ -219,6 +219,9 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
     return new Running() {
       @Override
       public void stop() throws IOException {
+        // it wrote the file as it exited, if it could
+        if (!isAlive())
+          return;
         try {
           jfr.stopRecording(id);
           // e.g. the JVM could not write there: through JMX instead
@@ -284,6 +287,20 @@ public final class RemoteJvm implements Recorder, AutoCloseable {
    */
   @Override
   public void close() {
+    if (!isAlive()) {
+      // its connection, dead, takes seconds to close: not on the caller's thread
+      Thread t = new Thread(() -> {
+        try {
+          jmx.close();
+        }
+        catch (IOException e) {
+          log.log(System.Logger.Level.DEBUG, "Could not disconnect from JVM " + pid, e);
+        }
+      }, "jfr-web disconnect " + pid);
+      t.setDaemon(true);
+      t.start();
+      return;
+    }
     try {
       stream.close();
     }

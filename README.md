@@ -396,6 +396,24 @@ What's different from embedding:
   jfr-web gets killed rather than stopped, that recording lingers until the target exits.
 - No history of operations or snapshots yet.
 
+### Profiling a test suite
+
+A test JVM lives for one run, and starts when you start the build. With `--follow`, jfr-web waits
+for it instead of failing: start it once, then run the tests as often as you like.
+
+```sh
+jfr-web standalone --attach "Gradle Test Executor" --follow    # then: ./gradlew test
+```
+
+Each new JVM whose name matches the regex is attached to as it appears, and recorded in a session
+until it exits. The JVM writes the recording itself as it exits. The browser opens on the first
+one, and lists the sessions of the next runs too. Maven Surefire's JVMs match `surefirebooter`.
+
+Attaching takes about a second, so the first tests of a run are missed. One JVM is recorded at a
+time: with parallel forks, the JVMs that start while one is recorded are skipped. The session's
+JFR settings apply to the whole JVM, so a suite that records JFR itself samples as often as the
+session does.
+
 ## Opening recordings
 
 Got `.jfr` files already? Snapshots, a `jcmd` dump, something a colleague sent? Open them in the

@@ -9,13 +9,18 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 import flak.App;
 import flak.AppFactory;
@@ -257,26 +262,150 @@ public final class Standalone implements AutoCloseable {
     if (jvm == null)
       throw new HttpException(404, "No JVM " + pid + " on this machine");
 
-    // what the profiler embedded in it tells, for an application not served yet
-    if (!targets.containsKey(jvm.app()) && !shared.containsKey(jvm.app()))
-      shared.put(jvm.app(), RemoteJvm.embedded(jvm.pid()));
-    Target target = target(jvm.app());
-    RemoteJvm current = target.getJvm();
-    if (current == null || current.getPid() != jvm.pid()) {
-      detachAll();
-      try {
-        target.attach(jvm, StackDepth.DEFAULT);
-      }
-      catch (IOException | RuntimeException e) {
-        log.log(System.Logger.Level.WARNING, "Could not attach to JVM " + pid, e);
-        throw new HttpException(502, "Could not attach to JVM " + pid + ": " + e.getMessage());
-      }
-      log.log(System.Logger.Level.INFO, "Attached to JVM " + pid + " (" + jvm.app() + ")");
+    Target target;
+    try {
+      target = attach(jvm, Shared.NONE);
+    }
+    catch (IOException | RuntimeException e) {
+      log.log(System.Logger.Level.WARNING, "Could not attach to JVM " + pid, e);
+      throw new HttpException(502, "Could not attach to JVM " + pid + ": " + e.getMessage());
     }
     Map<String, Object> res = new LinkedHashMap<>();
     res.put("app", target.getApp());
     res.put("path", target.path().substring(1) + "/");
     return res;
+  }
+
+  /**
+   * Attaches to a JVM, instead of the one attached if any.
+   *
+   * @param given what its application keeps elsewhere, completed by what the
+   *              profiler embedded in it tells, for an application not served
+   *              yet
+   */
+  private synchronized Target attach(Jvms.Jvm jvm, Shared given) throws IOException {
+    if (!targets.containsKey(jvm.app()) && !shared.containsKey(jvm.app()))
+      shared.put(jvm.app(), given.or(RemoteJvm.embedded(jvm.pid())));
+    Target target = target(jvm.app());
+    RemoteJvm current = target.getJvm();
+    if (current == null || current.getPid() != jvm.pid()) {
+      detachAll();
+      target.attach(jvm, StackDepth.DEFAULT);
+      log.log(System.Logger.Level.INFO, "Attached to JVM " + jvm.pid() + " (" + jvm.app() + ")");
+    }
+    return target;
+  }
+
+  /**
+   * Waits for each new JVM whose name matches a pattern, attaches to it, and
+   * records a session until it exits, which writes the recording: e.g. the
+   * JVM of a test suite, run again and again. One JVM is attached at a time:
+   * one that starts while another is attached is skipped.
+   *
+   * @param pattern   found in the name of the JVM, e.g. its main class
+   * @param given     what its application keeps elsewhere, see
+   *                  {@link #start(Path, int, String, Shared)}
+   * @param recording told the url of the interface of the JVM as each session
+   *                  starts, on a thread of this
+   */
+  public void follow(Pattern pattern, Shared given, Consumer<String> recording) {
+    watchdog.scheduleWithFixedDelay(new Follower(pattern, given, recording), 0, Follower.POLL_MS,
+                                    TimeUnit.MILLISECONDS);
+    log.log(System.Logger.Level.INFO, "Waiting for the JVMs matching " + pattern);
+  }
+
+  private final class Follower implements Runnable {
+    /** Soon enough for most of a test suite to be recorded. */
+    static final long POLL_MS = 100;
+    /** A JVM that starts may not accept attaching yet: tried that often. */
+    static final int ATTEMPTS = 30;
+
+    private final Pattern pattern;
+    private final Shared given;
+    private final Consumer<String> recording;
+    /** The JVMs attached to, skipped or given up on, of those running. */
+    private final Set<Long> done = new HashSet<>();
+    private final Map<Long, Integer> failures = new HashMap<>();
+
+    Follower(Pattern pattern, Shared given, Consumer<String> recording) {
+      this.pattern = pattern;
+      this.given = given;
+      this.recording = recording;
+    }
+
+    @Override
+    public void run() {
+      try {
+        String url = poll();
+        if (url != null)
+          recording.accept(url);
+      }
+      catch (RuntimeException e) {
+        log.log(System.Logger.Level.WARNING, "Could not look for the JVMs matching " + pattern, e);
+      }
+    }
+
+    /**
+     * @return the url of the interface of the JVM whose session started, or null
+     */
+    private String poll() {
+      synchronized (Standalone.this) {
+        // the JVM that ended first, for the next one not to be skipped
+        watch();
+        List<Jvms.Jvm> jvms = Jvms.list();
+        Set<Long> running = new HashSet<>();
+        for (Jvms.Jvm j : jvms)
+          running.add(j.pid());
+        done.retainAll(running);
+        failures.keySet().retainAll(running);
+
+        for (Jvms.Jvm j : jvms) {
+          if (done.contains(j.pid()) || !pattern.matcher(j.name()).find())
+            continue;
+          RemoteJvm attached = attached();
+          if (attached != null) {
+            log.log(System.Logger.Level.INFO, "JVM " + j.pid() + " (" + j.name() + ") skipped: JVM "
+                                              + attached.getPid() + " is attached, one at a time");
+            done.add(j.pid());
+            continue;
+          }
+          Target t = null;
+          try {
+            t = attach(j, given);
+            Session s = t.getSessions().start("follow");
+            done.add(j.pid());
+            failures.remove(j.pid());
+            log.log(System.Logger.Level.INFO, "Recording JVM " + j.pid() + " (" + j.name() + ") until it exits: session "
+                                              + s.getId() + ", " + s.getFile());
+            return root.getRootUrl() + t.path() + "/";
+          }
+          catch (IOException | RuntimeException e) {
+            if (t != null)
+              t.detach();
+            int n = failures.merge(j.pid(), 1, Integer::sum);
+            if (n < ATTEMPTS) {
+              log.log(System.Logger.Level.DEBUG, "Could not attach to JVM " + j.pid() + " yet", e);
+            }
+            else {
+              log.log(System.Logger.Level.WARNING, "Could not attach to JVM " + j.pid() + " (" + j.name() + ")", e);
+              done.add(j.pid());
+              failures.remove(j.pid());
+            }
+          }
+        }
+        return null;
+      }
+    }
+  }
+
+  /**
+   * The JVM attached, or null.
+   */
+  private synchronized RemoteJvm attached() {
+    for (Target t : targets.values())
+      if (t.getJvm() != null)
+        return t.getJvm();
+    return null;
   }
 
   /**
